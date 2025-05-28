@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Dict
 from decimal import Decimal
-from datetime import datetime
+import logging
 
 from ..dependencies import get_db
 
@@ -28,12 +28,15 @@ def get_economic_retention(db: Session = Depends(get_db)):
             ORDER BY year ASC
         """))
         
-        return [
+        data = [
             {
                 key: float(value) if isinstance(value, Decimal) else value 
                 for key, value in row._mapping.items()
             } 
             for row in result
         ]
+        print("Data retrieved:", data)  # Debug print
+        return data
     except Exception as e:
+        print("Error:", str(e))  # Debug print
         raise HTTPException(status_code=500, detail=str(e)) 

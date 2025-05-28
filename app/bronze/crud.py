@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models import EnergyRecords
+from .models import EnergyRecords
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 
 

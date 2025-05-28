@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.bronze.crud import EnergyRecords
 from app.bronze.schemas import EnergyRecordOut
 from app.dependencies import get_db
-from crud.base import get_one, get_all, get_many, get_many_filtered
+from app.crud.base import get_one, get_all, get_many, get_many_filtered
 
 energy_router = APIRouter()
 
