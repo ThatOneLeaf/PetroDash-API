@@ -141,4 +141,48 @@ def get_economic_expenditures(db: Session = Depends(get_db)):
     except Exception as e:
         logging.error(f"Error fetching expenditure data: {str(e)}")
         logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/capital-provider-payments", response_model=List[Dict])
+def get_capital_provider_payments(db: Session = Depends(get_db)):
+    """
+    Get capital provider payment data from silver.econ_capital_provider_payment table
+    Returns yearly data with breakdown of interest and dividend payments
+    """
+    try:
+        logging.info("Executing capital provider payments query")
+        
+        result = db.execute(text("""
+            SELECT 
+                year,
+                ROUND(interest::numeric, 2) as interest,
+                ROUND(dividends_to_nci::numeric, 2) as dividends_to_nci,
+                ROUND(dividends_to_parent::numeric, 2) as dividends_to_parent,
+                ROUND(total_dividends_interest::numeric, 2) as total_dividends_interest
+            FROM silver.econ_capital_provider_payment
+            ORDER BY year DESC
+        """))
+        
+        data = [
+            {
+                'year': row.year,
+                'interest': float(row.interest) if row.interest else 0,
+                'dividendsToNci': float(row.dividends_to_nci) if row.dividends_to_nci else 0,
+                'dividendsToParent': float(row.dividends_to_parent) if row.dividends_to_parent else 0,
+                'total': float(row.total_dividends_interest) if row.total_dividends_interest else 0
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} capital provider payment records")
+        logging.info(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No capital provider payment data returned from query")
+            return []
+            
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching capital provider payment data: {str(e)}")
+        logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e)) 
