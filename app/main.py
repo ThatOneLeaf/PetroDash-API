@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import api_router
+from app.routers import api_router
 
 from .routers import economic  # Import just the economic router for now
 
@@ -20,9 +20,10 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(economic.router, prefix="/economic", tags=["Economic Data"])
+
 
 app.include_router(api_router)
+
 
 
 @app.get("/", tags=["Root"])

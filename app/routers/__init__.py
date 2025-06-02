@@ -2,7 +2,8 @@
 from fastapi import APIRouter
 from .economic import router as economic_router
 from .reference import router as reference_router
-from .energy import energy_router
+from .energy import router as energy_router  # ✅ Must be named 'router'
+
 
 api_router = APIRouter()
 api_router.include_router(energy_router, prefix="/energy", tags=["energy"])
