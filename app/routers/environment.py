@@ -9,6 +9,7 @@ import io
 from datetime import datetime
 from typing import Optional, List
 from app.dependencies import get_db
+from app.utils.formatting_id import generate_pkey_id
 from app.crud.base import get_all, get_many_filtered, get_one
 from app.bronze.crud import (
     EnviWaterAbstraction, 
@@ -37,6 +38,7 @@ from ..utils.envi_template_utils import create_excel_template, create_all_templa
 
 router = APIRouter()
 
+#======================================================RETRIEVING-TYPE APIs======================================================
 #=================RETRIEVE ALL ENVIRONMENTAL DATA (GOLD)=================
 """
 This can be used for retrieving all environmental data to display these in the tables.
@@ -667,7 +669,13 @@ def get_hazard_waste_disposed_by_id(hwd_id: str, db: Session = Depends(get_db)):
     if not record:
         raise HTTPException(status_code=404, detail="Hazardous Waste Disposed record not found")
     return record
-    
+
+#======================================================CRUD-TYPE APIs======================================================
+#====================================BULK ADD RECORDS (ENVI)====================================
+@router.get("/generate_water_abstraction_id")
+def generate_water_abstraction_id(db: Session = Depends(get_db)):
+    generated_id = generate_pkey_id(db, "WA", EnviWaterAbstraction, "wa_id")
+    return {"generated_id": generated_id}
 
 # ============== EXCEL TEMPLATE ENDPOINTS ==============
 @router.get("/create_data_template")
@@ -714,7 +722,6 @@ async def create_data_template(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
 
-
 @router.get("/template_info", response_model=List[Dict])
 async def get_template_info():
     """
@@ -736,7 +743,6 @@ async def get_template_info():
         template_info.append(info)
     
     return template_info
-
 
 @router.get("/create_template/{table_name}")
 async def create_individual_template(
