@@ -41,10 +41,12 @@ def get_energy_records_by_status(
         logging.info(f"Fetching energy records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT er.*, csl.status_id
+            SELECT er.*,pp.*, csl.status_id
             FROM silver.csv_energy_records er
+			JOIN gold.dim_powerplant_profile pp 
+                ON pp.power_plant_id=er.power_plant_id
             JOIN public.checker_status_log csl
-              ON er.energy_id = csl.record_id
+                ON er.energy_id = csl.record_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
             ORDER BY er.create_at desc, er.date_generated desc, er.updated_at desc
         """)
