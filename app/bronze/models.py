@@ -29,3 +29,15 @@ class TableType(str, Enum):
     HAZARD_WASTE_GENERATED = "hazard_waste_generated"
     HAZARD_WASTE_DISPOSED = "hazard_waste_disposed"
     ALL = "all"
+
+class HRDemographics(Base):
+    __tablename__ = "hr_demographics"
+    
+    employee_id = Column(String(20), primary_key=True, index=True)
+    gender = Column(String(1))
+    birthdate = Column(TIMESTAMP)
+    position_id = Column(String(2))
+    p_np = Column(String(2))
+    company_id = Column(String(10))
+    create_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())

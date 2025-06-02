@@ -14,3 +14,14 @@ class EnergyRecordOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class HRDemographicsOut(BaseModel):
+    employee_id: str
+    gender: str
+    birthdate: Optional[dt]
+    position_id: Optional[str]
+    p_np: Optional[str]
+    company_id: Optional[str]
+    create_at: Optional[dt]
+    updated_at: Optional[dt]
+    
+    model_config = ConfigDict(from_attributes=True)
