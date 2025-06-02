@@ -23,18 +23,6 @@ class EnviWaterAbstractionOut(BaseModel):
     volume: Optional[float]
     unit_of_measurement: Optional[str]
 
-class HRDemographicsOut(BaseModel):
-    employee_id: str
-    gender: str
-    birthdate: Optional[dt]
-    position_id: Optional[str]
-    p_np: Optional[str]
-    company_id: Optional[str]
-    create_at: Optional[dt]
-    updated_at: Optional[dt]
-    
-    model_config = ConfigDict(from_attributes=True)
-
 class EnviWaterDischargeOut(BaseModel):
     wd_id: str
     company_id: Optional[str]
@@ -107,4 +95,18 @@ class EnviHazardWasteDisposedOut(BaseModel):
     waste_disposed: Optional[float]
     year: Optional[int]
 
+    model_config = ConfigDict(from_attributes=True)
+    
+#====================Human Resources=================================
+
+class HRDemographicsOut(BaseModel):
+    employee_id: str
+    gender: str
+    birthdate: Optional[dt]
+    position_id: Optional[str]
+    p_np: Optional[str]
+    company_id: Optional[str]
+    create_at: Optional[dt]
+    updated_at: Optional[dt]
+    
     model_config = ConfigDict(from_attributes=True)
