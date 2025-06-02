@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Numeric, TIMESTAMP, func
+from sqlalchemy import Column, String, Numeric, TIMESTAMP, func, Double, SmallInteger, Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.schema import MetaData
 from enum import Enum
@@ -6,7 +6,7 @@ from enum import Enum
 # Define MetaData with schema
 metadata = MetaData(schema="bronze")
 Base = declarative_base(metadata=metadata)
-
+#============================POWER PLANT ENERGY============================
 class EnergyRecords(Base):
     __tablename__ = "csv_energy_records"
     
@@ -18,6 +18,93 @@ class EnergyRecords(Base):
     create_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
+#============================ENVIRONMENTAL=================================
+class EnviWaterAbstraction(Base):
+    __tablename__ = "envi_water_abstraction"
+
+    wa_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    year = Column(SmallInteger)
+    month = Column(String(10))
+    quarter = Column(String(2))
+    volume = Column(Numeric)  # DOUBLE PRECISION
+    unit_of_measurement = Column(String(15))
+
+class EnviWaterDischarge(Base):
+    __tablename__ = "envi_water_discharge"
+
+    wd_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    year = Column(SmallInteger)
+    quarter = Column(String(2))
+    volume = Column(Numeric)
+    unit_of_measurement = Column(String(15))
+
+class EnviWaterConsumption(Base):
+    __tablename__ = "envi_water_consumption"
+
+    wc_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    year = Column(SmallInteger)
+    quarter = Column(String(2))
+    volume = Column(Numeric)
+    unit_of_measurement = Column(String(15))
+
+class EnviDieselConsumption(Base):
+    __tablename__ = "envi_diesel_consumption"
+
+    dc_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    cp_id = Column(String(20), index=True)
+    unit_of_measurement = Column(String(15))
+    consumption = Column(Numeric)
+    date = Column(Date)
+
+class EnviElectricConsumption(Base):
+    __tablename__ = "envi_electric_consumption"
+
+    ec_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    source = Column(String(20))
+    unit_of_measurement = Column(String(15))
+    consumption = Column(Numeric)
+    quarter = Column(String(2))
+    year = Column(SmallInteger)
+
+class EnviNonHazardWaste(Base):
+    __tablename__ = "envi_non_hazard_waste"
+
+    nhw_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    metrics = Column(String(50))
+    unit_of_measurement = Column(String(15))
+    waste = Column(Numeric)
+    month = Column(String(10))
+    quarter = Column(String(2))
+    year = Column(SmallInteger)
+
+class EnviHazardWasteGenerated(Base):
+    __tablename__ = "envi_hazard_waste_generated"
+
+    hwg_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    metrics = Column(String(50))
+    unit_of_measurement = Column(String(15))
+    waste_generated = Column(Numeric)
+    quarter = Column(String(2))
+    year = Column(SmallInteger)
+
+class EnviHazardWasteDisposed(Base):
+    __tablename__ = "envi_hazard_waste_disposed"
+
+    hwd_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    metrics = Column(String(50))
+    unit_of_measurement = Column(String(15))
+    waste_disposed = Column(Numeric)
+    year = Column(SmallInteger)
+
+# Used for the excel file template generation for ENVI
 class TableType(str, Enum):
     COMPANY_PROPERTY = "company_property"
     WATER_ABSTRACTION = "water_abstraction"

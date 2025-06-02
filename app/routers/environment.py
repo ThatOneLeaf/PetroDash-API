@@ -7,7 +7,19 @@ import traceback
 from fastapi.responses import StreamingResponse
 import io
 from datetime import datetime
-
+from typing import Optional, List
+from app.dependencies import get_db
+from app.crud.base import get_all, get_many_filtered, get_one
+from app.bronze.crud import (
+    EnviWaterAbstraction, 
+    EnviWaterDischarge, 
+    EnviWaterConsumption
+)
+from app.bronze.schemas import (
+    EnviWaterAbstractionOut,
+    EnviWaterDischargeOut,
+    EnviWaterConsumptionOut
+)
 from ..dependencies import get_db
 from ..bronze.models import TableType
 from ..template.envi_template_config import TEMPLATE_DEFINITIONS
@@ -15,8 +27,7 @@ from ..utils.envi_template_utils import create_excel_template, create_all_templa
 
 router = APIRouter()
 
-# ============== EXISTING ENDPOINTS ==============
-
+#=================RETRIEVE ALL ENVIRONMENTAL DATA=================
 @router.get("/water_abstraction", response_model=List[Dict])
 def get_water_abstraction(db: Session = Depends(get_db)):
     """
@@ -26,31 +37,17 @@ def get_water_abstraction(db: Session = Depends(get_db)):
     try:
         logging.info("Executing water abstraction query")
         
-        result = db.execute(text("""
-            SELECT
-                ewa.wa_id,
-                cm.company_name,
-                ewa.volume,
-                ewa.unit AS metrics,
-                ewa.quarter,
-                ewa.year,
-                COALESCE(s.status_name, 'HEAD APPROVED') AS status_name
-            FROM gold.vw_environment_water_abstraction ewa
-            LEFT JOIN public.checker_status_log csl ON ewa.wa_id = csl.record_id
-            LEFT JOIN public.status s ON csl.status_id = s.status_id
-            LEFT JOIN ref.company_main cm ON ewa.company_id = cm.company_id
-            ORDER BY ewa.year DESC
-        """))
+        result = db.execute(text("""SELECT * FROM gold.vw_environment_water_abstraction"""))
 
         data = [
             {
-                "waId": row.wa_id,
-                "companyName": row.company_name,
+                "wa_id": row.water_abstraction_id,
+                "company_name": row.company_name,
                 "volume": float(row.volume) if row.volume is not None else 0,
-                "metrics": row.metrics,
+                "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "statusName": row.status_name
+                "status_name": row.status_name
             }
             for row in result
         ]
@@ -68,7 +65,6 @@ def get_water_abstraction(db: Session = Depends(get_db)):
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/water_discharge", response_model=List[Dict])
 def get_water_discharge(db: Session = Depends(get_db)):
     """
@@ -78,38 +74,24 @@ def get_water_discharge(db: Session = Depends(get_db)):
     try:
         logging.info("Executing water discharge query")
         
-        result = db.execute(text("""
-            SELECT
-                ewd.wd_id,
-                cm.company_name,
-                ewd.volume,
-                ewd.unit AS metrics,
-                ewd.quarter,
-                ewd.year,
-                COALESCE(s.status_name, 'Head Approved') AS status_name
-            FROM gold.vw_environment_water_discharge ewd
-            LEFT JOIN public.checker_status_log csl ON ewd.wd_id = csl.record_id
-            LEFT JOIN public.status s ON csl.status_id = s.status_id
-            LEFT JOIN ref.company_main cm ON ewd.company_id = cm.company_id
-            ORDER BY ewd.year DESC
-        """))
+        result = db.execute(text("""SELECT * FROM gold.vw_environment_water_discharge"""))
 
         data = [
             {
-                "wdId": row.wd_id,
-                "companyName": row.company_name,
+                "wd_id": row.water_discharge_id,
+                "company_name": row.company_name,
                 "volume": float(row.volume) if row.volume is not None else 0,
-                "metrics": row.metrics,
+                "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "statusName": row.status_name
+                "status_name": row.status_name
             }
             for row in result
         ]
         
         logging.info(f"Query returned {len(data)} rows")
         logging.debug(f"Data: {data}")
-
+        
         if not data:
             logging.warning("No water discharge data found")
             return []
@@ -120,7 +102,6 @@ def get_water_discharge(db: Session = Depends(get_db)):
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/water_consumption", response_model=List[Dict])
 def get_water_consumption(db: Session = Depends(get_db)):
     """
@@ -130,38 +111,24 @@ def get_water_consumption(db: Session = Depends(get_db)):
     try:
         logging.info("Executing water consumption query")
         
-        result = db.execute(text("""
-            SELECT
-                ewc.wc_id,
-                cm.company_name,
-                ewc.volume,
-                ewc.unit AS metrics,
-                ewc.quarter,
-                ewc.year,
-                COALESCE(s.status_name, 'Head Approved') AS status_name
-            FROM gold.vw_environment_water_consumption ewc
-            LEFT JOIN public.checker_status_log csl ON ewc.wc_id = csl.record_id
-            LEFT JOIN public.status s ON csl.status_id = s.status_id
-            LEFT JOIN ref.company_main cm ON ewc.company_id = cm.company_id
-            ORDER BY ewc.year DESC
-        """))
+        result = db.execute(text("""SELECT * FROM gold.vw_environment_water_consumption"""))
 
         data = [
             {
-                "wcId": row.wc_id,
-                "companyName": row.company_name,
+                "wc_id": row.water_consumption_id,
+                "company_name": row.company_name,
                 "volume": float(row.volume) if row.volume is not None else 0,
-                "metrics": row.metrics,
+                "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "statusName": row.status_name
+                "status_name": row.status_name
             }
             for row in result
         ]
-
+        
         logging.info(f"Query returned {len(data)} rows")
         logging.debug(f"Data: {data}")
-
+        
         if not data:
             logging.warning("No water consumption data found")
             return []
@@ -171,8 +138,221 @@ def get_water_consumption(db: Session = Depends(get_db)):
         logging.error(f"Error fetching water consumption data: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/diesel_consumption", response_model=List[Dict])
+def get_diesel_consumption(db: Session = Depends(get_db)):
+    """
+    Get diesel consumption data from vw_environment_diesel_consumption view
+    Joins with status and company info, with 'Head Approved' as default status if null
+    """
+    try:
+        logging.info("Executing diesel consumption query")
+        
+        result = db.execute(text("""SELECT * FROM gold.vw_environment_diesel_consumption"""))
 
+        data = [
+            {
+                "dc_id": row.diesel_consumption_id,
+                "company_name": row.company_name,
+                "company_property_name": row.company_property_name,
+                "company_property_type": row.company_property_type,
+                "unit_of_measurement": row.unit_of_measurement,
+                "consumption": float(row.consumption) if row.consumption is not None else 0,
+                "month": row.month,
+                "year": row.year,
+                "quarter": row.quarter,
+                "date": row.date,
+                "status_name": row.status_name
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No diesel consumption data found")
+            return []
 
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching diesel consumption data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/electric_consumption", response_model=List[Dict])
+def get_electric_consumption(db: Session = Depends(get_db)):
+    """
+    Get electric consumption data from vw_environment_electric_consumption view
+    Joins with status and company info, with 'Head Approved' as default status if null
+    """
+    try:
+        logging.info("Executing electric consumption query")
+        
+        result = db.execute(text("""SELECT * FROM gold.vw_environment_electric_consumption"""))
+
+        data = [
+            {
+                "ec_id": row.electric_consumption_id,
+                "company_name": row.company_name,
+                "source": row.consumption_source,
+                "unit_of_measurement": row.unit_of_measurement,
+                "consumption": float(row.consumption) if row.consumption is not None else 0,
+                "quarter": row.quarter,
+                "year": row.year,
+                "status_name": row.status_name
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No electric consumption data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching electric consumption data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/non_hazard_waste", response_model=List[Dict])
+def get_non_hazard_waste(db: Session = Depends(get_db)):
+    """
+    Get non hazard waste data from vw_environment_non_hazard_waste view
+    Joins with status and company info, with 'Head Approved' as default status if null
+    """
+    try:
+        logging.info("Executing non hazard waste consumption query")
+        
+        result = db.execute(text("""SELECT * FROM gold.vw_environment_non_hazard_waste"""))
+
+        data = [
+            {
+                "nhw_id": row.non_hazardous_waste_id,
+                "company_name": row.company_name,
+                "metrics": row.metrics,
+                "unit_of_measurement": row.unit_of_measurement,
+                "waste": float(row.waste) if row.waste is not None else 0,
+                "quarter": row.quarter,
+                "year": row.year,
+                "status_name": row.status_name
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No non hazard waste consumption data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching non hazard waste consumption data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/hazard_waste_generated", response_model=List[Dict])
+def get_hazard_waste_generated(db: Session = Depends(get_db)):
+    """
+    Get hazard waste generated data from vw_environment_hazard_waste_generated view
+    Joins with status and company info, with 'Head Approved' as default status if null
+    """
+    try:
+        logging.info("Executing hazard waste generated waste consumption query")
+        
+        result = db.execute(text("""SELECT * FROM gold.vw_environment_hazard_waste_generated"""))
+
+        data = [
+            {
+                "hwg_id": row.hazard_waste_generated_id,
+                "company_name": row.company_name,
+                "waste_type": row.waste_type,
+                "unit": row.unit,
+                "waste_generated": float(row.waste_generated) if row.waste_generated is not None else 0,
+                "quarter": row.quarter,
+                "year": row.year,
+                "status_name": row.status_name
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No hazard waste generated waste consumption data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching hazard waste generated waste consumption data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/hazard_waste_disposed", response_model=List[Dict])
+def get_hazard_waste_disposed(db: Session = Depends(get_db)):
+    """
+    Get hazard waste disposed data from vw_environment_hazard_waste_disposed view
+    Joins with status and company info, with 'Head Approved' as default status if null
+    """
+    try:
+        logging.info("Executing hazard waste disposed waste consumption query")
+        
+        result = db.execute(text("""SELECT * FROM gold.vw_environment_hazard_waste_disposed"""))
+
+        data = [
+            {
+                "hwd_id": row.hazard_waste_disposed_id,
+                "company_name": row.company_name,
+                "waste_type": row.waste_type,
+                "unit": row.unit,
+                "waste_disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
+                "year": row.year,
+                "status_name": row.status_name
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No hazard waste disposed waste consumption data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching hazard waste disposed waste consumption data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+#=================RETRIEVE ENVIRONMENTAL DATA BY ID=================
+@router.get("/{wa_id}", response_model=EnviWaterAbstractionOut)
+def get_water_abstraction_by_id(wa_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, EnviWaterAbstraction, "wa_id", wa_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Water Abstraction record not found")
+    return record
+
+@router.get("/{wd_id}", response_model=EnviWaterDischargeOut)
+def get_water_abstraction_by_id(wd_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, EnviWaterDischarge, "wd_id", wd_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Water Discharge record not found")
+    return record
+
+@router.get("/{wc_id}", response_model=EnviWaterConsumptionOut)
+def get_water_abstraction_by_id(wc_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, EnviWaterConsumption, "wc_id", wc_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Water Consumption record not found")
+    return record
+    
 # ============== EXCEL TEMPLATE ENDPOINTS ==============
 
 @router.get("/create_data_template")
