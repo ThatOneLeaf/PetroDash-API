@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Numeric, TIMESTAMP, func, Double, SmallInteger, Date
+from sqlalchemy import Column, String, Numeric, TIMESTAMP, func, Double, SmallInteger, Date, TEXT, BOOLEAN, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.schema import MetaData
 from enum import Enum
@@ -116,7 +116,8 @@ class TableType(str, Enum):
     HAZARD_WASTE_GENERATED = "hazard_waste_generated"
     HAZARD_WASTE_DISPOSED = "hazard_waste_disposed"
     ALL = "all"
-
+    
+#============================HUMAN RESOURCES=================================
 class HRDemographics(Base):
     __tablename__ = "hr_demographics"
     
@@ -126,5 +127,48 @@ class HRDemographics(Base):
     position_id = Column(String(2))
     p_np = Column(String(2))
     company_id = Column(String(10))
-    create_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+class HRTenure(Base):
+    __tablename__ = "hr_tenure"
+    
+    employee_id = Column(String(20), primary_key=True, index=True)
+    start_date = Column(TIMESTAMP, primary_key=True, index=True)
+    end_date = Column(TIMESTAMP, nullable=True)
+    
+class HRTraining(Base):
+    __tablename__ = "hr_training"
+    
+    company_id = Column(String(20), primary_key=True, index=True)
+    date = Column(String(50), primary_key=True, index=True)
+    training_title = Column(TEXT, primary_key=True, index=True)
+    training_hours = Column(TIMESTAMP)
+    number_of_participants = Column(Numeric)
+    
+class HRSafetyWorkdata(Base):
+    __tablename__ = "hr_safety_workdata"
+    
+    company_id = Column(String(20), primary_key=True, index=True)
+    contractor = Column(SmallInteger, primary_key=True, index=True)
+    date = Column(String(10), primary_key=True, index=True)
+    manpower = Column(Integer)
+    manhours = Column(Integer)
+    
+class HRParentalLeave(Base):
+    __tablename__ = "hr_parental_leave"
+    
+    employee_id = Column(String(20), primary_key=True, index=True)
+    type_of_leave = Column(String(50))
+    date = Column(TIMESTAMP)
+    days = Column(Integer)
+    
+class HROsh(Base):
+    __tablename__ = "hr_occupational_safety_health"
+    
+    company_id = Column(String(20), primary_key=True, index=True)
+    workforce_type = Column(TEXT, primary_key=True, index=True)
+    lost_time = Column(BOOLEAN, primary_key=True, index=True)
+    date = Column(TIMESTAMP, primary_key=True, index=True)
+    incident_type = Column(TEXT, primary_key=True, index=True)
+    incident_title = Column(TEXT, primary_key=True, index=True)
+    incident_count = Column(Integer)
+

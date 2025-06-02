@@ -2,10 +2,20 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.bronze.schemas import HRDemographicsOut
 from app.dependencies import get_db
 import logging
 import traceback
+
+from app.crud.base import get_all, get_many_filtered, get_one
+from app.bronze.crud import (
+    HRDemographics,
+    HRTenure
+)
+from app.bronze.schemas import (
+    HRDemographicsOut,
+    HRTenureOut
+)
+
 
 router = APIRouter()
 
@@ -111,3 +121,11 @@ def get_gender_dist_by_position(
         logging.error(f"Error fetching data: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+#=================RETRIEVE HR DATA (BRONZE)=================
+@router.get("/get_employee_demographics_by_id/{demo_id}", response_model=HRDemographicsOut)
+def get_employee_demographics_by_id(employee_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, HRDemographics, "employee_id", employee_id)
+    if not record:
+       raise HTTPException(status_code=404, detail="Demographic record not found")
+    return record

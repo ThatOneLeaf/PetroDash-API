@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from .models import EnergyRecords, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
+from .models import EnergyRecords, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed, HRDemographics, HRTenure
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 
 # =================== POWER PLANT ENERGY DATA =================
@@ -62,3 +62,12 @@ def get_hazard_waste_generated_by_id(db: Session, hwg_id: str):
 # --- Hazardous Waste Disposed ---
 def get_hazard_waste_disposed_by_id(db: Session, hwd_id: str):
     return get_one(db, EnviHazardWasteDisposed, "hwd_id", hwd_id)
+
+# =================== HR DATA =================
+# --- Demographics ---
+def get_employee_demographics_by_id(db: Session, employee_id: str):
+    return get_one(db, HRDemographics, "employee_id", employee_id)
+
+# --- Tenure ---
+def get_employee_tenure_by_id(db: Session, tr_id: str):
+    return get_one(db, HRTenure, "tr_id", tr_id)

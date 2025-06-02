@@ -101,12 +101,46 @@ class EnviHazardWasteDisposedOut(BaseModel):
 
 class HRDemographicsOut(BaseModel):
     employee_id: str
-    gender: str
+    gender: Optional[str]
     birthdate: Optional[dt]
     position_id: Optional[str]
     p_np: Optional[str]
     company_id: Optional[str]
-    create_at: Optional[dt]
-    updated_at: Optional[dt]
     
     model_config = ConfigDict(from_attributes=True)
+
+class HRTenureOut(BaseModel):
+    employee_id: str
+    start_date: dt
+    end_date: Optional[dt]
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+class HRSafetyWorkdataOut(BaseModel):
+    company_id: str
+    contractor: str
+    date: dt
+    manpower: int
+    manhours: int
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+class HRParentalLeaveOut(BaseModel):
+    employee_id: str
+    type_of_leave: str
+    date: dt
+    days: int
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+class HROshOut(BaseModel):
+    company_id: str
+    workforce_type: str
+    lost_time: bool
+    date: dt
+    incident_type: str
+    incident_title: str
+    incident_count: int
+    
+    model_config = ConfigDict(from_attributes=True)
+    
