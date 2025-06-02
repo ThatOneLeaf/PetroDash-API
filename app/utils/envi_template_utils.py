@@ -24,6 +24,7 @@ def create_excel_template(table_type: str, include_examples: bool = True) -> io.
         
         df_data.to_excel(writer, sheet_name=template["sheet_name"], index=False)
         
+        """
         # Create instructions sheet
         instructions_data = {
             "Column": template["headers"],
@@ -31,9 +32,10 @@ def create_excel_template(table_type: str, include_examples: bool = True) -> io.
             "Description": template["descriptions"],
             "Example": template["examples"]
         }
+
         df_instructions = pd.DataFrame(instructions_data)
         df_instructions.to_excel(writer, sheet_name="Instructions", index=False)
-        
+        """
         # Format the sheets
         workbook = writer.book
         
@@ -42,10 +44,12 @@ def create_excel_template(table_type: str, include_examples: bool = True) -> io.
         for col in range(len(template["headers"])):
             main_sheet.column_dimensions[chr(65 + col)].width = 20
         
+        """
         # Format instructions sheet
         instructions_sheet = writer.sheets["Instructions"]
         for col in range(4):  # 4 columns in instructions
             instructions_sheet.column_dimensions[chr(65 + col)].width = 25
+        """
     
     output.seek(0)
     return output
