@@ -46,6 +46,7 @@ def get_energy_records_by_status(
             JOIN public.checker_status_log csl
               ON er.energy_id = csl.record_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+            ORDER BY er.create_at desc, er.date_generated desc, er.updated_at desc
         """)
 
         result = db.execute(query, {"status_id": status_id})
