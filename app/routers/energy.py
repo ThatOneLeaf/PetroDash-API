@@ -3,9 +3,10 @@ from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.bronze.crud import EnergyRecords
-from app.bronze.schemas import EnergyRecordOut
+from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
 from app.dependencies import get_db
 from app.crud.base import get_one, get_all, get_many, get_many_filtered
+from datetime import datetime
 import logging
 import traceback
 
@@ -117,6 +118,39 @@ def get_energy_by_id(energy_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Energy record not found")
     return record
 
+# ====================== add energy record ====================== #
+def generate_energy_id(db: Session) -> str:
+    today = datetime.now().strftime("%Y%m%d")
+    like_pattern = f"EN-{today}-%"
+
+    # Count how many records already exist for today
+    count_today = (
+        db.query(EnergyRecords)
+        .filter(EnergyRecords.energy_id.like(like_pattern))
+        .count()
+    )
+
+    seq = f"{count_today + 1:03d}"  # Format as 3-digit sequence
+    return f"EN-{today}-{seq}"
+
+@router.post("/add_energy_record")
+def add_energy_record(record: AddEnergyRecord, db: Session = Depends(get_db)):
+    new_id = generate_energy_id(db)
+    new_record = EnergyRecords(
+        energy_id=new_id,
+        power_plant_id=record.power_plant_id,
+        datetime=record.datetime,
+        energy_generated=record.energy_generated,
+        unit_of_measurement=record.unit_of_measurement,
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+    
+    # update silver
+    db.execute(text("CALL silver.load_csv_silver();"))
+    db.commit()
+    return new_record
 
 
 
