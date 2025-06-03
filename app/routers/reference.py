@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends,  Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List, Dict
+from typing import Optional, List, Dict
 from ..dependencies import get_db
 import logging
 import traceback
@@ -63,3 +63,27 @@ def get_expenditure_types(db: Session = Depends(get_db)):
         logging.error(f"Error fetching expenditure types: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ====================== powerplant based on company ====================== #
+@router.get("/power_plants", response_model=List[dict])
+def get_fact_energy(
+    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
+    db: Session = Depends(get_db)
+):
+    try:
+        sql = text("""
+            SELECT power_plant_id, site_name 
+            FROM ref.ref_power_plants 
+            WHERE (:company_ids IS NULL OR company_id = ANY(:company_ids));
+        """)
+
+        result = db.execute(sql, {"company_ids": company_ids})
+        data = [dict(row._mapping) for row in result]
+        return data
+
+    except Exception as e:
+        logging.error(f"Error calling powerplant: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
