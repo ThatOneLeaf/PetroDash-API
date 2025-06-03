@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from .models import EnergyRecords, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed, HRDemographics, HRTenure
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
+from app.utils.formatting_id import generate_pkey_id
 
 # =================== POWER PLANT ENERGY DATA =================
 def get_energy_record_by_id(db: Session, energy_id: str):
@@ -12,7 +13,8 @@ def get_all_energy_records(db: Session):
 def get_filtered_energy_records(db: Session, filters: dict, skip: int = 0, limit: int = 100):
     return get_many_filtered(db, EnergyRecords, filters=filters, skip=skip, limit=limit)
 
-# =================== ENVIRONMENTAL DATA =================
+# ====================================== ENVIRONMENTAL DATA ====================================
+# ====================================== RETRIEVE DATA ====================================
 # --- Water Abstraction ---
 def get_water_abstraction_by_id(db: Session, wa_id: str):
     return get_one(db, EnviWaterAbstraction, "wa_id", wa_id)
@@ -62,6 +64,27 @@ def get_hazard_waste_generated_by_id(db: Session, hwg_id: str):
 # --- Hazardous Waste Disposed ---
 def get_hazard_waste_disposed_by_id(db: Session, hwd_id: str):
     return get_one(db, EnviHazardWasteDisposed, "hwd_id", hwd_id)
+
+# ====================================== INSERT DATA ====================================
+# ====================================== BULK INSERT ======================================
+def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
+    records = []
+    for row in rows:
+        wa_id = generate_pkey_id(db, "WA", EnviWaterAbstraction, "wa_id")
+        record = EnviWaterAbstraction(
+            wa_id=wa_id,
+            company_id=row["company_id"],
+            year=row["year"],
+            month=row["month"],
+            quarter=row["quarter"],
+            volume=row["volume"],
+            unit_of_measurement=row["unit_of_measurement"],
+        )
+        records.append(record)
+
+    db.bulk_save_objects(records)
+    db.commit()
+    return len(records)
 
 # =================== HR DATA =================
 # --- Demographics ---
