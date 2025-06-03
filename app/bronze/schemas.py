@@ -18,6 +18,37 @@ class AddEnergyRecord(BaseModel):
     datetime: Optional[dt]
     energy_generated: Optional[float]
     unit_of_measurement: Optional[str]
+    
+#====================CSR/HELP=================================
+class CSRActivity(BaseModel):
+    csr_id: str
+    company_id: Optional[str]
+    project_id: Optional[str]
+    project_year: Optional[int]
+    csr_report: Optional[int]
+    project_expenses: Optional[float]
+    created_at: Optional[dt]
+    updated_at: Optional[dt]
+
+    model_config = ConfigDict(from_attributes=True)
+
+class CSRProject(BaseModel):
+    project_id: str
+    program_id: Optional[str]
+    project_name: Optional[str]
+    project_metrics: Optional[str]
+    created_at: Optional[dt]
+    updated_at: Optional[dt]
+
+    model_config = ConfigDict(from_attributes=True)
+
+class CSRProgram(BaseModel):
+    program_id: str
+    program_name: Optional[str]
+    created_at: Optional[dt]
+    updated_at: Optional[dt]
+
+    model_config = ConfigDict(from_attributes=True)
 
 #====================ENVIRONMENTAL=================================
 class EnviWaterAbstractionOut(BaseModel):

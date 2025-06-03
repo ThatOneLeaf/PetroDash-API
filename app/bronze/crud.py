@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from .models import EnergyRecords, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
+from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
 from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
@@ -14,8 +14,41 @@ def get_all_energy_records(db: Session):
 def get_filtered_energy_records(db: Session, filters: dict, skip: int = 0, limit: int = 100):
     return get_many_filtered(db, EnergyRecords, filters=filters, skip=skip, limit=limit)
 
+# ============================ CSR/HELP DATA============================
+# --- CSR Activity ---
+def get_csr_activity_by_id(db: Session, csr_id: str):
+    return get_one(db, CSRActivity, "csr_id", csr_id)
+
+def get_all_csr_activities(db: Session):
+    return get_all(db, CSRActivity)
+
+def get_filtered_csr_activities(db: Session, filters: dict, skip: int = 0, limit: int = 100):
+    return get_many_filtered(db, CSRActivity, filters=filters, skip=skip, limit=limit)
+
+# --- CSR Project ---
+def get_csr_project_by_id(db: Session, project_id: str):
+    return get_one(db, CSRProject, "project_id", project_id)
+
+def get_all_csr_projects(db: Session):
+    return get_all(db, CSRProject)
+    
+def get_filtered_csr_projects(db: Session, filters: dict, skip: int = 0, limit: int = 100):
+    return get_many_filtered(db, CSRProject, filters=filters, skip=skip, limit=limit)
+
+# --- CSR Program ---
+def get_csr_program_by_id(db: Session, program_id: str):
+    return get_one(db, CSRProgram, "program_id", program_id)
+
+def get_all_csr_programs(db: Session):
+    return get_all(db, CSRProgram)
+
+def get_filtered_csr_programs(db: Session, filters: dict, skip: int = 0, limit: int = 100):
+    return get_many_filtered(db, CSRProgram, filters=filters, skip=skip, limit=limit)
+
 # ====================================== ENVIRONMENTAL DATA ====================================
 # ====================================== RETRIEVE DATA ====================================
+
+# =================== ENVIRONMENTAL DATA =================
 # --- Water Abstraction ---
 def get_water_abstraction_by_id(db: Session, wa_id: str):
     return get_one(db, EnviWaterAbstraction, "wa_id", wa_id)

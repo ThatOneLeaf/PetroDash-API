@@ -14,4 +14,4 @@ api_router.include_router(economic_router, prefix="/economic", tags=["economic"]
 api_router.include_router(reference_router, prefix="/reference", tags=["reference"])
 api_router.include_router(environment_router, prefix="/environment", tags=["environment"])
 api_router.include_router(hr_router, prefix="/hr", tags=["hr"])
-api_router.include_router(csr_router, prefix="/csr", tags=["csr"])
+api_router.include_router(csr_router, prefix="/help", tags=["help"])
