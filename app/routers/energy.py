@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Form, UploadFile, File
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, update, select
 from app.bronze.crud import EnergyRecords
 from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
 from app.dependencies import get_db
@@ -182,59 +182,86 @@ def add_energy_record(
 
 
 # ====================== bulk add energy record ====================== #
-# @router.post("/bulk_add_energy_record")
-# def bulk_add_energy_record(
-#     powerPlant: str = Form(...),
-#     metric: str = Form(...),
-#     file: UploadFile = File(...),
-#     db: Session = Depends(get_db),
-# ):
-#     if file.content_type not in [
-#         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-#         "application/vnd.ms-excel"
-#     ]:
-#         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an Excel file.")
+@router.post("/bulk_add_energy_record")
+def bulk_add_energy_record(
+    powerPlant: str = Form(...),
+    metric: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    if file.content_type not in [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel"
+    ]:
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an Excel file.")
 
-#     try:
-#         contents = file.file.read()
-#         df = pd.read_excel(io.BytesIO(contents))
-#     except Exception as e:
-#         raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {e}")
+    try:
+        contents = file.file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {e}")
 
-#     if 'date' not in df.columns or 'energy_generated' not in df.columns:
-#         raise HTTPException(status_code=400, detail="Excel must contain 'date' and 'energy_generated' columns.")
+    if 'date' not in df.columns or 'energy_generated' not in df.columns:
+        raise HTTPException(status_code=400, detail="Excel must contain 'date' and 'energy_generated' columns.")
 
-#     # --- Use generate_energy_id() once, then extract prefix and number ---
-#     first_id = generate_energy_id(db)
-#     parts = first_id.split("-")
-#     prefix = "-".join(parts[:2])
-#     start_number = int(parts[-1])
+    # Generate base energy_id prefix
+    first_id = generate_energy_id(db)
+    parts = first_id.split("-")
+    prefix = "-".join(parts[:2])
+    counter = int(parts[-1])
 
-#     records_to_add = []
+    inserted = 0
+    updated = 0
 
-#     for i, (_, row) in enumerate(df.iterrows()):
-#         try:
-#             parsed_date = pd.to_datetime(row['date'], format='%Y-%m-%d')
-#         except Exception:
-#             raise HTTPException(status_code=400, detail=f"Invalid date format at row {i + 2}. Use YYYY-MM-DD.")
+    for i, (_, row) in enumerate(df.iterrows()):
+        try:
+            date_val = pd.to_datetime(row["date"], format="%Y-%m-%d").date()
+            energy_val = float(row["energy_generated"])
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Invalid format at row {i+2}.")
 
-#         energy_id = f"{prefix}-{str(start_number + i).zfill(3)}"
+        # Check if a record exists
+        existing_query = select(EnergyRecords.energy_generated).where(
+            EnergyRecords.power_plant_id == powerPlant,
+            EnergyRecords.datetime == date_val
+        )
+        result = db.execute(existing_query).first()
 
-#         record = EnergyRecords(
-#             energy_id=energy_id,
-#             power_plant_id=powerPlant,
-#             datetime=parsed_date,
-#             energy_generated=row['energy_generated'],
-#             unit_of_measurement=metric,
-#         )
-#         records_to_add.append(record)
+        if result:
+            # Perform SQL-level update to avoid modifying model attribute directly
+            update_stmt = (
+                update(EnergyRecords)
+                .where(
+                    EnergyRecords.power_plant_id == powerPlant,
+                    EnergyRecords.datetime == date_val
+                )
+                .values(energy_generated=EnergyRecords.energy_generated + energy_val)
+            )
+            db.execute(update_stmt)
+            updated += 1
+        else:
+            new_id = f"{prefix}-{str(counter).zfill(3)}"
+            counter += 1
 
-#     try:
-#         db.bulk_save_objects(records_to_add)
-#         db.commit()
-#         db.execute(text("CALL silver.load_csv_silver();"))
-#         db.commit()
+            new_record = EnergyRecords(
+                energy_id=new_id,
+                power_plant_id=powerPlant,
+                datetime=date_val,
+                energy_generated=energy_val,
+                unit_of_measurement=metric,
+            )
+            db.add(new_record)
+            inserted += 1
 
-#         return {"message": f"Successfully added {len(records_to_add)} energy records."}
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Database error: {e}")
+    try:
+        db.commit()
+        db.execute(text("CALL silver.load_csv_silver();"))
+        db.commit()
+        return {
+            "message": "Processed successfully.",
+            "inserted": inserted,
+            "updated": updated
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
