@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Dict, Union
@@ -19,7 +20,8 @@ from app.bronze.crud import (
     EnviElectricConsumption,
     EnviNonHazardWaste,
     EnviHazardWasteGenerated,
-    EnviHazardWasteDisposed
+    EnviHazardWasteDisposed,
+    bulk_create_water_abstractions
 )
 from app.bronze.schemas import (
     EnviWaterAbstractionOut,
@@ -37,6 +39,14 @@ from ..template.envi_template_config import TEMPLATE_DEFINITIONS
 from ..utils.envi_template_utils import create_excel_template, create_all_templates, get_table_mapping
 
 router = APIRouter()
+
+# For Validations
+VALID_MONTHS = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+]
+VALID_QUARTERS = {"Q1", "Q2", "Q3", "Q4"}
+CURRENT_YEAR = datetime.now().year
 
 #======================================================RETRIEVING-TYPE APIs======================================================
 #=================RETRIEVE ALL ENVIRONMENTAL DATA (GOLD)=================
@@ -672,10 +682,61 @@ def get_hazard_waste_disposed_by_id(hwd_id: str, db: Session = Depends(get_db)):
 
 #======================================================CRUD-TYPE APIs======================================================
 #====================================BULK ADD RECORDS (ENVI)====================================
-@router.get("/generate_water_abstraction_id")
-def generate_water_abstraction_id(db: Session = Depends(get_db)):
-    generated_id = generate_pkey_id(db, "WA", EnviWaterAbstraction, "wa_id")
-    return {"generated_id": generated_id}
+@router.post("/water-bulk_upload_water_abstraction")
+def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        df = pd.read_excel(file.file)
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'month', 'quarter', 'volume', 'unit_of_measurement'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if row["month"] not in [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            ]:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid month '{row['month']}'")
+
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid quarter '{row['quarter']}'")
+
+            if not isinstance(row["volume"], (int, float)) or row["volume"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid volume")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "month": row["month"],
+                "quarter": row["quarter"],
+                "volume": float(row["volume"]),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+            })
+
+        count = bulk_create_water_abstractions(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============== EXCEL TEMPLATE ENDPOINTS ==============
 @router.get("/create_data_template")
