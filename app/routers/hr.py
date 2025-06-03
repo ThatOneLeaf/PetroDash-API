@@ -194,7 +194,7 @@ def get_safety_workdata_records_by_status(
             SELECT swd.*, csl.status_id
             FROM silver.hr_safety_workdata swd
             JOIN public.checker_status_log csl
-            ON (swd.company_id || '|' || swd.contractor || '|' || swd.date) = csl.record_id
+                ON swd.safety_workdata_id = csl.record_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
 
@@ -221,7 +221,7 @@ def get_occupational_safety_health_records_by_status(
             SELECT osh.*, csl.status_id
             FROM silver.hr_occupational_safety_health osh
             JOIN public.checker_status_log csl
-            ON (osh.company_id || '|' || osh.workforce_type || '|' || osh.lost_time || '|' || osh.date || '|' || osh.incident_type || '|' || osh.incident_title) = csl.record_id
+                ON osh.osh_id = csl.record_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
 
@@ -249,7 +249,7 @@ def get_training_records_by_status(
             SELECT tr.*, csl.status_id
             FROM silver.hr_training tr
             JOIN public.checker_status_log csl
-            ON (tr.company_id || '|' || tr.date || '|' || tr.training_title) = csl.record_id
+                ON tr.training_id = csl.record_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
 
