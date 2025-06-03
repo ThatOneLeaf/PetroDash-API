@@ -50,6 +50,14 @@ class CSRProgram(Base):
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 #============================ENVIRONMENTAL=================================
+class EnviCompanyProperty(Base):
+    __tablename__ = "envi_company_property"
+
+    cp_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10), index=True)
+    cp_name = Column(String(30))
+    cp_type = Column(String(15))
+
 class EnviWaterAbstraction(Base):
     __tablename__ = "envi_water_abstraction"
 

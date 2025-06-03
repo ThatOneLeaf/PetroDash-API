@@ -13,6 +13,7 @@ from typing import Optional, List
 from app.dependencies import get_db
 from app.crud.base import get_all, get_many_filtered, get_one
 from app.bronze.crud import (
+    EnviCompanyProperty,
     EnviWaterAbstraction, 
     EnviWaterDischarge, 
     EnviWaterConsumption,
@@ -27,7 +28,8 @@ from app.bronze.crud import (
     bulk_create_electric_consumption,
     bulk_create_non_hazard_waste,
     bulk_create_hazard_waste_generated,
-    bulk_create_hazard_waste_disposed
+    bulk_create_hazard_waste_disposed,
+    bulk_create_diesel_consumption
 )
 from app.bronze.schemas import (
     EnviWaterAbstractionOut,
@@ -1097,6 +1099,93 @@ def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session 
             })
 
         count = bulk_create_hazard_waste_disposed(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/bulk_upload_diesel_consumption")
+def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk diesel consumption data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'cp_name', 'unit_of_measurement', 'consumption', 'date'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # Pre-fetch all company properties for lookup (case-insensitive)
+        company_properties = db.query(EnviCompanyProperty).all()
+        cp_lookup = {}
+        for cp in company_properties:
+            key = (cp.company_id.lower(), cp.cp_name.lower())
+            cp_lookup[key] = cp.cp_id
+
+        # data cleaning & row-level validation
+        rows = []
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["cp_name"], str) or not row["cp_name"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid cp_name")
+
+            # Look up cp_id using company_id and cp_name (case-insensitive)
+            company_id = row["company_id"].strip()
+            cp_name = row["cp_name"].strip()
+            cp_lookup_key = (company_id.lower(), cp_name.lower())
+            
+            if cp_lookup_key not in cp_lookup:
+                raise HTTPException(
+                    status_code=422, 
+                    detail=f"Row {i+2}: Company property not found for company_id '{company_id}' and cp_name '{cp_name}'"
+                )
+            
+            cp_id = cp_lookup[cp_lookup_key]
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["consumption"], (int, float)) or row["consumption"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid consumption")
+
+            # Validate date
+            try:
+                if isinstance(row["date"], str):
+                    # Try to parse string date
+                    parsed_date = pd.to_datetime(row["date"]).date()
+                elif hasattr(row["date"], 'date'):
+                    # Handle pandas Timestamp
+                    parsed_date = row["date"].date()
+                elif isinstance(row["date"], datetime.date):
+                    # Already a date object
+                    parsed_date = row["date"]
+                else:
+                    raise ValueError("Invalid date format")
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid date format")
+
+            # Extract year from date for the crud function
+            year = parsed_date.year
+
+            rows.append({
+                "company_id": company_id,
+                "cp_id": cp_id,
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "consumption": float(row["consumption"]),
+                "date": parsed_date,
+                "year": year  # Added for the crud function grouping logic
+            })
+
+        count = bulk_create_diesel_consumption(db, rows)
         return {"message": f"{count} records successfully inserted."}
 
     except HTTPException:

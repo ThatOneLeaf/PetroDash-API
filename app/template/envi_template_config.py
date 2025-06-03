@@ -58,7 +58,7 @@ TEMPLATE_DEFINITIONS = {
     "diesel_consumption": {
         "filename": "diesel_consumption_template.xlsx",
         "sheet_name": "Diesel Consumption",
-        "headers": ["company_id", "cp_id", "unit_of_measurement", "consumption", "date"],
+        "headers": ["company_id", "cp_name", "unit_of_measurement", "consumption", "date"],
         "data_types": ["VARCHAR(10)", "VARCHAR(20)", "VARCHAR(15)", "DOUBLE", "DATE"],
         "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "company property (ex: Generator Set, Grass Cutter, etc.)", "unit of measurement (ex: Liter)", "diesel consumption in liter (ex: 234.789)", "date (YYYY-MM-DD)"],
         "descriptions": [
@@ -105,7 +105,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Hazard Waste Generated",
         "headers": ["company_id", "metrics", "unit_of_measurement", "waste_generated", "quarter", "year"],
         "data_types": ["VARCHAR(10)", "VARCHAR(50)", "VARCHAR(15)", "DOUBLE", "VARCHAR(2)", "SMALLINT"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "metrics (ex: Battery, Used Oil, Electronic Waste, etc.)", "unit of measurement (ex: Kilogram, Ton, Liter)", "hazardous waste generated (ex: 89.25)", "month name (ex: January, February)", "year (ex: 2024)"],
+        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "metrics (ex: Battery, Used Oil, Electronic Waste, etc.)", "unit of measurement (ex: Kilogram, Ton, Liter)", "hazardous waste generated (ex: 89.25)", "quarter (ex: Q1, Q2, Q3, Q4)", "year (ex: 2024)"],
         "descriptions": [
             "Referenced Company ID",
             "Waste metrics/type",

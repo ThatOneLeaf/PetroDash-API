@@ -51,6 +51,12 @@ class CSRProgram(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 #====================ENVIRONMENTAL=================================
+class EnviCompanyPropertyOut(BaseModel):
+    cp_id: str
+    company_id: Optional[str]
+    cp_name: Optional[str]
+    cp_type: Optional[str]
+
 class EnviWaterAbstractionOut(BaseModel):
     wa_id: str
     company_id: Optional[str]
