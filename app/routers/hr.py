@@ -164,7 +164,7 @@ def get_parental_leave_records_by_status(
 
         query = text("""
             SELECT pl.*, csl.status_id
-            FROM silver.hr_parental pl
+            FROM silver.hr_parental_leave pl
             JOIN public.checker_status_log csl
                 ON pl.parental_leave_id = csl.record_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
