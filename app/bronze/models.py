@@ -173,3 +173,12 @@ class HROsh(Base):
     incident_title = Column(TEXT, primary_key=True, index=True)
     incident_count = Column(Integer)
 
+# HR Excel file template generation
+# class HRTableType(str, Enum):
+#     DEMOGRAPHICS = "demographics"
+#     TENURE = "tenure"
+#     SAFETY_WORKDATA = "safety_workdata"
+#     TRAINING = "training"
+#     PARENTAL_LEAVE = "parental_leave"
+#     OCCUPATIONAL_SAFETY_HEALTH = "occupational_safety_health"
+#     ALL = "all"

@@ -9,11 +9,21 @@ import traceback
 from app.crud.base import get_all, get_many_filtered, get_one
 from app.bronze.crud import (
     HRDemographics,
-    HRTenure
+    HRTenure,
+    HROsh,
+    HRParentalLeave,
+    HRSafetyWorkdata,
+    HRTraining
 )
 from app.bronze.schemas import (
     HRDemographicsOut,
-    HRTenureOut
+    HRTenureOut,
+    HROshOut,
+    HRParentalLeaveOut,
+    HRSafetyWorkdataOut,
+    HRTrainingOut,
+    EmployabilityCombinedOut,
+    AddEmployabilityRecord
 )
 
 
@@ -264,10 +274,68 @@ def get_training_records_by_status(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
-#=================RETRIEVE HR DATA (BRONZE)=================
-@router.get("/get_employee_demographics_by_id/{employee_id}", response_model=HRDemographicsOut)
-def get_employee_demographics_by_id(employee_id: str, db: Session = Depends(get_db)):
-    record = get_one(db, HRDemographics, "employee_id", employee_id)
+#=================RETRIEVE HR DATA BY ID(BRONZE)=================
+@router.get("/get_employability_combined_by_id/{employee_id}", response_model=EmployabilityCombinedOut)
+def get_employability_combined_by_id(employee_id: str, db: Session = Depends(get_db)):
+    demographics = get_one(db, HRDemographics, "employee_id", employee_id)
+    if not demographics:
+        raise HTTPException(status_code=404, detail="Demographic record not found")
+    
+    tenure = get_one(db, HRTenure, "employee_id", employee_id)
+    if not tenure:
+        raise HTTPException(status_code=404, detail="Tenure record not found")
+    
+    return EmployabilityCombinedOut(demographics=demographics, tenure=tenure)
+'''
+@router.get("/get_hr_osh_by_id/{osh_id}", response_model=HROshOut)
+def get_hr_osh_by_id(osh_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, HROsh, "osh_id", osh_id)
     if not record:
-       raise HTTPException(status_code=404, detail="Demographic record not found")
+        raise HTTPException(status_code=404, detail="Occupational Safety and Health record not found")
     return record
+
+@router.get("/get_hr_parental_leave_by_id/{parental_leave_id}", response_model=HRParentalLeaveOut)
+def get_hr_parental_leave_by_id(parental_leave_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, HRParentalLeave, "parental_leave_id", parental_leave_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Parental Leave record not found")
+    return record
+
+@router.get("/get_hr_safety_workdata_by_id/{safety_workdata_id}", response_model=HRSafetyWorkdataOut)
+def get_hr_safety_workdata_by_id(safety_workdata_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, HRSafetyWorkdata, "safety_workdata_id", safety_workdata_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Safety Workdata record not found")
+    return record
+
+@router.get("/get_hr_training_by_id/{training_id}", response_model=HRTrainingOut)
+def get_hr_training_by_id(training_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, HRTraining, "training_id", training_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Training record not found")
+    return record
+'''
+
+# ====================== ADD RECORD ====================== 
+# --- EMPLOYABILITY ---
+@router.post("/add_employability_record")
+def add_employability_record(record: AddEmployabilityRecord, db: Session = Depends(get_db)):
+    new_record = AddEmployabilityRecord(
+        employee_id=record.demographics.employee_id,
+        gender=record.demographics.gender,
+        birthdate=record.demographics.birthdate,
+        position_id=record.demographics.position_id,
+        p_np=record.demographics.p_np,
+        company_id=record.demographics.company_id,
+        employment_status=record.demographics.employment_status,
+        start_date=record.tenure.start_date,
+        end_date=record.tenure.end_date,
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+    
+    # update silver
+    db.execute(text("CALL silver.load_hr_silver();"))
+    db.commit()
+    return new_record

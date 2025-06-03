@@ -150,4 +150,32 @@ class HROshOut(BaseModel):
     incident_count: int
     
     model_config = ConfigDict(from_attributes=True)
+
+class HRTrainingOut(BaseModel):
+    company_id: str
+    date: str
+    training_title: str
+    training_hours: dt
+    number_of_participants: int
     
+    model_config = ConfigDict(from_attributes=True)
+    
+class EmployabilityCombinedOut(BaseModel):
+    demographics: HRDemographicsOut
+    tenure: HRTenureOut
+
+class AddEmployabilityRecord(BaseModel):
+    demographics: HRDemographicsOut
+    tenure: HRTenureOut
+'''
+class AddEmployabilityRecord(BaseModel):
+    employee_id: str
+    gender: Optional[str]
+    birthdate: Optional[dt]
+    position_id: Optional[str]
+    p_np: Optional[str]
+    company_id: Optional[str]
+    employment_status: Optional[str]
+    start_date: dt
+    end_date: Optional[dt]
+'''

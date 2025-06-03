@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-from .models import EnergyRecords, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed, HRDemographics, HRTenure
+from .models import EnergyRecords, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
+from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
 
@@ -122,3 +123,19 @@ def get_employee_demographics_by_id(db: Session, employee_id: str):
 # --- Tenure ---
 def get_employee_tenure_by_id(db: Session, tr_id: str):
     return get_one(db, HRTenure, "tr_id", tr_id)
+
+# --- Safety Workdata ---
+def get_safety_workdata_by_id(db: Session, sw_id: str):
+    return get_one(db, HRSafetyWorkdata, "sw_id", sw_id)
+
+# --- Training ---
+def get_training_by_id(db: Session, training_id: str):
+    return get_one(db, HRTraining, "training_id", training_id)
+
+# --- Parental Leave ---
+def get_parental_leave_by_id(db: Session, pl_id: str):
+    return get_one(db, HRParentalLeave, "pl_id", pl_id)
+
+# --- Occupational Safety and Health ---
+def get_osh_by_id(db: Session, osh_id: str):
+    return get_one(db, HROsh, "osh_id", osh_id)
