@@ -18,6 +18,37 @@ class EnergyRecords(Base):
     create_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
+#============================CSR/HELP============================
+class CSRActivity(Base):
+    __tablename__ = "csr_activity"
+
+    csr_id = Column(String(10), primary_key=True, index=True)
+    company_id = Column(String(20), index=True)
+    project_id = Column(String(20), index=True)
+    project_year = Column(SmallInteger)
+    csr_report = Column(Numeric)
+    project_expenses = Column(Numeric)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+class CSRProject(Base):
+    __tablename__ = "csr_project"
+
+    project_id = Column(String(20), primary_key=True, index=True)
+    program_id = Column(String(20), index=True)
+    project_name = Column(String(20))
+    project_metrics = Column(String(50))
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+class CSRProgram(Base):
+    __tablename__ = "csr_program"
+
+    program_id = Column(String(5), primary_key=True, index=True)
+    program_name = Column(String(20))
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
 #============================ENVIRONMENTAL=================================
 class EnviWaterAbstraction(Base):
     __tablename__ = "envi_water_abstraction"

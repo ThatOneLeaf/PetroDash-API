@@ -40,8 +40,7 @@ def get_csr_programs(db: Session = Depends(get_db)):
         ]
         
         logging.info(f"Query returned {len(data)} CSR programs")
-        return data
-        
+
     except Exception as e:
         logging.error(f"Error fetching CSR programs: {str(e)}")
         logging.error(traceback.format_exc())
@@ -77,7 +76,7 @@ def get_csr_projects(program_id: Optional[str] = None, db: Session = Depends(get
             {where_clause}
             ORDER BY pr.program_name, cp.project_name
         """), params)
-        
+
         data = [
             {
                 'projectId': row.project_id,
@@ -131,7 +130,7 @@ def get_csr_activities(
         where_clause = ""
         if where_conditions:
             where_clause = "WHERE " + " AND ".join(where_conditions)
-        
+
         result = db.execute(text(f"""
             SELECT 
                 ca.csr_id,
@@ -144,12 +143,17 @@ def get_csr_activities(
                 ca.project_year,
                 ROUND(ca.csr_report::numeric, 2) as csr_report,
                 ROUND(ca.project_expenses::numeric, 2) as project_expenses,
+                CASE 
+                    WHEN csl.status_id = 'HAP' THEN 'Head Approved'
+                    ELSE csl.status_id
+                END AS status_id,
                 ca.date_created,
                 ca.date_updated
             FROM silver.csr_activity ca
             JOIN ref.company_main cm ON ca.company_id = cm.company_id
             JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
             JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
+            JOIN public.checker_status_log as csl ON csl.record_id = ca.csr_id
             {where_clause}
             ORDER BY ca.project_year DESC, cm.company_name, pr.program_name, cp.project_name
         """), params)
@@ -166,6 +170,7 @@ def get_csr_activities(
                 'projectYear': row.project_year,
                 'csrReport': float(row.csr_report) if row.csr_report else 0,
                 'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
+                'statusId': row.status_id,
                 'dateCreated': row.date_created.isoformat() if row.date_created else None,
                 'dateUpdated': row.date_updated.isoformat() if row.date_updated else None
             }
@@ -179,4 +184,3 @@ def get_csr_activities(
         logging.error(f"Error fetching CSR activities: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-
