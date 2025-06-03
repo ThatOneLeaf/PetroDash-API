@@ -3,6 +3,7 @@ from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviWate
 from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
+from sqlalchemy import text
 
 # =================== POWER PLANT ENERGY DATA =================
 def get_energy_record_by_id(db: Session, energy_id: str):
@@ -146,6 +147,461 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
     
     db.bulk_save_objects(records)
     db.commit()
+
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := TRUE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+             )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        # You can choose to raise the exception or handle it gracefully
+        # raise e
+    return len(records)
+
+def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    
+    # Group rows by company_id and year to handle different patterns
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+    
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["year"]))
+        grouped_rows[key].append((i, row))
+    
+    # Generate IDs for each group
+    id_mapping = {}
+    for (company_id, year), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            indicator="WD",
+            company_id=company_id,
+            year=year,
+            model_class=EnviWaterDischarge,
+            id_field="wd_id",
+            count=len(row_list)
+        )
+        
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+    
+    # Create records with proper IDs
+    for i, row in enumerate(rows):
+        record = EnviWaterDischarge(
+            wd_id=id_mapping[i],
+            company_id=row["company_id"],
+            year=row["year"],
+            quarter=row["quarter"],
+            volume=row["volume"],
+            unit_of_measurement=row["unit_of_measurement"],
+        )
+        records.append(record)
+    
+    db.bulk_save_objects(records)
+    db.commit()
+
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := TRUE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+             )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        # You can choose to raise the exception or handle it gracefully
+        # raise e
+    return len(records)
+
+def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    
+    # Group rows by company_id and year to handle different patterns
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+    
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["year"]))
+        grouped_rows[key].append((i, row))
+    
+    # Generate IDs for each group
+    id_mapping = {}
+    for (company_id, year), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            indicator="WC",
+            company_id=company_id,
+            year=year,
+            model_class=EnviWaterConsumption,
+            id_field="wc_id",
+            count=len(row_list)
+        )
+        
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+    
+    # Create records with proper IDs
+    for i, row in enumerate(rows):
+        record = EnviWaterConsumption(
+            wc_id=id_mapping[i],
+            company_id=row["company_id"],
+            year=row["year"],
+            quarter=row["quarter"],
+            volume=row["volume"],
+            unit_of_measurement=row["unit_of_measurement"],
+        )
+        records.append(record)
+    
+    db.bulk_save_objects(records)
+    db.commit()
+
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := TRUE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+             )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        # You can choose to raise the exception or handle it gracefully
+        # raise e
+    return len(records)
+
+def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    
+    # Group rows by company_id and year to handle different patterns
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+    
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["year"]))
+        grouped_rows[key].append((i, row))
+    
+    # Generate IDs for each group
+    id_mapping = {}
+    for (company_id, year), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            indicator="EC",
+            company_id=company_id,
+            year=year,
+            model_class=EnviElectricConsumption,
+            id_field="ec_id",
+            count=len(row_list)
+        )
+        
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+    
+    # Create records with proper IDs
+    for i, row in enumerate(rows):
+        record = EnviElectricConsumption(
+            ec_id=id_mapping[i],
+            company_id=row["company_id"],
+            source=row["source"],
+            unit_of_measurement=row["unit_of_measurement"],
+            consumption=row["consumption"],
+            quarter=row["quarter"],
+            year=row["year"]            
+        )
+        records.append(record)
+    
+    db.bulk_save_objects(records)
+    db.commit()
+
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := TRUE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+             )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        # You can choose to raise the exception or handle it gracefully
+        # raise e
+    return len(records)
+
+def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    
+    # Group rows by company_id and year to handle different patterns
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+    
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["year"]))
+        grouped_rows[key].append((i, row))
+    
+    # Generate IDs for each group
+    id_mapping = {}
+    for (company_id, year), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            indicator="NHW",
+            company_id=company_id,
+            year=year,
+            model_class=EnviNonHazardWaste,
+            id_field="nhw_id",
+            count=len(row_list)
+        )
+        
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+    
+    # Create records with proper IDs
+    for i, row in enumerate(rows):
+        record = EnviNonHazardWaste(
+            nhw_id=id_mapping[i],
+            company_id=row["company_id"],
+            metrics=row["metrics"],
+            unit_of_measurement=row["unit_of_measurement"],
+            waste=row["waste"],
+            month=row["month"],
+            quarter=row["quarter"],
+            year=row["year"]            
+        )
+        records.append(record)
+    
+    db.bulk_save_objects(records)
+    db.commit()
+
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := TRUE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+             )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        # You can choose to raise the exception or handle it gracefully
+        # raise e
+    return len(records)
+
+def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    
+    # Group rows by company_id and year to handle different patterns
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+    
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["year"]))
+        grouped_rows[key].append((i, row))
+    
+    # Generate IDs for each group
+    id_mapping = {}
+    for (company_id, year), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            indicator="HWG",
+            company_id=company_id,
+            year=year,
+            model_class=EnviHazardWasteGenerated,
+            id_field="hwg_id",
+            count=len(row_list)
+        )
+        
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+    
+    # Create records with proper IDs
+    for i, row in enumerate(rows):
+        record = EnviHazardWasteGenerated(
+            hwg_id=id_mapping[i],
+            company_id=row["company_id"],
+            metrics=row["metrics"],
+            unit_of_measurement=row["unit_of_measurement"],
+            waste_generated=row["waste_generated"],
+            quarter=row["quarter"],
+            year=row["year"]            
+        )
+        records.append(record)
+    
+    db.bulk_save_objects(records)
+    db.commit()
+
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := TRUE,
+                load_hazard_waste_disposed := FALSE
+             )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        # You can choose to raise the exception or handle it gracefully
+        # raise e
+    return len(records)
+
+def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    
+    # Group rows by company_id and year to handle different patterns
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+    
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["year"]))
+        grouped_rows[key].append((i, row))
+    
+    # Generate IDs for each group
+    id_mapping = {}
+    for (company_id, year), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            indicator="HWD",
+            company_id=company_id,
+            year=year,
+            model_class=EnviHazardWasteDisposed,
+            id_field="hwd_id",
+            count=len(row_list)
+        )
+        
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+    
+    # Create records with proper IDs
+    for i, row in enumerate(rows):
+        record = EnviHazardWasteDisposed(
+            hwd_id=id_mapping[i],
+            company_id=row["company_id"],
+            metrics=row["metrics"],
+            unit_of_measurement=row["unit_of_measurement"],
+            waste_disposed=row["waste_disposed"],
+            year=row["year"]            
+        )
+        records.append(record)
+    
+    db.bulk_save_objects(records)
+    db.commit()
+
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := TRUE
+             )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        # You can choose to raise the exception or handle it gracefully
+        # raise e
     return len(records)
 
 # =================== HR DATA =================
