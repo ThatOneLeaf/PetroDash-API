@@ -841,3 +841,25 @@ async def create_individual_template(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+
+
+# FOR COMBOBOX
+@router.get("/distinct_cp_names", response_model=List[dict])
+def get_distinct_cp_names(db: Session = Depends(get_db)):
+    try:
+        logging.info("Fetching distinct cp_id, cp_name values from envi_company_property")
+
+        query = text("""
+            SELECT DISTINCT cp_id, cp_name FROM silver.envi_company_property
+        """)
+
+        result = db.execute(query)
+        data = [dict(row._mapping) for row in result]
+
+        logging.info(f"Returned {len(data)} distinct cp_id, cp_name entries")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving cp_id and cp_name values: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
