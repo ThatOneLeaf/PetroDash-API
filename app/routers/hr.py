@@ -182,33 +182,87 @@ def get_parental_leave_records_by_status(
         raise HTTPException(status_code=500, detail="Internal server error")
     
 # =================SAFETY WORKDATA RECORD BY STATUS================= 
+@router.get("/safety_workdata_records_by_status", response_model=List[dict])
+def get_safety_workdata_records_by_status(
+    status_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info(f"Fetching safety workdata records. Filter status_id: {status_id}")
 
-# @router.get("/safety_workdata_records_by_status", response_model=List[dict])
-# def get_safety_workdata_records_by_status(
-#     status_id: Optional[str] = Query(None),
-#     db: Session = Depends(get_db)
-# ):
-#     try:
-#         logging.info(f"Fetching safety workdata records. Filter status_id: {status_id}")
+        query = text("""
+            SELECT swd.*, csl.status_id
+            FROM silver.hr_safety_workdata swd
+            JOIN public.checker_status_log csl
+            ON (swd.company_id || '|' || swd.contractor || '|' || swd.date) = csl.record_id
+            WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+        """)
 
-#         query = text("""
-#             SELECT swd.*, csl.status_id
-#             FROM silver.hr_safety_workdata swd
-#             JOIN public.checker_status_log csl
-#                 ON pl.employee_id = csl.record_id
-#             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
-#         """)
+        result = db.execute(query, {"status_id": status_id})
+        data = [dict(row._mapping) for row in result]
 
-#         result = db.execute(query, {"status_id": status_id})
-#         data = [dict(row._mapping) for row in result]
+        logging.info(f"Returned {len(data)} records")
+        return data
 
-#         logging.info(f"Returned {len(data)} records")
-#         return data
+    except Exception as e:
+        logging.error(f"Error retrieving safety workdata records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+# =================OCCUPATIONAL SAFETY HEALTH RECORD BY STATUS================= 
+@router.get("/occupational_safety_health_records_by_status", response_model=List[dict])
+def get_occupational_safety_health_records_by_status(
+    status_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info(f"Fetching occupational safety health records. Filter status_id: {status_id}")
 
-#     except Exception as e:
-#         logging.error(f"Error retrieving employability records: {str(e)}")
-#         logging.error(traceback.format_exc())
-#         raise HTTPException(status_code=500, detail="Internal server error")
+        query = text("""
+            SELECT osh.*, csl.status_id
+            FROM silver.hr_occupational_safety_health osh
+            JOIN public.checker_status_log csl
+            ON (osh.company_id || '|' || osh.workforce_type || '|' || osh.lost_time || '|' || osh.date || '|' || osh.incident_type || '|' || osh.incident_title) = csl.record_id
+            WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+        """)
+
+        result = db.execute(query, {"status_id": status_id})
+        data = [dict(row._mapping) for row in result]
+
+        logging.info(f"Returned {len(data)} records")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving occupational safety health records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+# =================TRAINING RECORD BY STATUS================= 
+@router.get("/training_records_by_status", response_model=List[dict])
+def get_training_records_by_status(
+    status_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info(f"Fetching training records Filter status_id: {status_id}")
+
+        query = text("""
+            SELECT tr.*, csl.status_id
+            FROM silver.hr_training tr
+            JOIN public.checker_status_log csl
+            ON (tr.company_id || '|' || tr.date || '|' || tr.training_title) = csl.record_id
+            WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+        """)
+
+        result = db.execute(query, {"status_id": status_id})
+        data = [dict(row._mapping) for row in result]
+
+        logging.info(f"Returned {len(data)} records")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving training records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 #=================RETRIEVE HR DATA (BRONZE)=================
 @router.get("/get_employee_demographics_by_id/{employee_id}", response_model=HRDemographicsOut)
