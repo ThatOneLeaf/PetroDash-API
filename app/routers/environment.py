@@ -7,10 +7,10 @@ import logging
 import traceback
 from fastapi.responses import StreamingResponse
 import io
+from io import BytesIO
 from datetime import datetime
 from typing import Optional, List
 from app.dependencies import get_db
-from app.utils.formatting_id import generate_pkey_id
 from app.crud.base import get_all, get_many_filtered, get_one
 from app.bronze.crud import (
     EnviWaterAbstraction, 
@@ -682,13 +682,15 @@ def get_hazard_waste_disposed_by_id(hwd_id: str, db: Session = Depends(get_db)):
 
 #======================================================CRUD-TYPE APIs======================================================
 #====================================BULK ADD RECORDS (ENVI)====================================
-@router.post("/water-bulk_upload_water_abstraction")
+@router.post("/bulk_upload_water_abstraction")
 def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
     try:
-        df = pd.read_excel(file.file)
+        logging.info(f"Add bulk data")
+        contents = file.file.read()  # If not using async def
+        df = pd.read_excel(BytesIO(contents))
 
         # basic validation...
         required_columns = {'company_id', 'year', 'month', 'quarter', 'volume', 'unit_of_measurement'}
