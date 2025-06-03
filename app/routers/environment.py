@@ -619,7 +619,41 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-#=================RETRIEVE ENVIRONMENTAL DATA BY ID (BRONZE)=================
+#=================RETRIEVE ENVIRONMENTAL DATA (BRONZE)=================
+#==========================FOR WATER ABSTRACTION==========================
+@router.get("/water_abstraction_records", response_model=List[dict])
+def get_water_abstraction_records(db: Session = Depends(get_db)):
+    try:
+        logging.info("Fetching water abstraction records with mapped IDs and status")
+
+        query = text("""
+            SELECT
+                bewa.company_id,
+                bewa.year,
+                COALESCE(bewa.month, 'N/A') AS month,
+                COALESCE(bewa.quarter, 'N/A') AS quarter,
+                bewa.volume,
+                bewa.unit_of_measurement,
+                s.status_name
+            FROM bronze.envi_water_abstraction bewa
+            INNER JOIN silver.wa_id_mapping wim ON bewa.wa_id = wim.wa_id_bronze
+            INNER JOIN silver.envi_water_abstraction sewa ON sewa.wa_id = wim.wa_id_silver
+            INNER JOIN public.checker_status_log csl ON csl.record_id = sewa.wa_id 
+            INNER JOIN public.status s ON s.status_id = csl.status_id
+        """)
+
+        result = db.execute(query)
+        data = [dict(row._mapping) for row in result]
+
+        logging.info(f"Returned {len(data)} water abstraction records")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving water abstraction records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+#==========================BY ID==========================
 """
 This can be used for retrieving specific environmental data records by their IDs and if
 you wish to edit the raw data (that's why this uses bronze schema)
