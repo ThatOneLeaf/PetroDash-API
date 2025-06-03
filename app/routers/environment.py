@@ -79,12 +79,12 @@ def get_water_abstraction(db: Session = Depends(get_db), wa_id: Optional[str] = 
 
             data = {
                 "wa_id": row.water_abstraction_id,
-                "company_name": row.company_name,
+                "company": row.company_name,
                 "volume": float(row.volume) if row.volume is not None else 0,
                 "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status_name": row.status_name
+                "status name": row.status_name
             }
             
             logging.info(f"Found water abstraction data for ID: {wa_id}")
@@ -97,12 +97,12 @@ def get_water_abstraction(db: Session = Depends(get_db), wa_id: Optional[str] = 
             data = [
                 {
                     "wa_id": row.water_abstraction_id,
-                    "company_name": row.company_name,
+                    "company": row.company_name,
                     "volume": float(row.volume) if row.volume is not None else 0,
                     "unit": row.unit,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status_name": row.status_name
+                    "status name": row.status_name
                 }
                 for row in result
             ]
@@ -148,12 +148,12 @@ def get_water_discharge(db: Session = Depends(get_db), wd_id: Optional[str] = No
 
             data = {
                 "wd_id": row.water_discharge_id,
-                "company_name": row.company_name,
+                "company": row.company_name,
                 "volume": float(row.volume) if row.volume is not None else 0,
                 "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status_name": row.status_name
+                "status name": row.status_name
             }
             
             logging.info(f"Found water discharge data for ID: {wd_id}")
@@ -166,12 +166,12 @@ def get_water_discharge(db: Session = Depends(get_db), wd_id: Optional[str] = No
             data = [
                 {
                     "wd_id": row.water_discharge_id,
-                    "company_name": row.company_name,
+                    "company": row.company_name,
                     "volume": float(row.volume) if row.volume is not None else 0,
                     "unit": row.unit,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status_name": row.status_name
+                    "status name": row.status_name
                 }
                 for row in result
             ]
@@ -217,12 +217,12 @@ def get_water_consumption(db: Session = Depends(get_db), wc_id: Optional[str] = 
 
             data = {
                 "wc_id": row.water_consumption_id,
-                "company_name": row.company_name,
+                "company": row.company_name,
                 "volume": float(row.volume) if row.volume is not None else 0,
                 "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status_name": row.status_name
+                "status name": row.status_name
             }
             
             logging.info(f"Found water consumption data for ID: {wc_id}")
@@ -235,12 +235,12 @@ def get_water_consumption(db: Session = Depends(get_db), wc_id: Optional[str] = 
             data = [
                 {
                     "wc_id": row.water_consumption_id,
-                    "company_name": row.company_name,
+                    "company": row.company_name,
                     "volume": float(row.volume) if row.volume is not None else 0,
                     "unit": row.unit,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status_name": row.status_name
+                    "status name": row.status_name
                 }
                 for row in result
             ]
@@ -286,16 +286,16 @@ def get_diesel_consumption(db: Session = Depends(get_db), dc_id: Optional[str] =
 
             data = {
                 "dc_id": row.diesel_consumption_id,
-                "company_name": row.company_name,
-                "company_property_name": row.company_property_name,
-                "company_property_type": row.company_property_type,
-                "unit_of_measurement": row.unit_of_measurement,
+                "company": row.company_name,
+                "property name": row.company_property_name,
+                "property type": row.company_property_type,
+                "unit": row.unit_of_measurement,
                 "consumption": float(row.consumption) if row.consumption is not None else 0,
                 "month": row.month,
                 "year": row.year,
                 "quarter": row.quarter,
                 "date": row.date,
-                "status_name": row.status_name
+                "status name": row.status_name
             }
             
             logging.info(f"Found diesel consumption data for ID: {dc_id}")
@@ -308,16 +308,16 @@ def get_diesel_consumption(db: Session = Depends(get_db), dc_id: Optional[str] =
             data = [
                 {
                     "dc_id": row.diesel_consumption_id,
-                    "company_name": row.company_name,
-                    "company_property_name": row.company_property_name,
-                    "company_property_type": row.company_property_type,
-                    "unit_of_measurement": row.unit_of_measurement,
+                    "company": row.company_name,
+                    "property name": row.company_property_name,
+                    "property type": row.company_property_type,
+                    "unit": row.unit_of_measurement,
                     "consumption": float(row.consumption) if row.consumption is not None else 0,
                     "month": row.month,
                     "year": row.year,
                     "quarter": row.quarter,
                     "date": row.date,
-                    "status_name": row.status_name
+                    "status name": row.status_name
                 }
                 for row in result
             ]
@@ -363,13 +363,13 @@ def get_electric_consumption(db: Session = Depends(get_db), ec_id: Optional[str]
 
             data = {
                 "ec_id": row.electric_consumption_id,
-                "company_name": row.company_name,
+                "company": row.company_name,
                 "source": row.consumption_source,
-                "unit_of_measurement": row.unit_of_measurement,
+                "unit": row.unit_of_measurement,
                 "consumption": float(row.consumption) if row.consumption is not None else 0,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status_name": row.status_name
+                "status name": row.status_name
             }
             
             logging.info(f"Found electric consumption data for ID: {ec_id}")
@@ -382,13 +382,13 @@ def get_electric_consumption(db: Session = Depends(get_db), ec_id: Optional[str]
             data = [
                 {
                     "ec_id": row.electric_consumption_id,
-                    "company_name": row.company_name,
+                    "company": row.company_name,
                     "source": row.consumption_source,
-                    "unit_of_measurement": row.unit_of_measurement,
+                    "unit": row.unit_of_measurement,
                     "consumption": float(row.consumption) if row.consumption is not None else 0,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status_name": row.status_name
+                    "status name": row.status_name
                 }
                 for row in result
             ]
@@ -434,13 +434,13 @@ def get_non_hazard_waste(db: Session = Depends(get_db), nhw_id: Optional[str] = 
 
             data = {
                 "nhw_id": row.non_hazardous_waste_id,
-                "company_name": row.company_name,
+                "company": row.company_name,
                 "metrics": row.metrics,
-                "unit_of_measurement": row.unit_of_measurement,
+                "unit": row.unit_of_measurement,
                 "waste": float(row.waste) if row.waste is not None else 0,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status_name": row.status_name
+                "status name": row.status_name
             }
             
             logging.info(f"Found non hazard waste data for ID: {nhw_id}")
@@ -453,13 +453,13 @@ def get_non_hazard_waste(db: Session = Depends(get_db), nhw_id: Optional[str] = 
             data = [
                 {
                     "nhw_id": row.non_hazardous_waste_id,
-                    "company_name": row.company_name,
+                    "company": row.company_name,
                     "metrics": row.metrics,
-                    "unit_of_measurement": row.unit_of_measurement,
+                    "unit": row.unit_of_measurement,
                     "waste": float(row.waste) if row.waste is not None else 0,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status_name": row.status_name
+                    "status name": row.status_name
                 }
                 for row in result
             ]
@@ -505,13 +505,13 @@ def get_hazard_waste_generated(db: Session = Depends(get_db), hwg_id: Optional[s
 
             data = {
                 "hwg_id": row.hazard_waste_generated_id,
-                "company_name": row.company_name,
-                "waste_type": row.waste_type,
+                "company": row.company_name,
+                "waste type": row.waste_type,
                 "unit": row.unit,
-                "waste_generated": float(row.waste_generated) if row.waste_generated is not None else 0,
+                "waste generated": float(row.waste_generated) if row.waste_generated is not None else 0,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status_name": row.status_name
+                "status name": row.status_name
             }
             
             logging.info(f"Found hazard waste generated data for ID: {hwg_id}")
@@ -524,13 +524,13 @@ def get_hazard_waste_generated(db: Session = Depends(get_db), hwg_id: Optional[s
             data = [
                 {
                     "hwg_id": row.hazard_waste_generated_id,
-                    "company_name": row.company_name,
-                    "waste_type": row.waste_type,
+                    "company": row.company_name,
+                    "waste type": row.waste_type,
                     "unit": row.unit,
-                    "waste_generated": float(row.waste_generated) if row.waste_generated is not None else 0,
+                    "waste generated": float(row.waste_generated) if row.waste_generated is not None else 0,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status_name": row.status_name
+                    "status name": row.status_name
                 }
                 for row in result
             ]
@@ -576,12 +576,12 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
 
             data = {
                 "hwd_id": row.hazard_waste_disposed_id,
-                "company_name": row.company_name,
-                "waste_type": row.waste_type,
+                "company": row.company_name,
+                "waste type": row.waste_type,
                 "unit": row.unit,
-                "waste_disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
+                "waste disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
                 "year": row.year,
-                "status_name": row.status_name
+                "status name": row.status_name
             }
             
             logging.info(f"Found hazard waste disposed data for ID: {hwd_id}")
@@ -594,12 +594,12 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
             data = [
                 {
                     "hwd_id": row.hazard_waste_disposed_id,
-                    "company_name": row.company_name,
-                    "waste_type": row.waste_type,
+                    "company": row.company_name,
+                    "waste type": row.waste_type,
                     "unit": row.unit,
-                    "waste_disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
+                    "waste disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
                     "year": row.year,
-                    "status_name": row.status_name
+                    "status": row.status_name
                 }
                 for row in result
             ]
@@ -628,13 +628,13 @@ def get_water_abstraction_records(db: Session = Depends(get_db)):
 
         query = text("""
             SELECT
-                bewa.company_id,
+                bewa.company_id AS company,
                 bewa.year,
                 COALESCE(bewa.month, 'N/A') AS month,
                 COALESCE(bewa.quarter, 'N/A') AS quarter,
                 bewa.volume,
-                bewa.unit_of_measurement,
-                s.status_name
+                bewa.unit_of_measurement AS unit,
+                s.status_name AS status
             FROM bronze.envi_water_abstraction bewa
             INNER JOIN silver.wa_id_mapping wim ON bewa.wa_id = wim.wa_id_bronze
             INNER JOIN silver.envi_water_abstraction sewa ON sewa.wa_id = wim.wa_id_silver
