@@ -881,6 +881,229 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/bulk_upload_electric_consumption")
+def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk electric consumption data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'quarter', 'source', 'unit_of_measurement', 'consumption'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid quarter '{row['quarter']}'")
+
+            if not isinstance(row["source"], str) or not row["source"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid source")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["consumption"], (int, float)) or row["consumption"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid consumption")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "quarter": row["quarter"],
+                "source": row["source"].strip(),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "consumption": float(row["consumption"]),
+            })
+
+        count = bulk_create_electric_consumption(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_non_hazard_waste")
+def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk non-hazard waste data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'month', 'quarter', 'metrics', 'unit_of_measurement', 'waste'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if row["month"] not in [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            ]:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid month '{row['month']}'")
+
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid quarter '{row['quarter']}'")
+
+            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid metrics")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["waste"], (int, float)) or row["waste"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid waste")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "month": row["month"],
+                "quarter": row["quarter"],
+                "metrics": row["metrics"].strip(),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "waste": float(row["waste"]),
+            })
+
+        count = bulk_create_non_hazard_waste(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_hazard_waste_generated")
+def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk hazard waste generated data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'quarter', 'metrics', 'unit_of_measurement', 'waste_generated'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid quarter '{row['quarter']}'")
+
+            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid metrics")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["waste_generated"], (int, float)) or row["waste_generated"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid waste_generated")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "quarter": row["quarter"],
+                "metrics": row["metrics"].strip(),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "waste_generated": float(row["waste_generated"]),
+            })
+
+        count = bulk_create_hazard_waste_generated(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_hazard_waste_disposed")
+def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk hazard waste disposed data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'metrics', 'unit_of_measurement', 'waste_disposed'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid metrics")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["waste_disposed"], (int, float)) or row["waste_disposed"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid waste_disposed")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "metrics": row["metrics"].strip(),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "waste_disposed": float(row["waste_disposed"]),
+            })
+
+        count = bulk_create_hazard_waste_disposed(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============== EXCEL TEMPLATE ENDPOINTS ==============
 @router.get("/create_data_template")
