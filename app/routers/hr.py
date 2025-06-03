@@ -152,9 +152,10 @@ def get_employability_records_by_status(
         logging.error(f"Error retrieving employability records: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
-    
+
+# =================PARENTAL LEAVE RECORD BY STATUS=================
 @router.get("/parental_leave_records_by_status", response_model=List[dict])
-def get_employability_records_by_status(
+def get_parental_leave_records_by_status(
     status_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
@@ -176,9 +177,38 @@ def get_employability_records_by_status(
         return data
 
     except Exception as e:
-        logging.error(f"Error retrieving employability records: {str(e)}")
+        logging.error(f"Error retrieving parental leave records: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+# =================SAFETY WORKDATA RECORD BY STATUS================= 
+
+# @router.get("/safety_workdata_records_by_status", response_model=List[dict])
+# def get_safety_workdata_records_by_status(
+#     status_id: Optional[str] = Query(None),
+#     db: Session = Depends(get_db)
+# ):
+#     try:
+#         logging.info(f"Fetching safety workdata records. Filter status_id: {status_id}")
+
+#         query = text("""
+#             SELECT swd.*, csl.status_id
+#             FROM silver.hr_safety_workdata swd
+#             JOIN public.checker_status_log csl
+#                 ON pl.employee_id = csl.record_id
+#             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+#         """)
+
+#         result = db.execute(query, {"status_id": status_id})
+#         data = [dict(row._mapping) for row in result]
+
+#         logging.info(f"Returned {len(data)} records")
+#         return data
+
+#     except Exception as e:
+#         logging.error(f"Error retrieving employability records: {str(e)}")
+#         logging.error(traceback.format_exc())
+#         raise HTTPException(status_code=500, detail="Internal server error")
 
 #=================RETRIEVE HR DATA (BRONZE)=================
 @router.get("/get_employee_demographics_by_id/{employee_id}", response_model=HRDemographicsOut)
