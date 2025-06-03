@@ -106,6 +106,7 @@ class HRDemographicsOut(BaseModel):
     position_id: Optional[str]
     p_np: Optional[str]
     company_id: Optional[str]
+    employment_status: Optional[str]
     
     model_config = ConfigDict(from_attributes=True)
 

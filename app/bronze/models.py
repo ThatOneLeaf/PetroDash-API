@@ -127,6 +127,7 @@ class HRDemographics(Base):
     position_id = Column(String(2))
     p_np = Column(String(2))
     company_id = Column(String(10))
+    employment_status = Column(String(20))
 
 class HRTenure(Base):
     __tablename__ = "hr_tenure"

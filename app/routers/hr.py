@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
-from typing import List, Dict
+from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.dependencies import get_db
@@ -122,8 +122,66 @@ def get_gender_dist_by_position(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# =================EMPLOYABILITY RECORD BY STATUS=================
+@router.get("/employability_records_by_status", response_model=List[dict])
+def get_employability_records_by_status(
+    status_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info(f"Fetching employability records. Filter status_id: {status_id}")
+
+        query = text("""
+            SELECT demo.*, tenure.*, csl.status_id
+            FROM silver.hr_demographics demo
+            JOIN silver.hr_tenure tenure 
+                ON demo.employee_id = tenure.employee_id
+            JOIN public.checker_status_log csl
+                ON demo.employee_id = csl.record_id
+            WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+        """)
+
+        result = db.execute(query, {"status_id": status_id})
+        data = [dict(row._mapping) for row in result]
+
+        logging.info(f"Returned {len(data)} records")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving employability records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/parental_leave_records_by_status", response_model=List[dict])
+def get_employability_records_by_status(
+    status_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info(f"Fetching parental leave records. Filter status_id: {status_id}")
+
+        query = text("""
+            SELECT pl.*, csl.status_id
+            FROM silver.hr_parental pl
+            JOIN public.checker_status_log csl
+                ON pl.employee_id = csl.record_id
+            WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+        """)
+
+        result = db.execute(query, {"status_id": status_id})
+        data = [dict(row._mapping) for row in result]
+
+        logging.info(f"Returned {len(data)} records")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving employability records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 #=================RETRIEVE HR DATA (BRONZE)=================
-@router.get("/get_employee_demographics_by_id/{demo_id}", response_model=HRDemographicsOut)
+@router.get("/get_employee_demographics_by_id/{employee_id}", response_model=HRDemographicsOut)
 def get_employee_demographics_by_id(employee_id: str, db: Session = Depends(get_db)):
     record = get_one(db, HRDemographics, "employee_id", employee_id)
     if not record:
