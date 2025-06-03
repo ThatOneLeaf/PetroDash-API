@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from .models import EnergyRecords, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed, HRDemographics, HRTenure
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
-from app.utils.formatting_id import generate_pkey_id
+from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
 
 # =================== POWER PLANT ENERGY DATA =================
 def get_energy_record_by_id(db: Session, energy_id: str):
@@ -68,11 +68,39 @@ def get_hazard_waste_disposed_by_id(db: Session, hwd_id: str):
 # ====================================== INSERT DATA ====================================
 # ====================================== BULK INSERT ======================================
 def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+        
     records = []
-    for row in rows:
-        wa_id = generate_pkey_id(db, "WA", EnviWaterAbstraction, "wa_id")
+    
+    # Group rows by company_id and year to handle different patterns
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+    
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["year"]))
+        grouped_rows[key].append((i, row))
+    
+    # Generate IDs for each group
+    id_mapping = {}
+    for (company_id, year), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            indicator="WA",
+            company_id=company_id,
+            year=year,
+            model_class=EnviWaterAbstraction,
+            id_field="wa_id",
+            count=len(row_list)
+        )
+        
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+    
+    # Create records with proper IDs
+    for i, row in enumerate(rows):
         record = EnviWaterAbstraction(
-            wa_id=wa_id,
+            wa_id=id_mapping[i],
             company_id=row["company_id"],
             year=row["year"],
             month=row["month"],
@@ -81,7 +109,7 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
             unit_of_measurement=row["unit_of_measurement"],
         )
         records.append(record)
-
+    
     db.bulk_save_objects(records)
     db.commit()
     return len(records)
