@@ -143,12 +143,14 @@ def get_employability_records_by_status(
         logging.info(f"Fetching employability records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT demo.*, tenure.*, csl.status_id
+            SELECT demo.*, tenure.*, cm.company_name, csl.status_id
             FROM silver.hr_demographics demo
             JOIN silver.hr_tenure tenure 
                 ON demo.employee_id = tenure.employee_id
             JOIN public.checker_status_log csl
                 ON demo.employee_id = csl.record_id
+            JOIN ref.company_main cm
+                ON demo.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
 
@@ -173,10 +175,14 @@ def get_parental_leave_records_by_status(
         logging.info(f"Fetching parental leave records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT pl.*, csl.status_id
+            SELECT pl.*, cm.company_name, csl.status_id
             FROM silver.hr_parental_leave pl
             JOIN public.checker_status_log csl
                 ON pl.parental_leave_id = csl.record_id
+            JOIN silver.hr_demographics demo
+                ON pl.employee_id = demo.employee_id
+            JOIN ref.company_main cm
+                ON demo.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
 
@@ -201,10 +207,12 @@ def get_safety_workdata_records_by_status(
         logging.info(f"Fetching safety workdata records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT swd.*, csl.status_id
+            SELECT swd.*, cm.company_name, csl.status_id
             FROM silver.hr_safety_workdata swd
             JOIN public.checker_status_log csl
                 ON swd.safety_workdata_id = csl.record_id
+            JOIN ref.company_main cm
+                ON swd.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
 
@@ -228,10 +236,12 @@ def get_occupational_safety_health_records_by_status(
         logging.info(f"Fetching occupational safety health records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT osh.*, csl.status_id
+            SELECT osh.*, cm.company_name, csl.status_id
             FROM silver.hr_occupational_safety_health osh
             JOIN public.checker_status_log csl
                 ON osh.osh_id = csl.record_id
+            JOIN ref.company_main cm
+                ON osh.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
 
@@ -256,10 +266,12 @@ def get_training_records_by_status(
         logging.info(f"Fetching training records Filter status_id: {status_id}")
 
         query = text("""
-            SELECT tr.*, csl.status_id
+            SELECT tr.*, cm.company_name, csl.status_id
             FROM silver.hr_training tr
             JOIN public.checker_status_log csl
                 ON tr.training_id = csl.record_id
+            JOIN ref.company_main cm
+                ON tr.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
 
