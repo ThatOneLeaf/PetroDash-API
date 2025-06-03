@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Form, UploadFile, File
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -7,6 +7,8 @@ from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
 from app.dependencies import get_db
 from app.crud.base import get_one, get_all, get_many, get_many_filtered
 from datetime import datetime
+import pandas as pd
+import io
 import logging
 import traceback
 
@@ -120,7 +122,7 @@ def get_energy_by_id(energy_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Energy record not found")
     return record
 
-# ====================== add energy record ====================== #
+# ====================== generate energy id ====================== #
 def generate_energy_id(db: Session) -> str:
     today = datetime.now().strftime("%Y%m%d")
     like_pattern = f"EN-{today}-%"
@@ -135,27 +137,104 @@ def generate_energy_id(db: Session) -> str:
     seq = f"{count_today + 1:03d}"  # Format as 3-digit sequence
     return f"EN-{today}-{seq}"
 
+# ====================== single add energy record ====================== #
 @router.post("/add_energy_record")
-def add_energy_record(record: AddEnergyRecord, db: Session = Depends(get_db)):
+def add_energy_record(
+    powerPlant: str = Form(...),
+    date: str = Form(...),
+    energyGenerated: float = Form(...),
+    metric: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    # Parse date string to datetime
+    try:
+        parsed_date = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    # Check if record already exists for this powerPlant and date
+    existing = db.query(EnergyRecords).filter(
+        EnergyRecords.power_plant_id == powerPlant,
+        EnergyRecords.datetime == parsed_date
+    ).first()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="A record for this date already exists.")
+
     new_id = generate_energy_id(db)
     new_record = EnergyRecords(
         energy_id=new_id,
-        power_plant_id=record.power_plant_id,
-        datetime=record.datetime,
-        energy_generated=record.energy_generated,
-        unit_of_measurement=record.unit_of_measurement,
+        power_plant_id=powerPlant,
+        datetime=parsed_date,
+        energy_generated=energyGenerated,
+        unit_of_measurement=metric,
     )
+
     db.add(new_record)
     db.commit()
     db.refresh(new_record)
-    
+
     # update silver
     db.execute(text("CALL silver.load_csv_silver();"))
     db.commit()
+
     return new_record
 
 
+# ====================== bulk add energy record ====================== #
+# @router.post("/bulk_add_energy_record")
+# def bulk_add_energy_record(
+#     powerPlant: str = Form(...),
+#     metric: str = Form(...),
+#     file: UploadFile = File(...),
+#     db: Session = Depends(get_db),
+# ):
+#     if file.content_type not in [
+#         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+#         "application/vnd.ms-excel"
+#     ]:
+#         raise HTTPException(status_code=400, detail="Invalid file type. Please upload an Excel file.")
 
+#     try:
+#         contents = file.file.read()
+#         df = pd.read_excel(io.BytesIO(contents))
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {e}")
 
+#     if 'date' not in df.columns or 'energy_generated' not in df.columns:
+#         raise HTTPException(status_code=400, detail="Excel must contain 'date' and 'energy_generated' columns.")
 
+#     # --- Use generate_energy_id() once, then extract prefix and number ---
+#     first_id = generate_energy_id(db)
+#     parts = first_id.split("-")
+#     prefix = "-".join(parts[:2])
+#     start_number = int(parts[-1])
 
+#     records_to_add = []
+
+#     for i, (_, row) in enumerate(df.iterrows()):
+#         try:
+#             parsed_date = pd.to_datetime(row['date'], format='%Y-%m-%d')
+#         except Exception:
+#             raise HTTPException(status_code=400, detail=f"Invalid date format at row {i + 2}. Use YYYY-MM-DD.")
+
+#         energy_id = f"{prefix}-{str(start_number + i).zfill(3)}"
+
+#         record = EnergyRecords(
+#             energy_id=energy_id,
+#             power_plant_id=powerPlant,
+#             datetime=parsed_date,
+#             energy_generated=row['energy_generated'],
+#             unit_of_measurement=metric,
+#         )
+#         records_to_add.append(record)
+
+#     try:
+#         db.bulk_save_objects(records_to_add)
+#         db.commit()
+#         db.execute(text("CALL silver.load_csv_silver();"))
+#         db.commit()
+
+#         return {"message": f"Successfully added {len(records_to_add)} energy records."}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Database error: {e}")
