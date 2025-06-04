@@ -4,6 +4,8 @@ from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRPa
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
 from sqlalchemy import text
+from sqlalchemy.sql import text
+from datetime import datetime, timedelta
 
 # =================== POWER PLANT ENERGY DATA =================
 def get_energy_record_by_id(db: Session, energy_id: str):
@@ -401,7 +403,7 @@ def insert_create_hazard_waste_generated(db: Session, data: dict):
     if not hwg_id:
         hwg_id = generate_pkey_id(
             db=db,
-            indicator="HWG",
+            indicator="HW",
             company_id=data["company_id"],
             year=data["year"],
             model_class=EnviHazardWasteGenerated,
@@ -485,18 +487,17 @@ def insert_create_hazard_waste_disposed(db: Session, data: dict):
 def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
     if not rows:
         return 0
-        
+
     records = []
-    
-    # Group rows by company_id and year to handle different patterns
+    checker_logs = []
+
     from collections import defaultdict
     grouped_rows = defaultdict(list)
-    
+
     for i, row in enumerate(rows):
         key = (row["company_id"], int(row["year"]))
         grouped_rows[key].append((i, row))
-    
-    # Generate IDs for each group
+
     id_mapping = {}
     for (company_id, year), row_list in grouped_rows.items():
         ids = generate_bulk_pkey_ids(
@@ -508,14 +509,18 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
             id_field="wa_id",
             count=len(row_list)
         )
-        
+
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
-    
-    # Create records with proper IDs
+
+    # Build abstraction records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
+        wa_id = id_mapping[i]
+
+        # Create abstraction record
         record = EnviWaterAbstraction(
-            wa_id=id_mapping[i],
+            wa_id=wa_id,
             company_id=row["company_id"],
             year=row["year"],
             month=row["month"],
@@ -524,11 +529,23 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
             unit_of_measurement=row["unit_of_measurement"],
         )
         records.append(record)
-    
+
+        # Create checker_status_log insert params
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_logs.append({
+            "cs_id": f"CS-{wa_id}",
+            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+            "record_id": wa_id,
+            "status_id": "PND",
+            "status_timestamp": status_time,
+            "remarks": "real-data inserted"
+        })
+
+    # Insert records
     db.bulk_save_objects(records)
     db.commit()
 
-    # Call the stored procedure after inserting data
+    # Call stored procedure
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
@@ -541,24 +558,52 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
                 load_non_hazard_waste := FALSE,
                 load_hazard_waste_generated := FALSE,
                 load_hazard_waste_disposed := FALSE
-             )
+            )
         """))
-        
         db.commit()
         print("Stored procedure executed successfully")
-        
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        # You can choose to raise the exception or handle it gracefully
-        # raise e
+
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)  # this is the correct executemany usage
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+
     return len(records)
+
+from datetime import datetime, timedelta
+from sqlalchemy.sql import text
 
 def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
     if not rows:
         return 0
         
     records = []
+    checker_logs = []
     
     # Group rows by company_id and year to handle different patterns
     from collections import defaultdict
@@ -584,10 +629,14 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
     
-    # Create records with proper IDs
+    # Build discharge records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
+        wd_id = id_mapping[i]
+        
+        # Create discharge record
         record = EnviWaterDischarge(
-            wd_id=id_mapping[i],
+            wd_id=wd_id,
             company_id=row["company_id"],
             year=row["year"],
             quarter=row["quarter"],
@@ -595,7 +644,19 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
             unit_of_measurement=row["unit_of_measurement"],
         )
         records.append(record)
+        
+        # Create checker_status_log insert params
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_logs.append({
+            "cs_id": f"CS-{wd_id}",
+            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+            "record_id": wd_id,
+            "status_id": "PND",
+            "status_timestamp": status_time,
+            "remarks": "real-data inserted"
+        })
     
+    # Insert records
     db.bulk_save_objects(records)
     db.commit()
 
@@ -621,8 +682,34 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        # You can choose to raise the exception or handle it gracefully
-        # raise e
+    
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+        
     return len(records)
 
 def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
@@ -630,6 +717,7 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
         return 0
         
     records = []
+    checker_logs = []
     
     # Group rows by company_id and year to handle different patterns
     from collections import defaultdict
@@ -655,10 +743,14 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
     
-    # Create records with proper IDs
+    # Build consumption records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
+        wc_id = id_mapping[i]
+        
+        # Create consumption record
         record = EnviWaterConsumption(
-            wc_id=id_mapping[i],
+            wc_id=wc_id,
             company_id=row["company_id"],
             year=row["year"],
             quarter=row["quarter"],
@@ -666,7 +758,19 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
             unit_of_measurement=row["unit_of_measurement"],
         )
         records.append(record)
+        
+        # Create checker_status_log insert params
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_logs.append({
+            "cs_id": f"CS-{wc_id}",
+            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+            "record_id": wc_id,
+            "status_id": "PND",
+            "status_timestamp": status_time,
+            "remarks": "real-data inserted"
+        })
     
+    # Insert records
     db.bulk_save_objects(records)
     db.commit()
 
@@ -692,8 +796,34 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        # You can choose to raise the exception or handle it gracefully
-        # raise e
+        
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+        
     return len(records)
 
 def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
@@ -701,6 +831,7 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
         return 0
         
     records = []
+    checker_logs = []
     
     # Group rows by company_id and year to handle different patterns
     from collections import defaultdict
@@ -726,10 +857,14 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
     
-    # Create records with proper IDs
+    # Build electric consumption records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
+        ec_id = id_mapping[i]
+        
+        # Create electric consumption record
         record = EnviElectricConsumption(
-            ec_id=id_mapping[i],
+            ec_id=ec_id,
             company_id=row["company_id"],
             source=row["source"],
             unit_of_measurement=row["unit_of_measurement"],
@@ -738,7 +873,19 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
             year=row["year"]            
         )
         records.append(record)
+        
+        # Create checker_status_log insert params
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_logs.append({
+            "cs_id": f"CS-{ec_id}",
+            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+            "record_id": ec_id,
+            "status_id": "PND",
+            "status_timestamp": status_time,
+            "remarks": "real-data inserted"
+        })
     
+    # Insert records
     db.bulk_save_objects(records)
     db.commit()
 
@@ -764,8 +911,34 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        # You can choose to raise the exception or handle it gracefully
-        # raise e
+        
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+        
     return len(records)
 
 def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
@@ -773,6 +946,7 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
         return 0
         
     records = []
+    checker_logs = []
     
     # Group rows by company_id and year to handle different patterns
     from collections import defaultdict
@@ -798,10 +972,14 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
     
-    # Create records with proper IDs
+    # Build non-hazard waste records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
+        nhw_id = id_mapping[i]
+        
+        # Create non-hazard waste record
         record = EnviNonHazardWaste(
-            nhw_id=id_mapping[i],
+            nhw_id=nhw_id,
             company_id=row["company_id"],
             metrics=row["metrics"],
             unit_of_measurement=row["unit_of_measurement"],
@@ -811,7 +989,19 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
             year=row["year"]            
         )
         records.append(record)
+        
+        # Create checker_status_log insert params
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_logs.append({
+            "cs_id": f"CS-{nhw_id}",
+            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+            "record_id": nhw_id,
+            "status_id": "PND",
+            "status_timestamp": status_time,
+            "remarks": "real-data inserted"
+        })
     
+    # Insert records
     db.bulk_save_objects(records)
     db.commit()
 
@@ -837,8 +1027,34 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        # You can choose to raise the exception or handle it gracefully
-        # raise e
+        
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+        
     return len(records)
 
 def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
@@ -846,6 +1062,7 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
         return 0
         
     records = []
+    checker_logs = []
     
     # Group rows by company_id and year to handle different patterns
     from collections import defaultdict
@@ -871,10 +1088,14 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
     
-    # Create records with proper IDs
+    # Build hazard waste generated records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
+        hwg_id = id_mapping[i]
+        
+        # Create hazard waste generated record
         record = EnviHazardWasteGenerated(
-            hwg_id=id_mapping[i],
+            hwg_id=hwg_id,
             company_id=row["company_id"],
             metrics=row["metrics"],
             unit_of_measurement=row["unit_of_measurement"],
@@ -883,7 +1104,19 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
             year=row["year"]            
         )
         records.append(record)
+        
+        # Create checker_status_log insert params
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_logs.append({
+            "cs_id": f"CS-{hwg_id}",
+            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+            "record_id": hwg_id,
+            "status_id": "PND",
+            "status_timestamp": status_time,
+            "remarks": "real-data inserted"
+        })
     
+    # Insert records
     db.bulk_save_objects(records)
     db.commit()
 
@@ -909,8 +1142,34 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        # You can choose to raise the exception or handle it gracefully
-        # raise e
+        
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+        
     return len(records)
 
 def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
@@ -918,6 +1177,7 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
         return 0
         
     records = []
+    checker_logs = []
     
     # Group rows by company_id and year to handle different patterns
     from collections import defaultdict
@@ -943,10 +1203,14 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
     
-    # Create records with proper IDs
+    # Build hazard waste disposed records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
+        hwd_id = id_mapping[i]
+        
+        # Create hazard waste disposed record
         record = EnviHazardWasteDisposed(
-            hwd_id=id_mapping[i],
+            hwd_id=hwd_id,
             company_id=row["company_id"],
             metrics=row["metrics"],
             unit_of_measurement=row["unit_of_measurement"],
@@ -954,7 +1218,19 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
             year=row["year"]            
         )
         records.append(record)
+        
+        # Create checker_status_log insert params
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_logs.append({
+            "cs_id": f"CS-{hwd_id}",
+            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+            "record_id": hwd_id,
+            "status_id": "PND",
+            "status_timestamp": status_time,
+            "remarks": "real-data inserted"
+        })
     
+    # Insert records
     db.bulk_save_objects(records)
     db.commit()
 
@@ -980,8 +1256,34 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        # You can choose to raise the exception or handle it gracefully
-        # raise e
+        
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+        
     return len(records)
 
 def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
@@ -989,6 +1291,7 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         return 0
         
     records = []
+    checker_logs = []
     
     # Group rows by company_id and year to handle different patterns
     from collections import defaultdict
@@ -1014,10 +1317,14 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
     
-    # Create records with proper IDs
+    # Build diesel consumption records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
+        dc_id = id_mapping[i]
+        
+        # Create diesel consumption record
         record = EnviDieselConsumption(
-            dc_id=id_mapping[i],
+            dc_id=dc_id,
             company_id=row["company_id"],
             cp_id=row["cp_id"],
             unit_of_measurement=row["unit_of_measurement"],
@@ -1025,7 +1332,19 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
             date=row["date"]        
         )
         records.append(record)
+        
+        # Create checker_status_log insert params
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_logs.append({
+            "cs_id": f"CS-{dc_id}",
+            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+            "record_id": dc_id,
+            "status_id": "PND",
+            "status_timestamp": status_time,
+            "remarks": "real-data inserted"
+        })
     
+    # Insert records
     db.bulk_save_objects(records)
     db.commit()
 
@@ -1051,8 +1370,34 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        # You can choose to raise the exception or handle it gracefully
-        # raise e
+        
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+        
     return len(records)
 
 # =================== HR DATA =================
