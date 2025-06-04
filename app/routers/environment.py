@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request
 import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -49,9 +49,10 @@ from app.bronze.schemas import (
     EnviElectricConsumptionOut,
     EnviNonHazardWasteOut,
     EnviHazardWasteGeneratedOut,
-    EnviHazardWasteDisposedOut
+    EnviHazardWasteDisposedOut,
+    FilteredDataRequest
 )
-from ..dependencies import get_db
+#from ..dependencies import get_db
 from ..bronze.models import TableType
 from ..template.envi_template_config import TEMPLATE_DEFINITIONS
 from ..utils.envi_template_utils import create_excel_template, create_all_templates, get_table_mapping
@@ -737,6 +738,7 @@ def get_hazard_waste_disposed_by_id(hwd_id: str, db: Session = Depends(get_db)):
 #======================================================CRUD-TYPE APIs======================================================
 #====================================SINGLE ADD RECORDS (ENVI)====================================
 #---WATER ABSTRACTION---
+"""
 @router.post("/single_upload_water_abstraction")
 def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
     try:
@@ -1110,6 +1112,7 @@ def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+"""
 #====================================BULK ADD RECORDS (ENVI)====================================
 @router.post("/bulk_upload_water_abstraction")
 def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -1704,3 +1707,29 @@ def get_distinct_cp_names(db: Session = Depends(get_db)):
         logging.error(f"Error retrieving cp_id and cp_name values: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.post("/export_excel")
+async def export_excel(request: Request):
+    data = await request.json()
+    
+    # Convert list of dicts to DataFrame
+    df = pd.DataFrame(data)
+
+    # Write to Excel in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Filtered Data")
+
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=exported_data.xlsx"
+        }
+    )
+
+@router.get("/test_export")
+async def test_export():
+    return {"message": "Export route is registered!"}
