@@ -23,7 +23,8 @@ from app.bronze.schemas import (
     HRSafetyWorkdataOut,
     HRTrainingOut,
     EmployabilityCombinedOut,
-    AddEmployabilityRecord
+    AddEmployabilityRecord,
+    AddSafetyWorkdataRecord
 )
 
 
@@ -342,6 +343,25 @@ def add_employability_record(record: AddEmployabilityRecord, db: Session = Depen
         employment_status=record.demographics.employment_status,
         start_date=record.tenure.start_date,
         end_date=record.tenure.end_date,
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+    
+    # update silver
+    db.execute(text("CALL silver.load_hr_silver();"))
+    db.commit()
+    return new_record
+# --- SAFETY WORKDATA ---
+@router.post("/add_safety_workdata_record")
+def add_safety_workdata_record(record: AddSafetyWorkdataRecord, db: Session = Depends(get_db)):
+    new_record = AddSafetyWorkdataRecord(
+        company_id=record.company_id,
+        contractor=record.contractor,
+        date=record.date,
+        manpower=record.manpower,
+        manhours=record.manhours
+
     )
     db.add(new_record)
     db.commit()

@@ -198,6 +198,14 @@ class EmployabilityCombinedOut(BaseModel):
 class AddEmployabilityRecord(BaseModel):
     demographics: HRDemographicsOut
     tenure: HRTenureOut
+    
+class AddSafetyWorkdataRecord(BaseModel):
+    company_id: str
+    contractor: str
+    date: dt
+    manpower: int
+    manhours: int
+
 '''
 class AddEmployabilityRecord(BaseModel):
     employee_id: str
