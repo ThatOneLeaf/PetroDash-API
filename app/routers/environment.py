@@ -22,6 +22,16 @@ from app.bronze.crud import (
     EnviNonHazardWaste,
     EnviHazardWasteGenerated,
     EnviHazardWasteDisposed,
+    #single insert
+    insert_create_water_abstraction,
+    insert_create_water_discharge,
+    insert_create_water_consumption,
+    insert_create_diesel_consumption,
+    insert_create_electric_consumption,
+    insert_create_non_hazard_waste,
+    insert_create_hazard_waste_generated,
+    insert_create_hazard_waste_disposed,
+    #bulk insert
     bulk_create_water_abstractions,
     bulk_create_water_discharge,
     bulk_create_water_consumption,
@@ -627,7 +637,7 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-#=================RETRIEVE ENVIRONMENTAL DATA (BRONZE)=================
+#=================RETRIEVE ENVIRONMENTAL DATA (BRONZE)====================
 #==========================FOR WATER ABSTRACTION==========================
 @router.get("/water_abstraction_records", response_model=List[dict])
 def get_water_abstraction_records(db: Session = Depends(get_db)):
@@ -723,6 +733,381 @@ def get_hazard_waste_disposed_by_id(hwd_id: str, db: Session = Depends(get_db)):
     return record
 
 #======================================================CRUD-TYPE APIs======================================================
+#====================================SINGLE ADD RECORDS (ENVI)====================================
+#---WATER ABSTRACTION---
+@router.post("/single_upload_water_abstraction")
+def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single water abstraction record")
+        CURRENT_YEAR = datetime.now().year
+
+        required_fields = ['company_id', 'year', 'month', 'quarter', 'volume', 'unit_of_measurement']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        if data["month"] not in [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]:
+            raise HTTPException(status_code=422, detail=f"Invalid month '{data['month']}'")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid volume")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "year": int(data["year"]),
+            "month": data["month"],
+            "quarter": data["quarter"],
+            "volume": float(data["volume"]),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+        }
+
+        # Assuming you have a single insert function
+        create_water_abstraction(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---WATER-DISCHARGE---
+@router.post("/single_upload_water_discharge")
+def single_upload_water_discharge(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single water discharge record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'year', 'quarter', 'volume', 'unit_of_measurement']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid volume")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "year": int(data["year"]),
+            "quarter": data["quarter"],
+            "volume": float(data["volume"]),
+            "unit_of_measurement": data["unit_of_measurement"].strip()
+        }
+
+        create_water_discharge(db, record)
+        return {"message": "1 water discharge record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---WATER-CONSUMPTION---
+@router.post("/single_upload_water_consumption")
+def single_upload_water_consumption(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single water consumption record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'year', 'quarter', 'volume', 'unit_of_measurement']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid volume")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "year": int(data["year"]),
+            "quarter": data["quarter"],
+            "volume": float(data["volume"]),
+            "unit_of_measurement": data["unit_of_measurement"].strip()
+        }
+
+        create_water_consumption(db, record)
+        return {"message": "1 water consumption record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---ELECTRIC-CONSUMPTION---
+@router.post("/single_upload_electric_consumption")
+def single_upload_electric_consumption(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single electric consumption record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'source', 'unit_of_measurement', 'consumption', 'quarter', 'year']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["source"], str) or not data["source"].strip():
+            raise HTTPException(status_code=422, detail="Invalid source")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["consumption"], (int, float)) or data["consumption"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid consumption")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "source": data["source"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "consumption": float(data["consumption"]),
+            "quarter": data["quarter"],
+            "year": int(data["year"]),
+        }
+
+        create_electric_consumption(db, record)
+        return {"message": "1 electric consumption record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---DIESEL-CONSUMPTION---
+@router.post("/single_upload_diesel_consumption")
+def single_upload_diesel_consumption(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single diesel consumption record")
+        required_fields = ['company_id', 'cp_id', 'unit_of_measurement', 'consumption', 'date']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["cp_id"], str) or not data["cp_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid cp_id")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["consumption"], (int, float)) or data["consumption"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid consumption")
+
+        try:
+            date_parsed = datetime.strptime(data["date"], "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "cp_id": data["cp_id"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "consumption": float(data["consumption"]),
+            "date": date_parsed
+        }
+
+        create_diesel_consumption(db, record)
+        return {"message": "1 diesel consumption record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---NON-HAZARD-WASTE---
+@router.post("/single_upload_non_hazard_waste")
+def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single non-hazard waste record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'metrics', 'unit_of_measurement', 'waste', 'month', 'quarter', 'year']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["metrics"], str) or not data["metrics"].strip():
+            raise HTTPException(status_code=422, detail="Invalid metrics")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["waste"], (int, float)) or data["waste"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid waste")
+
+        if data["month"] not in [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]:
+            raise HTTPException(status_code=422, detail=f"Invalid month '{data['month']}'")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "metrics": data["metrics"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "waste": float(data["waste"]),
+            "month": data["month"],
+            "quarter": data["quarter"],
+            "year": int(data["year"]),
+        }
+
+        create_non_hazard_waste(db, record)
+        return {"message": "1 non-hazard waste record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---HAZARD-WASTE-GENERATED---
+@router.post("/single_upload_hazard_waste_generated")
+def single_upload_hazard_waste_generated(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single hazard waste generated record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'metrics', 'unit_of_measurement', 'waste_generated', 'quarter', 'year']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["metrics"], str) or not data["metrics"].strip():
+            raise HTTPException(status_code=422, detail="Invalid metrics")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["waste_generated"], (int, float)) or data["waste_generated"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid waste_generated")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "metrics": data["metrics"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "waste_generated": float(data["waste_generated"]),
+            "quarter": data["quarter"],
+            "year": int(data["year"]),
+        }
+
+        create_hazard_waste_generated(db, record)
+        return {"message": "1 hazard waste generated record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---HAZARD-WASTE-DISPOSED---
+@router.post("/single_upload_hazard_waste_disposed")
+def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single hazard waste disposed record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'metrics', 'unit_of_measurement', 'waste_disposed', 'year']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["metrics"], str) or not data["metrics"].strip():
+            raise HTTPException(status_code=422, detail="Invalid metrics")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["waste_disposed"], (int, float)) or data["waste_disposed"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid waste_disposed")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "metrics": data["metrics"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "waste_disposed": float(data["waste_disposed"]),
+            "year": int(data["year"]),
+        }
+
+        create_hazard_waste_disposed(db, record)
+        return {"message": "1 hazard waste disposed record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 #====================================BULK ADD RECORDS (ENVI)====================================
 @router.post("/bulk_upload_water_abstraction")
 def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db)):
