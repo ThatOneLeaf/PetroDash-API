@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, update, select
 from app.bronze.crud import EnergyRecords
 from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
+from app.public.models import CheckerStatus
 from app.dependencies import get_db
 from app.crud.base import get_one, get_all, get_many, get_many_filtered
 from datetime import datetime
@@ -137,12 +138,28 @@ def generate_energy_id(db: Session) -> str:
     seq = f"{count_today + 1:03d}"  # Format as 3-digit sequence
     return f"EN-{today}-{seq}"
 
+# ====================== generate cs id ====================== #
+def generate_cs_id(db: Session) -> str:
+    today = datetime.now().strftime("%Y%m%d")
+    like_pattern = f"CS{today}%"
+
+    # Count how many records already exist for today
+    count_today = (
+        db.query(CheckerStatus)
+        .filter(CheckerStatus.cs_id.like(like_pattern))
+        .count()
+    )
+
+    seq = f"{count_today + 1:03d}"  # Format as 3-digit sequence
+    return f"CS{today}{seq}"
+
 # ====================== single add energy record ====================== #
 @router.post("/add_energy_record")
 def add_energy_record(
     powerPlant: str = Form(...),
     date: str = Form(...),
     energyGenerated: float = Form(...),
+    checker: str = Form(...),
     metric: str = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -169,11 +186,22 @@ def add_energy_record(
         energy_generated=energyGenerated,
         unit_of_measurement=metric,
     )
+    
+    new_log_id = generate_cs_id(db)
+    new_log = CheckerStatus(
+        cs_id = new_log_id,
+        checker_id = checker,
+        record_id = new_id,
+        status_id = "PND",
+        status_timestamp = datetime.now(),
+        remarks = "Newly Added"
+    )
 
     db.add(new_record)
+    db.add(new_log)
     db.commit()
     db.refresh(new_record)
-
+    
     # update silver
     db.execute(text("CALL silver.load_csv_silver();"))
     db.commit()
@@ -185,6 +213,7 @@ def add_energy_record(
 @router.post("/bulk_add_energy_record")
 def bulk_add_energy_record(
     powerPlant: str = Form(...),
+    checker: str = Form(...),
     metric: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -204,11 +233,16 @@ def bulk_add_energy_record(
     if 'date' not in df.columns or 'energy_generated' not in df.columns:
         raise HTTPException(status_code=400, detail="Excel must contain 'date' and 'energy_generated' columns.")
 
-    # Generate base energy_id prefix
+    # Generate base energy_id prefix for bronze.energy records
     first_id = generate_energy_id(db)
     parts = first_id.split("-")
     prefix = "-".join(parts[:2])
     counter = int(parts[-1])
+    
+    # Generate base cs_id prefix for status
+    first_cs_id = generate_cs_id(db)
+    cs_prefix = first_cs_id[:-3]  # except the last 3 digits
+    cs_counter = int(first_cs_id[-3:])  # last 3 digits
 
     inserted = 0
     updated = 0
@@ -228,7 +262,7 @@ def bulk_add_energy_record(
         result = db.execute(existing_query).first()
 
         if result:
-            # Perform SQL-level update to avoid modifying model attribute directly
+            # aggregate
             update_stmt = (
                 update(EnergyRecords)
                 .where(
@@ -240,6 +274,7 @@ def bulk_add_energy_record(
             db.execute(update_stmt)
             updated += 1
         else:
+            # new record
             new_id = f"{prefix}-{str(counter).zfill(3)}"
             counter += 1
 
@@ -251,6 +286,21 @@ def bulk_add_energy_record(
                 unit_of_measurement=metric,
             )
             db.add(new_record)
+
+            # Add corresponding status log
+            new_log_id = f"{cs_prefix}{str(cs_counter).zfill(3)}"
+            cs_counter += 1
+            
+            new_log = CheckerStatus(
+                cs_id=new_log_id,
+                checker_id=checker,
+                record_id=new_id,
+                status_id="PND",
+                status_timestamp=datetime.now(),
+                remarks="Newly Added"
+            )
+            db.add(new_log)
+
             inserted += 1
 
     try:
@@ -265,3 +315,78 @@ def bulk_add_energy_record(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
+
+# ====================== update status ====================== #
+@router.post("/update_status_energy")
+def update_status(
+    cs_id: str = Form(...),
+    new_status: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    # update
+    update_stmt = (
+        update(CheckerStatus)
+        .where(CheckerStatus.cs_id == cs_id)
+        .values(
+            cs_id = cs_id,
+            status_id = new_status,
+            status_timestamp = datetime.now()
+        )
+    )
+
+    try:
+        db.execute(update_stmt)
+        db.commit()
+        return {"message": "Status updated successfully."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+# ====================== edit energy record ====================== #
+@router.post("/edit_energy_record")
+def edit_energy_record(
+    energy_id: str = Form(...),
+    powerPlant: str = Form(...),
+    date: str = Form(...),
+    energyGenerated: float = Form(...),
+    checker: str = Form(...),
+    metric: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    try:
+        parsed_date = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    # update
+    update_stmt = (
+        update(EnergyRecords)
+        .where(EnergyRecords.energy_id == energy_id)
+        .values(
+            energy_generated = energyGenerated,
+            unit_of_measurement = metric,
+            updated_at = parsed_date,
+            power_plant_id = powerPlant
+        )
+    )
+
+    try:
+        db.execute(update_stmt)
+        
+        # Add checker log
+        new_cs_id = generate_cs_id(db)
+        new_log = CheckerStatus(
+            cs_id=new_cs_id,
+            checker_id=checker,
+            record_id=energy_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="Edited",
+        )
+        db.add(new_log)
+
+        db.commit()
+        return {"message": "Energy record updated successfully."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
