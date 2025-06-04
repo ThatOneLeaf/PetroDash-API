@@ -738,7 +738,6 @@ def get_hazard_waste_disposed_by_id(hwd_id: str, db: Session = Depends(get_db)):
 #======================================================CRUD-TYPE APIs======================================================
 #====================================SINGLE ADD RECORDS (ENVI)====================================
 #---WATER ABSTRACTION---
-"""
 @router.post("/single_upload_water_abstraction")
 def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
     try:
@@ -1112,7 +1111,7 @@ def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-"""
+
 #====================================BULK ADD RECORDS (ENVI)====================================
 @router.post("/bulk_upload_water_abstraction")
 def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db)):
