@@ -779,7 +779,7 @@ def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
         }
 
         # Assuming you have a single insert function
-        create_water_abstraction(db, record)
+        insert_create_water_abstraction(db, record)
 
         return {"message": "1 record successfully inserted."}
 
@@ -823,7 +823,7 @@ def single_upload_water_discharge(data: dict, db: Session = Depends(get_db)):
             "unit_of_measurement": data["unit_of_measurement"].strip()
         }
 
-        create_water_discharge(db, record)
+        insert_create_water_discharge(db, record)
         return {"message": "1 water discharge record successfully inserted."}
 
     except HTTPException:
@@ -866,7 +866,7 @@ def single_upload_water_consumption(data: dict, db: Session = Depends(get_db)):
             "unit_of_measurement": data["unit_of_measurement"].strip()
         }
 
-        create_water_consumption(db, record)
+        insert_create_water_consumption(db, record)
         return {"message": "1 water consumption record successfully inserted."}
 
     except HTTPException:
@@ -913,7 +913,7 @@ def single_upload_electric_consumption(data: dict, db: Session = Depends(get_db)
             "year": int(data["year"]),
         }
 
-        create_electric_consumption(db, record)
+        insert_create_electric_consumption(db, record)
         return {"message": "1 electric consumption record successfully inserted."}
 
     except HTTPException:
@@ -957,7 +957,7 @@ def single_upload_diesel_consumption(data: dict, db: Session = Depends(get_db)):
             "date": date_parsed
         }
 
-        create_diesel_consumption(db, record)
+        insert_create_diesel_consumption(db, record)
         return {"message": "1 diesel consumption record successfully inserted."}
 
     except HTTPException:
@@ -1011,7 +1011,7 @@ def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
             "year": int(data["year"]),
         }
 
-        create_non_hazard_waste(db, record)
+        insert_create_non_hazard_waste(db, record)
         return {"message": "1 non-hazard waste record successfully inserted."}
 
     except HTTPException:
@@ -1058,7 +1058,7 @@ def single_upload_hazard_waste_generated(data: dict, db: Session = Depends(get_d
             "year": int(data["year"]),
         }
 
-        create_hazard_waste_generated(db, record)
+        insert_create_hazard_waste_generated(db, record)
         return {"message": "1 hazard waste generated record successfully inserted."}
 
     except HTTPException:
@@ -1101,7 +1101,7 @@ def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db
             "year": int(data["year"]),
         }
 
-        create_hazard_waste_disposed(db, record)
+        insert_create_hazard_waste_disposed(db, record)
         return {"message": "1 hazard waste disposed record successfully inserted."}
 
     except HTTPException:
