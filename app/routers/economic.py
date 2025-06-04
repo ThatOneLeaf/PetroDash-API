@@ -185,4 +185,206 @@ def get_capital_provider_payments(db: Session = Depends(get_db)):
     except Exception as e:
         logging.error(f"Error fetching capital provider payment data: {str(e)}")
         logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/value-generated")
+def create_value_generated(value_data: dict, db: Session = Depends(get_db)):
+    """
+    Insert economic value generated data into bronze layer and process to silver
+    """
+    try:
+        logging.info(f"Creating value generated record: {value_data}")
+        
+        # Insert into bronze layer
+        db.execute(text("""
+            INSERT INTO bronze.econ_value (
+                year,
+                electricity_sales,
+                oil_revenues,
+                other_revenues,
+                interest_income,
+                share_in_net_income_of_associate,
+                miscellaneous_income
+            ) VALUES (
+                :year,
+                :electricity_sales,
+                :oil_revenues,
+                :other_revenues,
+                :interest_income,
+                :share_in_net_income_of_associate,
+                :miscellaneous_income
+            )
+            ON CONFLICT (year) 
+            DO UPDATE SET
+                electricity_sales = EXCLUDED.electricity_sales,
+                oil_revenues = EXCLUDED.oil_revenues,
+                other_revenues = EXCLUDED.other_revenues,
+                interest_income = EXCLUDED.interest_income,
+                share_in_net_income_of_associate = EXCLUDED.share_in_net_income_of_associate,
+                miscellaneous_income = EXCLUDED.miscellaneous_income
+        """), {
+            'year': value_data['year'],
+            'electricity_sales': float(value_data.get('electricitySales', 0) or 0),
+            'oil_revenues': float(value_data.get('oilRevenues', 0) or 0),
+            'other_revenues': float(value_data.get('otherRevenues', 0) or 0),
+            'interest_income': float(value_data.get('interestIncome', 0) or 0),
+            'share_in_net_income_of_associate': float(value_data.get('shareInNetIncomeOfAssociate', 0) or 0),
+            'miscellaneous_income': float(value_data.get('miscellaneousIncome', 0) or 0)
+        })
+        
+        # Call silver layer load procedure
+        db.execute(text("CALL silver.load_econ_silver()"))
+        
+        db.commit()
+        logging.info("Value generated record created and processed to silver layer successfully")
+        
+        return {"message": "Value generated record created successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error creating value generated record: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/expenditures")
+def create_expenditure(expenditure_data: dict, db: Session = Depends(get_db)):
+    """
+    Insert economic expenditure data into bronze layer and process to silver
+    """
+    try:
+        logging.info(f"Creating expenditure record: {expenditure_data}")
+        
+        # Insert into bronze layer
+        db.execute(text("""
+            INSERT INTO bronze.econ_expenditures (
+                year,
+                company_id,
+                type_id,
+                government_payments,
+                supplier_spending_local,
+                supplier_spending_abroad,
+                employee_wages_benefits,
+                community_investments,
+                depreciation,
+                depletion,
+                others
+            ) VALUES (
+                :year,
+                :company_id,
+                :type_id,
+                :government_payments,
+                :supplier_spending_local,
+                :supplier_spending_abroad,
+                :employee_wages_benefits,
+                :community_investments,
+                :depreciation,
+                :depletion,
+                :others
+            )
+            ON CONFLICT (year, company_id, type_id) 
+            DO UPDATE SET
+                government_payments = EXCLUDED.government_payments,
+                supplier_spending_local = EXCLUDED.supplier_spending_local,
+                supplier_spending_abroad = EXCLUDED.supplier_spending_abroad,
+                employee_wages_benefits = EXCLUDED.employee_wages_benefits,
+                community_investments = EXCLUDED.community_investments,
+                depreciation = EXCLUDED.depreciation,
+                depletion = EXCLUDED.depletion,
+                others = EXCLUDED.others
+        """), {
+            'year': expenditure_data['year'],
+            'company_id': expenditure_data['comp'],
+            'type_id': expenditure_data['type'],
+            'government_payments': float(expenditure_data.get('government', 0) or 0),
+            'supplier_spending_local': float(expenditure_data.get('localSuppl', 0) or 0),
+            'supplier_spending_abroad': float(expenditure_data.get('foreignSupplierSpending', 0) or 0),
+            'employee_wages_benefits': float(expenditure_data.get('employee', 0) or 0),
+            'community_investments': float(expenditure_data.get('community', 0) or 0),
+            'depreciation': float(expenditure_data.get('depreciation', 0) or 0),
+            'depletion': float(expenditure_data.get('depletion', 0) or 0),
+            'others': float(expenditure_data.get('others', 0) or 0)
+        })
+        
+        # Call silver layer load procedure
+        db.execute(text("CALL silver.load_econ_silver()"))
+        
+        db.commit()
+        logging.info("Expenditure record created and processed to silver layer successfully")
+        
+        return {"message": "Expenditure record created successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error creating expenditure record: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/capital-provider-payments")
+def create_capital_provider_payment(payment_data: dict, db: Session = Depends(get_db)):
+    """
+    Insert capital provider payment data into bronze layer and process to silver
+    """
+    try:
+        logging.info(f"Creating capital provider payment: {payment_data}")
+        
+        # Insert into bronze layer
+        db.execute(text("""
+            INSERT INTO bronze.econ_capital_provider_payment (
+                year, 
+                interest, 
+                dividends_to_nci, 
+                dividends_to_parent
+            ) VALUES (
+                :year,
+                :interest,
+                :dividends_to_nci,
+                :dividends_to_parent
+            )
+            ON CONFLICT (year) 
+            DO UPDATE SET
+                interest = EXCLUDED.interest,
+                dividends_to_nci = EXCLUDED.dividends_to_nci,
+                dividends_to_parent = EXCLUDED.dividends_to_parent
+        """), {
+            'year': payment_data['year'],
+            'interest': float(payment_data.get('interest', 0) or 0),
+            'dividends_to_nci': float(payment_data.get('dividendsToNci', 0) or 0),
+            'dividends_to_parent': float(payment_data.get('dividendsToParent', 0) or 0)
+        })
+        
+        # Call silver layer load procedure
+        db.execute(text("CALL silver.load_econ_silver()"))
+        
+        db.commit()
+        logging.info("Capital provider payment created and processed to silver layer successfully")
+        
+        return {"message": "Capital provider payment created successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error creating capital provider payment: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/process-bronze-to-silver")
+def process_all_bronze_to_silver(db: Session = Depends(get_db)):
+    """
+    Process all bronze economic data to silver layer
+    Useful for batch processing or data refresh
+    """
+    try:
+        logging.info("Processing all bronze economic data to silver layer")
+        
+        # Call the single silver layer load procedure that handles all economic tables
+        db.execute(text("CALL silver.load_econ_silver()"))
+        
+        db.commit()
+        logging.info("All bronze economic data processed to silver layer successfully")
+        
+        return {"message": "All bronze economic data processed to silver layer successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error processing bronze to silver: {str(e)}")
+        logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e)) 

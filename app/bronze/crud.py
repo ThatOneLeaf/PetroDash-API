@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
+from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviCompanyProperty, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
 from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
@@ -84,23 +84,403 @@ def get_filtered_water_consumption(db: Session, filters: dict, skip: int = 0, li
 def get_electric_consumption_by_id(db: Session, ec_id: str):
     return get_one(db, EnviElectricConsumption, "ec_id", ec_id)
 
+def get_all_electric_consumption(db: Session):
+    return get_all(db, EnviElectricConsumption)
+
+def get_filtered_electric_consumption(db: Session, filters: dict, skip: int = 0, limit: int = 100):
+    return get_many_filtered(db, EnviElectricConsumption, filters=filters, skip=skip, limit=limit)
+
 # --- Diesel Consumption ---
 def get_diesel_consumption_by_id(db: Session, dc_id: str):
     return get_one(db, EnviDieselConsumption, "dc_id", dc_id)
+
+def get_all_diesel_consumption(db: Session):
+    return get_all(db, EnviDieselConsumption)
+
+def get_filtered_diesel_consumption(db: Session, filters: dict, skip: int = 0, limit: int = 100):
+    return get_many_filtered(db, EnviDieselConsumption, filters=filters, skip=skip, limit=limit)
 
 # --- Non-Hazardous Waste ---
 def get_non_hazard_waste_by_id(db: Session, nhw_id: str):
     return get_one(db, EnviNonHazardWaste, "nhw_id", nhw_id)
 
+def get_all_non_hazard_waste(db: Session):
+    return get_all(db, EnviNonHazardWaste)
+
+def get_filtered_non_hazard_waste(db: Session, filters: dict, skip: int = 0, limit: int = 100):
+    return get_many_filtered(db, EnviNonHazardWaste, filters=filters, skip=skip, limit=limit)
+
 # --- Hazardous Waste Generated ---
 def get_hazard_waste_generated_by_id(db: Session, hwg_id: str):
     return get_one(db, EnviHazardWasteGenerated, "hwg_id", hwg_id)
+
+def get_all_hazard_waste_generated(db: Session):
+    return get_all(db, EnviHazardWasteGenerated)
+
+def get_filtered_hazard_waste_generated(db: Session, filters: dict, skip: int = 0, limit: int = 100):
+    return get_many_filtered(db, EnviHazardWasteGenerated, filters=filters, skip=skip, limit=limit)
 
 # --- Hazardous Waste Disposed ---
 def get_hazard_waste_disposed_by_id(db: Session, hwd_id: str):
     return get_one(db, EnviHazardWasteDisposed, "hwd_id", hwd_id)
 
-# ====================================== INSERT DATA ====================================
+def get_all_hazard_waste_disposed(db: Session):
+    return get_all(db, EnviHazardWasteDisposed)
+
+def get_filtered_hazard_waste_disposed(db: Session, filters: dict, skip: int = 0, limit: int = 100):
+    return get_many_filtered(db, EnviHazardWasteDisposed, filters=filters, skip=skip, limit=limit)
+
+# ====================================== INSERT DATA ======================================
+#water abstraction
+def insert_create_water_abstraction(db: Session, data: dict):
+    # Generate a primary key if needed
+    wa_id = data.get("wa_id")
+    if not wa_id:
+        wa_id = generate_pkey_id(
+            db=db,
+            indicator="WA",
+            company_id=data["company_id"],
+            year=data["year"],
+            model_class=EnviWaterAbstraction,
+            id_field="wa_id"
+        )
+    record = EnviWaterAbstraction(
+        wa_id=wa_id,
+        company_id=data["company_id"],
+        year=data["year"],
+        month=data["month"],
+        quarter=data["quarter"],
+        volume=data["volume"],
+        unit_of_measurement=data["unit_of_measurement"],
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    # Optionally call the stored procedure if you want to trigger it on single insert
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := TRUE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+#water discharge
+def insert_create_water_discharge(db: Session, data: dict):
+    wd_id = data.get("wd_id")
+    if not wd_id:
+        wd_id = generate_pkey_id(
+            db=db,
+            indicator="WD",
+            company_id=data["company_id"],
+            year=data["year"],
+            model_class=EnviWaterDischarge,
+            id_field="wd_id"
+        )
+    record = EnviWaterDischarge(
+        wd_id=wd_id,
+        company_id=data["company_id"],
+        year=data["year"],
+        quarter=data["quarter"],
+        volume=data["volume"],
+        unit_of_measurement=data["unit_of_measurement"],
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := TRUE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# water consumption
+def insert_create_water_consumption(db: Session, data: dict):
+    wc_id = data.get("wc_id")
+    if not wc_id:
+        wc_id = generate_pkey_id(
+            db=db,
+            indicator="WC",
+            company_id=data["company_id"],
+            year=data["year"],
+            model_class=EnviWaterConsumption,
+            id_field="wc_id"
+        )
+    record = EnviWaterConsumption(
+        wc_id=wc_id,
+        company_id=data["company_id"],
+        year=data["year"],
+        quarter=data["quarter"],
+        volume=data["volume"],
+        unit_of_measurement=data["unit_of_measurement"],
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := TRUE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# electric consumption
+def insert_create_electric_consumption(db: Session, data: dict):
+    ec_id = data.get("ec_id")
+    if not ec_id:
+        ec_id = generate_pkey_id(
+            db=db,
+            indicator="EC",
+            company_id=data["company_id"],
+            year=data["year"],
+            model_class=EnviElectricConsumption,
+            id_field="ec_id"
+        )
+    record = EnviElectricConsumption(
+        ec_id=ec_id,
+        company_id=data["company_id"],
+        source=data["source"],
+        unit_of_measurement=data["unit_of_measurement"],
+        consumption=data["consumption"],
+        quarter=data["quarter"],
+        year=data["year"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := TRUE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# diesel consumption
+def insert_create_diesel_consumption(db: Session, data: dict):
+    dc_id = data.get("dc_id")
+    if not dc_id:
+        dc_id = generate_pkey_id(
+            db=db,
+            indicator="DC",
+            company_id=data["company_id"],
+            year=data["year"],
+            model_class=EnviDieselConsumption,
+            id_field="dc_id"
+        )
+    record = EnviDieselConsumption(
+        dc_id=dc_id,
+        company_id=data["company_id"],
+        unit_of_measurement=data["unit_of_measurement"],
+        consumption=data["consumption"],
+        quarter=data["quarter"],
+        year=data["year"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := TRUE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# non-hazard waste
+def insert_create_non_hazard_waste(db: Session, data: dict):
+    nhw_id = data.get("nhw_id")
+    if not nhw_id:
+        nhw_id = generate_pkey_id(
+            db=db,
+            indicator="NHW",
+            company_id=data["company_id"],
+            year=data["year"],
+            model_class=EnviNonHazardWaste,
+            id_field="nhw_id"
+        )
+    record = EnviNonHazardWaste(
+        nhw_id=nhw_id,
+        company_id=data["company_id"],
+        metrics=data["metrics"],
+        unit_of_measurement=data["unit_of_measurement"],
+        waste=data["waste"],
+        month=data["month"],
+        quarter=data["quarter"],
+        year=data["year"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := TRUE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# hazard waste generated
+def insert_create_hazard_waste_generated(db: Session, data: dict):
+    hwg_id = data.get("hwg_id")
+    if not hwg_id:
+        hwg_id = generate_pkey_id(
+            db=db,
+            indicator="HWG",
+            company_id=data["company_id"],
+            year=data["year"],
+            model_class=EnviHazardWasteGenerated,
+            id_field="hwg_id"
+        )
+    record = EnviHazardWasteGenerated(
+        hwg_id=hwg_id,
+        company_id=data["company_id"],
+        metrics=data["metrics"],
+        unit_of_measurement=data["unit_of_measurement"],
+        waste_generated=data["waste_generated"],
+        quarter=data["quarter"],
+        year=data["year"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := TRUE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# hazard waste disposed
+def insert_create_hazard_waste_disposed(db: Session, data: dict):
+    hwd_id = data.get("hwd_id")
+    if not hwd_id:
+        hwd_id = generate_pkey_id(
+            db=db,
+            indicator="HWD",
+            company_id=data["company_id"],
+            year=data["year"],
+            model_class=EnviHazardWasteDisposed,
+            id_field="hwd_id"
+        )
+    record = EnviHazardWasteDisposed(
+        hwd_id=hwd_id,
+        company_id=data["company_id"],
+        metrics=data["metrics"],
+        unit_of_measurement=data["unit_of_measurement"],
+        waste_disposed=data["waste_disposed"],
+        year=data["year"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := TRUE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
 # ====================================== BULK INSERT ======================================
 def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -591,6 +971,77 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
                 load_non_hazard_waste := FALSE,
                 load_hazard_waste_generated := FALSE,
                 load_hazard_waste_disposed := TRUE
+             )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        # You can choose to raise the exception or handle it gracefully
+        # raise e
+    return len(records)
+
+def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    
+    # Group rows by company_id and year to handle different patterns
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+    
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["year"]))
+        grouped_rows[key].append((i, row))
+    
+    # Generate IDs for each group
+    id_mapping = {}
+    for (company_id, year), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            indicator="DC",
+            company_id=company_id,
+            year=year,
+            model_class=EnviDieselConsumption,
+            id_field="dc_id",
+            count=len(row_list)
+        )
+        
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+    
+    # Create records with proper IDs
+    for i, row in enumerate(rows):
+        record = EnviDieselConsumption(
+            dc_id=id_mapping[i],
+            company_id=row["company_id"],
+            cp_id=row["cp_id"],
+            unit_of_measurement=row["unit_of_measurement"],
+            consumption=row["consumption"],
+            date=row["date"]        
+        )
+        records.append(record)
+    
+    db.bulk_save_objects(records)
+    db.commit()
+
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := TRUE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
              )
         """))
         

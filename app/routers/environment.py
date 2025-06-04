@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request
 import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -13,6 +13,7 @@ from typing import Optional, List
 from app.dependencies import get_db
 from app.crud.base import get_all, get_many_filtered, get_one
 from app.bronze.crud import (
+    EnviCompanyProperty,
     EnviWaterAbstraction, 
     EnviWaterDischarge, 
     EnviWaterConsumption,
@@ -21,13 +22,24 @@ from app.bronze.crud import (
     EnviNonHazardWaste,
     EnviHazardWasteGenerated,
     EnviHazardWasteDisposed,
+    #single insert
+    insert_create_water_abstraction,
+    insert_create_water_discharge,
+    insert_create_water_consumption,
+    insert_create_diesel_consumption,
+    insert_create_electric_consumption,
+    insert_create_non_hazard_waste,
+    insert_create_hazard_waste_generated,
+    insert_create_hazard_waste_disposed,
+    #bulk insert
     bulk_create_water_abstractions,
     bulk_create_water_discharge,
     bulk_create_water_consumption,
     bulk_create_electric_consumption,
     bulk_create_non_hazard_waste,
     bulk_create_hazard_waste_generated,
-    bulk_create_hazard_waste_disposed
+    bulk_create_hazard_waste_disposed,
+    bulk_create_diesel_consumption
 )
 from app.bronze.schemas import (
     EnviWaterAbstractionOut,
@@ -37,9 +49,10 @@ from app.bronze.schemas import (
     EnviElectricConsumptionOut,
     EnviNonHazardWasteOut,
     EnviHazardWasteGeneratedOut,
-    EnviHazardWasteDisposedOut
+    EnviHazardWasteDisposedOut,
+    FilteredDataRequest
 )
-from ..dependencies import get_db
+#from ..dependencies import get_db
 from ..bronze.models import TableType
 from ..template.envi_template_config import TEMPLATE_DEFINITIONS
 from ..utils.envi_template_utils import create_excel_template, create_all_templates, get_table_mapping
@@ -90,7 +103,7 @@ def get_water_abstraction(db: Session = Depends(get_db), wa_id: Optional[str] = 
                 "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status name": row.status_name
+                "status": row.status_name
             }
             
             logging.info(f"Found water abstraction data for ID: {wa_id}")
@@ -108,7 +121,7 @@ def get_water_abstraction(db: Session = Depends(get_db), wa_id: Optional[str] = 
                     "unit": row.unit,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status name": row.status_name
+                    "status": row.status_name
                 }
                 for row in result
             ]
@@ -159,7 +172,7 @@ def get_water_discharge(db: Session = Depends(get_db), wd_id: Optional[str] = No
                 "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status name": row.status_name
+                "status": row.status_name
             }
             
             logging.info(f"Found water discharge data for ID: {wd_id}")
@@ -177,7 +190,7 @@ def get_water_discharge(db: Session = Depends(get_db), wd_id: Optional[str] = No
                     "unit": row.unit,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status name": row.status_name
+                    "status": row.status_name
                 }
                 for row in result
             ]
@@ -228,7 +241,7 @@ def get_water_consumption(db: Session = Depends(get_db), wc_id: Optional[str] = 
                 "unit": row.unit,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status name": row.status_name
+                "status": row.status_name
             }
             
             logging.info(f"Found water consumption data for ID: {wc_id}")
@@ -246,7 +259,7 @@ def get_water_consumption(db: Session = Depends(get_db), wc_id: Optional[str] = 
                     "unit": row.unit,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status name": row.status_name
+                    "status": row.status_name
                 }
                 for row in result
             ]
@@ -293,15 +306,15 @@ def get_diesel_consumption(db: Session = Depends(get_db), dc_id: Optional[str] =
             data = {
                 "dc_id": row.diesel_consumption_id,
                 "company": row.company_name,
-                "property name": row.company_property_name,
-                "property type": row.company_property_type,
+                "property": row.company_property_name,
+                "type": row.company_property_type,
                 "unit": row.unit_of_measurement,
                 "consumption": float(row.consumption) if row.consumption is not None else 0,
                 "month": row.month,
-                "year": row.year,
                 "quarter": row.quarter,
+                "year": row.year,
                 "date": row.date,
-                "status name": row.status_name
+                "status": row.status_name
             }
             
             logging.info(f"Found diesel consumption data for ID: {dc_id}")
@@ -315,15 +328,15 @@ def get_diesel_consumption(db: Session = Depends(get_db), dc_id: Optional[str] =
                 {
                     "dc_id": row.diesel_consumption_id,
                     "company": row.company_name,
-                    "property name": row.company_property_name,
-                    "property type": row.company_property_type,
+                    "property": row.company_property_name,
+                    "type": row.company_property_type,
                     "unit": row.unit_of_measurement,
                     "consumption": float(row.consumption) if row.consumption is not None else 0,
                     "month": row.month,
-                    "year": row.year,
                     "quarter": row.quarter,
+                    "year": row.year,
                     "date": row.date,
-                    "status name": row.status_name
+                    "status": row.status_name
                 }
                 for row in result
             ]
@@ -375,7 +388,7 @@ def get_electric_consumption(db: Session = Depends(get_db), ec_id: Optional[str]
                 "consumption": float(row.consumption) if row.consumption is not None else 0,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status name": row.status_name
+                "status": row.status_name
             }
             
             logging.info(f"Found electric consumption data for ID: {ec_id}")
@@ -394,7 +407,7 @@ def get_electric_consumption(db: Session = Depends(get_db), ec_id: Optional[str]
                     "consumption": float(row.consumption) if row.consumption is not None else 0,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status name": row.status_name
+                    "status": row.status_name
                 }
                 for row in result
             ]
@@ -446,7 +459,7 @@ def get_non_hazard_waste(db: Session = Depends(get_db), nhw_id: Optional[str] = 
                 "waste": float(row.waste) if row.waste is not None else 0,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status name": row.status_name
+                "status": row.status_name
             }
             
             logging.info(f"Found non hazard waste data for ID: {nhw_id}")
@@ -465,7 +478,7 @@ def get_non_hazard_waste(db: Session = Depends(get_db), nhw_id: Optional[str] = 
                     "waste": float(row.waste) if row.waste is not None else 0,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status name": row.status_name
+                    "status": row.status_name
                 }
                 for row in result
             ]
@@ -512,12 +525,12 @@ def get_hazard_waste_generated(db: Session = Depends(get_db), hwg_id: Optional[s
             data = {
                 "hwg_id": row.hazard_waste_generated_id,
                 "company": row.company_name,
-                "waste type": row.waste_type,
+                "type": row.waste_type,
                 "unit": row.unit,
                 "waste generated": float(row.waste_generated) if row.waste_generated is not None else 0,
                 "quarter": row.quarter,
                 "year": row.year,
-                "status name": row.status_name
+                "status": row.status_name
             }
             
             logging.info(f"Found hazard waste generated data for ID: {hwg_id}")
@@ -531,12 +544,12 @@ def get_hazard_waste_generated(db: Session = Depends(get_db), hwg_id: Optional[s
                 {
                     "hwg_id": row.hazard_waste_generated_id,
                     "company": row.company_name,
-                    "waste type": row.waste_type,
+                    "type": row.waste_type,
                     "unit": row.unit,
                     "waste generated": float(row.waste_generated) if row.waste_generated is not None else 0,
                     "quarter": row.quarter,
                     "year": row.year,
-                    "status name": row.status_name
+                    "status": row.status_name
                 }
                 for row in result
             ]
@@ -583,11 +596,11 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
             data = {
                 "hwd_id": row.hazard_waste_disposed_id,
                 "company": row.company_name,
-                "waste type": row.waste_type,
+                "type": row.waste_type,
                 "unit": row.unit,
                 "waste disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
                 "year": row.year,
-                "status name": row.status_name
+                "status": row.status_name
             }
             
             logging.info(f"Found hazard waste disposed data for ID: {hwd_id}")
@@ -601,7 +614,7 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
                 {
                     "hwd_id": row.hazard_waste_disposed_id,
                     "company": row.company_name,
-                    "waste type": row.waste_type,
+                    "type": row.waste_type,
                     "unit": row.unit,
                     "waste disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
                     "year": row.year,
@@ -625,7 +638,7 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-#=================RETRIEVE ENVIRONMENTAL DATA (BRONZE)=================
+#=================RETRIEVE ENVIRONMENTAL DATA (BRONZE)====================
 #==========================FOR WATER ABSTRACTION==========================
 @router.get("/water_abstraction_records", response_model=List[dict])
 def get_water_abstraction_records(db: Session = Depends(get_db)):
@@ -634,7 +647,8 @@ def get_water_abstraction_records(db: Session = Depends(get_db)):
 
         query = text("""
             SELECT
-                bewa.company_id AS company,
+                bewa.wa_id,
+				cm.company_name AS company,
                 bewa.year,
                 COALESCE(bewa.month, 'N/A') AS month,
                 COALESCE(bewa.quarter, 'N/A') AS quarter,
@@ -646,6 +660,7 @@ def get_water_abstraction_records(db: Session = Depends(get_db)):
             INNER JOIN silver.envi_water_abstraction sewa ON sewa.wa_id = wim.wa_id_silver
             INNER JOIN public.checker_status_log csl ON csl.record_id = sewa.wa_id 
             INNER JOIN public.status s ON s.status_id = csl.status_id
+			INNER JOIN ref.company_main cm ON cm.company_id = bewa.company_id
         """)
 
         result = db.execute(query)
@@ -721,6 +736,382 @@ def get_hazard_waste_disposed_by_id(hwd_id: str, db: Session = Depends(get_db)):
     return record
 
 #======================================================CRUD-TYPE APIs======================================================
+#====================================SINGLE ADD RECORDS (ENVI)====================================
+#---WATER ABSTRACTION---
+@router.post("/single_upload_water_abstraction")
+def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single water abstraction record")
+        CURRENT_YEAR = datetime.now().year
+
+        required_fields = ['company_id', 'year', 'month', 'quarter', 'volume', 'unit_of_measurement']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        if data["month"] not in [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]:
+            raise HTTPException(status_code=422, detail=f"Invalid month '{data['month']}'")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid volume")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "year": int(data["year"]),
+            "month": data["month"],
+            "quarter": data["quarter"],
+            "volume": float(data["volume"]),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+        }
+
+        # Assuming you have a single insert function
+        insert_create_water_abstraction(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---WATER-DISCHARGE---
+@router.post("/single_upload_water_discharge")
+def single_upload_water_discharge(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single water discharge record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'year', 'quarter', 'volume', 'unit_of_measurement']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid volume")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "year": int(data["year"]),
+            "quarter": data["quarter"],
+            "volume": float(data["volume"]),
+            "unit_of_measurement": data["unit_of_measurement"].strip()
+        }
+
+        insert_create_water_discharge(db, record)
+        return {"message": "1 water discharge record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---WATER-CONSUMPTION---
+@router.post("/single_upload_water_consumption")
+def single_upload_water_consumption(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single water consumption record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'year', 'quarter', 'volume', 'unit_of_measurement']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid volume")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "year": int(data["year"]),
+            "quarter": data["quarter"],
+            "volume": float(data["volume"]),
+            "unit_of_measurement": data["unit_of_measurement"].strip()
+        }
+
+        insert_create_water_consumption(db, record)
+        return {"message": "1 water consumption record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---ELECTRIC-CONSUMPTION---
+@router.post("/single_upload_electric_consumption")
+def single_upload_electric_consumption(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single electric consumption record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'source', 'unit_of_measurement', 'consumption', 'quarter', 'year']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["source"], str) or not data["source"].strip():
+            raise HTTPException(status_code=422, detail="Invalid source")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["consumption"], (int, float)) or data["consumption"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid consumption")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "source": data["source"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "consumption": float(data["consumption"]),
+            "quarter": data["quarter"],
+            "year": int(data["year"]),
+        }
+
+        insert_create_electric_consumption(db, record)
+        return {"message": "1 electric consumption record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---DIESEL-CONSUMPTION---
+@router.post("/single_upload_diesel_consumption")
+def single_upload_diesel_consumption(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single diesel consumption record")
+        required_fields = ['company_id', 'cp_id', 'unit_of_measurement', 'consumption', 'date']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["cp_id"], str) or not data["cp_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid cp_id")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["consumption"], (int, float)) or data["consumption"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid consumption")
+
+        try:
+            date_parsed = datetime.strptime(data["date"], "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "cp_id": data["cp_id"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "consumption": float(data["consumption"]),
+            "date": date_parsed
+        }
+
+        insert_create_diesel_consumption(db, record)
+        return {"message": "1 diesel consumption record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---NON-HAZARD-WASTE---
+@router.post("/single_upload_non_hazard_waste")
+def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single non-hazard waste record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'metrics', 'unit_of_measurement', 'waste', 'month', 'quarter', 'year']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["metrics"], str) or not data["metrics"].strip():
+            raise HTTPException(status_code=422, detail="Invalid metrics")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["waste"], (int, float)) or data["waste"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid waste")
+
+        if data["month"] not in [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]:
+            raise HTTPException(status_code=422, detail=f"Invalid month '{data['month']}'")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "metrics": data["metrics"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "waste": float(data["waste"]),
+            "month": data["month"],
+            "quarter": data["quarter"],
+            "year": int(data["year"]),
+        }
+
+        insert_create_non_hazard_waste(db, record)
+        return {"message": "1 non-hazard waste record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---HAZARD-WASTE-GENERATED---
+@router.post("/single_upload_hazard_waste_generated")
+def single_upload_hazard_waste_generated(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single hazard waste generated record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'metrics', 'unit_of_measurement', 'waste_generated', 'quarter', 'year']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["metrics"], str) or not data["metrics"].strip():
+            raise HTTPException(status_code=422, detail="Invalid metrics")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["waste_generated"], (int, float)) or data["waste_generated"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid waste_generated")
+
+        if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "metrics": data["metrics"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "waste_generated": float(data["waste_generated"]),
+            "quarter": data["quarter"],
+            "year": int(data["year"]),
+        }
+
+        insert_create_hazard_waste_generated(db, record)
+        return {"message": "1 hazard waste generated record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+#---HAZARD-WASTE-DISPOSED---
+@router.post("/single_upload_hazard_waste_disposed")
+def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single hazard waste disposed record")
+        CURRENT_YEAR = datetime.now().year
+        required_fields = ['company_id', 'metrics', 'unit_of_measurement', 'waste_disposed', 'year']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["metrics"], str) or not data["metrics"].strip():
+            raise HTTPException(status_code=422, detail="Invalid metrics")
+
+        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+
+        if not isinstance(data["waste_disposed"], (int, float)) or data["waste_disposed"] < 0:
+            raise HTTPException(status_code=422, detail="Invalid waste_disposed")
+
+        if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid year")
+
+        record = {
+            "company_id": data["company_id"].strip(),
+            "metrics": data["metrics"].strip(),
+            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "waste_disposed": float(data["waste_disposed"]),
+            "year": int(data["year"]),
+        }
+
+        insert_create_hazard_waste_disposed(db, record)
+        return {"message": "1 hazard waste disposed record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 #====================================BULK ADD RECORDS (ENVI)====================================
 @router.post("/bulk_upload_water_abstraction")
 def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -881,6 +1272,316 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/bulk_upload_electric_consumption")
+def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk electric consumption data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'quarter', 'source', 'unit_of_measurement', 'consumption'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid quarter '{row['quarter']}'")
+
+            if not isinstance(row["source"], str) or not row["source"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid source")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["consumption"], (int, float)) or row["consumption"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid consumption")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "quarter": row["quarter"],
+                "source": row["source"].strip(),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "consumption": float(row["consumption"]),
+            })
+
+        count = bulk_create_electric_consumption(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_non_hazard_waste")
+def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk non-hazard waste data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'month', 'quarter', 'metrics', 'unit_of_measurement', 'waste'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if row["month"] not in [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            ]:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid month '{row['month']}'")
+
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid quarter '{row['quarter']}'")
+
+            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid metrics")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["waste"], (int, float)) or row["waste"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid waste")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "month": row["month"],
+                "quarter": row["quarter"],
+                "metrics": row["metrics"].strip(),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "waste": float(row["waste"]),
+            })
+
+        count = bulk_create_non_hazard_waste(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_hazard_waste_generated")
+def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk hazard waste generated data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'quarter', 'metrics', 'unit_of_measurement', 'waste_generated'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid quarter '{row['quarter']}'")
+
+            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid metrics")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["waste_generated"], (int, float)) or row["waste_generated"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid waste_generated")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "quarter": row["quarter"],
+                "metrics": row["metrics"].strip(),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "waste_generated": float(row["waste_generated"]),
+            })
+
+        count = bulk_create_hazard_waste_generated(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_hazard_waste_disposed")
+def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk hazard waste disposed data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'metrics', 'unit_of_measurement', 'waste_disposed'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid metrics")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["waste_disposed"], (int, float)) or row["waste_disposed"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid waste_disposed")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "metrics": row["metrics"].strip(),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "waste_disposed": float(row["waste_disposed"]),
+            })
+
+        count = bulk_create_hazard_waste_disposed(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/bulk_upload_diesel_consumption")
+def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk diesel consumption data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'cp_name', 'unit_of_measurement', 'consumption', 'date'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # Pre-fetch all company properties for lookup (case-insensitive)
+        company_properties = db.query(EnviCompanyProperty).all()
+        cp_lookup = {}
+        for cp in company_properties:
+            key = (cp.company_id.lower(), cp.cp_name.lower())
+            cp_lookup[key] = cp.cp_id
+
+        # data cleaning & row-level validation
+        rows = []
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["cp_name"], str) or not row["cp_name"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid cp_name")
+
+            # Look up cp_id using company_id and cp_name (case-insensitive)
+            company_id = row["company_id"].strip()
+            cp_name = row["cp_name"].strip()
+            cp_lookup_key = (company_id.lower(), cp_name.lower())
+            
+            if cp_lookup_key not in cp_lookup:
+                raise HTTPException(
+                    status_code=422, 
+                    detail=f"Row {i+2}: Company property not found for company_id '{company_id}' and cp_name '{cp_name}'"
+                )
+            
+            cp_id = cp_lookup[cp_lookup_key]
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            if not isinstance(row["consumption"], (int, float)) or row["consumption"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid consumption")
+
+            # Validate date
+            try:
+                if isinstance(row["date"], str):
+                    # Try to parse string date
+                    parsed_date = pd.to_datetime(row["date"]).date()
+                elif hasattr(row["date"], 'date'):
+                    # Handle pandas Timestamp
+                    parsed_date = row["date"].date()
+                elif isinstance(row["date"], datetime.date):
+                    # Already a date object
+                    parsed_date = row["date"]
+                else:
+                    raise ValueError("Invalid date format")
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid date format")
+
+            # Extract year from date for the crud function
+            year = parsed_date.year
+
+            rows.append({
+                "company_id": company_id,
+                "cp_id": cp_id,
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+                "consumption": float(row["consumption"]),
+                "date": parsed_date,
+                "year": year  # Added for the crud function grouping logic
+            })
+
+        count = bulk_create_diesel_consumption(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============== EXCEL TEMPLATE ENDPOINTS ==============
 @router.get("/create_data_template")
@@ -1005,3 +1706,25 @@ def get_distinct_cp_names(db: Session = Depends(get_db)):
         logging.error(f"Error retrieving cp_id and cp_name values: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.post("/export_excel")
+async def export_excel(request: Request):
+    data = await request.json()
+    
+    # Convert list of dicts to DataFrame
+    df = pd.DataFrame(data)
+
+    # Write to Excel in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Filtered Data")
+
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=exported_data.xlsx"
+        }
+    )

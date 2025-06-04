@@ -5,7 +5,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Company Property",
         "headers": ["company_id", "cp_name", "cp_type"],
         "data_types": ["VRCHAR(10)", "VARCHAR(30)", "VARCHAR(15)"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "company property (ex: Generator Set, Grass Cutter, etc.)", "company property type (ex: Equipment, Vehicle)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "company property (ex: Generator Set, Grass Cutter, etc.)", "company property type (ex: Equipment, Vehicle)"],
         "descriptions": [
             "Referenced Company ID",
             "Property Name",
@@ -17,7 +17,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Water Abstraction",
         "headers": ["company_id", "year", "month", "quarter", "volume", "unit_of_measurement"],
         "data_types": ["VARCHAR(10)", "SMALLINT", "VARCHAR(10)", "VARCHAR(2)", "DOUBLE", "VARCHAR(15)"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "year (ex: 2023)", "month name (ex: January, February)", "quarter (ex: Q1, Q2, Q3, Q4)", "water volume (ex: 1250.50)", "unit of measurement (ex: cubic meter)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "year (ex: 2023)", "month name (ex: January, February)", "values accepted: Q1, Q2, Q3, Q4", "water volume (ex: 1250.50)", "unit of measurement (value accepted: cubic meter)"],
         "descriptions": [
             "Referenced Company ID",
             "Year (YYYY)",
@@ -32,7 +32,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Water Discharge",
         "headers": ["company_id", "year", "quarter", "volume", "unit_of_measurement"],
         "data_types": ["VARCHAR(10)", "SMALLINT", "VARCHAR(2)", "DOUBLE", "VARCHAR(15)"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "year (ex: 2023)", "month name (ex: January, February)", "quarter (ex: Q1, Q2, Q3, Q4)", "water volume (ex: 1250.50)", "unit of measurement (ex: cubic meter)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "year (ex: 2023)", "values accepted: Q1, Q2, Q3, Q4", "water volume (ex: 1250.50)", "unit of measurement (value accepted: cubic meter)"],
         "descriptions": [
             "Referenced Company ID",
             "Year (YYYY)",
@@ -46,7 +46,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Water Consumption",
         "headers": ["company_id", "year", "quarter", "volume", "unit_of_measurement"],
         "data_types": ["VARCHAR(10)", "SMALLINT", "VARCHAR(2)", "DOUBLE", "VARCHAR(15)"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "year (ex: 2023)", "month name (ex: January, February)", "quarter (ex: Q1, Q2, Q3, Q4)", "water volume in cubic meter (ex: 1250.50)", "unit of measurement (ex: cubic meter)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "year (ex: 2023)", "values accepted: Q1, Q2, Q3, Q4", "water volume (ex: 1250.50)", "unit of measurement (value accepted: cubic meter)"],
         "descriptions": [
             "Referenced Company ID",
             "Year (YYYY)",
@@ -58,9 +58,9 @@ TEMPLATE_DEFINITIONS = {
     "diesel_consumption": {
         "filename": "diesel_consumption_template.xlsx",
         "sheet_name": "Diesel Consumption",
-        "headers": ["company_id", "cp_id", "unit_of_measurement", "consumption", "date"],
+        "headers": ["company_id", "cp_name", "unit_of_measurement", "consumption", "date"],
         "data_types": ["VARCHAR(10)", "VARCHAR(20)", "VARCHAR(15)", "DOUBLE", "DATE"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "company property (ex: Generator Set, Grass Cutter, etc.)", "unit of measurement (ex: Liter)", "diesel consumption in liter (ex: 234.789)", "date (YYYY-MM-DD)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "values accepted: DMAX, MULTICAB, MUX, Generator Sets, WATER TRUCK (6l), WATER TRUCK (4l), ELF TRUCK, Grass Cutter", "unit of measurement (value accepted: Liter)", "diesel consumption in liter (ex: 234.789)", "date (YYYY-MM-DD)"],
         "descriptions": [
             "Referenced Company ID",
             "Referenced Company Property ID",
@@ -74,7 +74,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Electric Consumption",
         "headers": ["company_id", "source", "unit_of_measurement", "consumption", "quarter", "year"],
         "data_types": ["VARCHAR(10)", "VARCHAR(20)", "VARCHAR(15)", "DOUBLE", "VARCHAR(2)", "SMALLINT"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "source (ex: Control Building, Logistics Station)", "unit of measurement (ex: kWh)", "electricity consumption in kWh (ex: 1234.56)", "quarter (ex: Q1, Q2, Q3, Q4)", "year (ex: 2024)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "source (values acceted: Control Building, Logistics Station)", "unit of measurement (value accepted: kWh)", "electricity consumption in kWh (ex: 1234.56)", "values accepted: Q1, Q2, Q3, Q4", "year (ex: 2024)"],
         "descriptions": [
             "Referenced Company ID",
             "Source location",
@@ -89,7 +89,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Non-Hazard Waste",
         "headers": ["company_id", "metrics", "unit_of_measurement", "waste", "month", "quarter", "year"],
         "data_types": ["VARCHAR(10)", "VARCHAR(50)", "VARCHAR(15)", "DOUBLE", "VARCHAR(10)", "VARCHAR(2)", "SMALLINT"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "metrics (ex: Residual, Scrap Metal, PET Bottles, Food, Compostable, etc.)", "unit of measurement (ex: Kilogram, Pieces)", "non-hazardous waste generated (ex: 125.50)", "month name (ex: January, February)", "quarter (ex: Q1, Q2, Q3, Q4)", "year (ex: 2024)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "metrics (value accepted: Food, PET Bottles, Compostable, Scrap Tires, Scrap Metal, Residual)", "unit of measurement (values accepted: Ton, Kilogram, Pieces)", "non-hazardous waste generated (ex: 125.50)", "month name (ex: January, February)", "values accepted: Q1, Q2, Q3, Q4", "year (ex: 2024)"],
         "descriptions": [
             "Referenced Company ID",
             "Waste metrics/type",
@@ -105,7 +105,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Hazard Waste Generated",
         "headers": ["company_id", "metrics", "unit_of_measurement", "waste_generated", "quarter", "year"],
         "data_types": ["VARCHAR(10)", "VARCHAR(50)", "VARCHAR(15)", "DOUBLE", "VARCHAR(2)", "SMALLINT"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "metrics (ex: Battery, Used Oil, Electronic Waste, etc.)", "unit of measurement (ex: Kilogram, Ton, Liter)", "hazardous waste generated (ex: 89.25)", "month name (ex: January, February)", "year (ex: 2024)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "metrics (values_accepted: Battery, Used Oil, Electronic Waste, BFL, Paints/Solvent Based, Oil Contaminated Materials, Oil Filters, Empty Containers)", "unit of measurement (ex: Kilogram, Ton, Liter)", "hazardous waste generated (ex: 89.25)", "values accepted: Q1, Q2, Q3, Q4)", "year (ex: 2024)"],
         "descriptions": [
             "Referenced Company ID",
             "Waste metrics/type",
@@ -120,7 +120,7 @@ TEMPLATE_DEFINITIONS = {
         "sheet_name": "Hazard Waste Disposed",
         "headers": ["company_id", "metrics", "unit_of_measurement", "waste_disposed", "year"],
         "data_types": ["VARCHAR(10)", "VARCHAR(50)", "VARCHAR(15)", "DOUBLE", "SMALLINT"],
-        "examples": ["company id (ex: PSC, MGI, PWEI, etc.)", "metrics (ex: Battery, Used Oil, Electronic Waste, etc.)", "unit of measurement (ex: Kilogram, Ton, Liter)", "hazardous waste generated (ex: 89.25)", "year (ex: 2024)"],
+        "examples": ["ex: BGEC (values accepted: BGEC-Bugallon Green Energy Corp, BEP_NL-Buhawind Energy Phillippines (Northern Luzon), PWEI-PetroWind Energy Inc., ESEC-EcoSolar Energy Corp, BKS-BKS Green Energy Corp, DGEC-Dagohoy Green Energy Corp, SJGEC-San Jose Green Energy Corp, PGEC-PetroGreen Energy Corp, PSC-PetroSolar Corp, BEP_NM-Buhawind Energy Phillippines (Northern Mindoro), RGEC-Rizal Green Energy Corp, BEP_EP-Buhawind Energy Phillippines (East Panay), PERC-PetroEnergy Resources Corp, MGI-Maibarara Geothermal Inc.)", "metrics (values_accepted: Battery, Used Oil, Electronic Waste, BFL, Paints/Solvent Based, Oil Contaminated Materials, Oil Filters, Empty Containers)", "unit of measurement (ex: Kilogram, Ton, Liter)", "hazardous waste generated (ex: 89.25)", "year (ex: 2024)"],
         "descriptions": [
             "Referenced Company ID",
             "Waste metrics/type",

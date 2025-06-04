@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime as dt
-from typing import Optional
+from typing import Optional, List, Dict, Any
 #====================POWER PLANT ENERGY=================================
 class EnergyRecordOut(BaseModel):
     energy_id: str
@@ -51,6 +51,12 @@ class CSRProgram(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 #====================ENVIRONMENTAL=================================
+class EnviCompanyPropertyOut(BaseModel):
+    cp_id: str
+    company_id: Optional[str]
+    cp_name: Optional[str]
+    cp_type: Optional[str]
+
 class EnviWaterAbstractionOut(BaseModel):
     wa_id: str
     company_id: Optional[str]
@@ -218,3 +224,7 @@ class AddEmployabilityRecord(BaseModel):
     start_date: dt
     end_date: Optional[dt]
 '''
+
+# Define the full request model
+class FilteredDataRequest(BaseModel):
+    filteredData: List[EnviElectricConsumptionOut]
