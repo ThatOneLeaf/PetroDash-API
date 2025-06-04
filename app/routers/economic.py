@@ -1,14 +1,231 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Dict
 from decimal import Decimal
 import logging
 import traceback
+import pandas as pd
+import io
+from fastapi.responses import StreamingResponse
+import time
 
 from ..dependencies import get_db
 
 router = APIRouter()
+
+# Helper function for creating Excel templates
+def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
+    """Create minimal Excel template with just headers and readable column widths"""
+    df = pd.DataFrame({header: [] for header in headers})
+    output = io.BytesIO()
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+        worksheet = writer.sheets['Sheet1']
+        
+        # Auto-adjust column widths to make headers readable
+        for column in worksheet.columns:
+            max_length = len(str(column[0].value)) + 2  # Header length + padding
+            worksheet.column_dimensions[column[0].column_letter].width = max_length
+    
+    output.seek(0)
+    return output
+
+# Helper functions for validation
+def validate_year(year_value):
+    """Validate that year is a 4-digit number"""
+    if year_value is None:
+        return False, "Year is required"
+    
+    try:
+        year = int(year_value)
+        if year < 1000 or year > 9999:
+            return False, f"Year must be a 4-digit number, got {year}"
+        return True, None
+    except (ValueError, TypeError):
+        return False, f"Year must be a number, got {year_value}"
+
+def validate_company_id(company_id, db: Session):
+    """Validate that company ID exists in company_main table"""
+    if company_id is None:
+        return False, "Company ID is required"
+    
+    try:
+        # Convert to string since company_id is VARCHAR in database
+        company_id_str = str(int(company_id))  # Ensure it's a valid number first, then convert to string
+        result = db.execute(text("SELECT company_id FROM ref.company_main WHERE company_id = :company_id"), 
+                          {"company_id": company_id_str})
+        if result.fetchone() is None:
+            return False, f"Company ID {company_id} does not exist"
+        return True, None
+    except (ValueError, TypeError):
+        return False, f"Company ID must be a number, got {company_id}"
+    except Exception as e:
+        return False, f"Database error checking Company ID: {str(e)}"
+
+def validate_type_id(type_id, db: Session):
+    """Validate that type ID exists in expenditure_type table"""
+    if type_id is None:
+        return False, "Type ID is required"
+    
+    try:
+        # Convert to string since type_id might be VARCHAR in database
+        type_id_str = str(int(type_id))  # Ensure it's a valid number first, then convert to string
+        result = db.execute(text("SELECT type_id FROM ref.expenditure_type WHERE type_id = :type_id"), 
+                          {"type_id": type_id_str})
+        if result.fetchone() is None:
+            return False, f"Type ID {type_id} does not exist"
+        return True, None
+    except (ValueError, TypeError):
+        return False, f"Type ID must be a number, got {type_id}"
+    except Exception as e:
+        return False, f"Database error checking Type ID: {str(e)}"
+
+# Helper function for processing Excel imports
+async def process_excel_import(file: UploadFile, import_config: Dict, db: Session):
+    """
+    Process Excel file import with flexible column mapping and error handling
+    All-or-nothing approach: if any row has validation errors, entire import is rejected
+    
+    Args:
+        file: Uploaded Excel file
+        import_config: Dict containing:
+            - expected_columns: Dict mapping field names to possible column names
+            - required_fields: List of required field names
+            - validate_expenditures: Boolean to enable expenditure-specific validation
+            - insert_query: SQL insert query template
+    """
+    try:
+        # Validate file type
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are supported")
+        
+        # Read Excel file
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+        
+        logging.info(f"Processing Excel file with {len(df)} rows")
+        logging.info(f"Columns found: {list(df.columns)}")
+        
+        # Map actual columns to expected columns
+        column_mapping = {}
+        df_columns_lower = [col.lower().strip() for col in df.columns]
+        
+        for expected_col, possible_names in import_config['expected_columns'].items():
+            found = False
+            for possible_name in possible_names:
+                if possible_name.lower() in df_columns_lower:
+                    actual_col_index = df_columns_lower.index(possible_name.lower())
+                    actual_col_name = df.columns[actual_col_index]
+                    column_mapping[expected_col] = actual_col_name
+                    found = True
+                    break
+            if not found and expected_col in import_config['required_fields']:
+                raise HTTPException(status_code=400, detail=f"Required column '{expected_col}' not found in Excel file")
+        
+        logging.info(f"Column mapping: {column_mapping}")
+        
+        # PHASE 1: Validate ALL rows first
+        validation_errors = []
+        valid_records = []
+        
+        for index, row in df.iterrows():
+            # Extract and validate data
+            record_data = {}
+            row_errors = []
+            
+            for field, column in column_mapping.items():
+                value = row[column] if column in row.index else None
+                
+                # Handle different data types and validation
+                if field == 'year':
+                    valid, error_msg = validate_year(value)
+                    if not valid:
+                        row_errors.append(error_msg)
+                        continue
+                    record_data[field] = int(value)
+                    
+                elif field == 'company_id' and import_config.get('validate_expenditures', False):
+                    valid, error_msg = validate_company_id(value, db)
+                    if not valid:
+                        row_errors.append(error_msg)
+                        continue
+                    record_data[field] = int(value)
+                    
+                elif field == 'type_id' and import_config.get('validate_expenditures', False):
+                    valid, error_msg = validate_type_id(value, db)
+                    if not valid:
+                        row_errors.append(error_msg)
+                        continue
+                    record_data[field] = int(value)
+                    
+                elif field.endswith('_id'):
+                    if value is None or value == '':
+                        if field in import_config['required_fields']:
+                            row_errors.append(f"{field} is required")
+                            continue
+                        record_data[field] = None
+                    else:
+                        try:
+                            record_data[field] = int(value)
+                        except (ValueError, TypeError):
+                            row_errors.append(f"{field} must be a number, got {value}")
+                            continue
+                else:
+                    record_data[field] = float(value or 0) if value is not None else 0
+            
+            if row_errors:
+                validation_errors.append(f"Row {index + 2}: {'; '.join(row_errors)}")
+            else:
+                valid_records.append(record_data)
+        
+        # If there are ANY validation errors, reject the entire import
+        if validation_errors:
+            result = {
+                "message": "Import rejected due to validation errors",
+                "total_processed": len(df),
+                "successful_imports": 0,
+                "errors": len(validation_errors),
+                "error_details": validation_errors[:10]  # Limit to first 10 errors
+            }
+            return result
+        
+        # PHASE 2: If all rows are valid, proceed with import
+        success_count = 0
+        
+        for record_data in valid_records:
+            try:
+                db.execute(text(import_config['insert_query']), record_data)
+                success_count += 1
+            except Exception as insert_error:
+                # If there's an insert error after validation passed, rollback and report
+                db.rollback()
+                logging.error(f"Insert error after validation: {str(insert_error)}")
+                raise HTTPException(status_code=500, detail=f"Database insert error: {str(insert_error)}")
+        
+        # Process to silver layer
+        db.execute(text("CALL silver.load_econ_silver()"))
+        db.commit()
+        time.sleep(0.5)
+        
+        logging.info(f"Import completed successfully: {success_count} records imported")
+        
+        result = {
+            "message": f"Import completed successfully",
+            "total_processed": len(df),
+            "successful_imports": success_count,
+            "errors": 0
+        }
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error in process_excel_import: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
 
 @router.get("/retention", response_model=List[Dict])
 def get_economic_retention(db: Session = Depends(get_db)):
@@ -236,6 +453,10 @@ def create_value_generated(value_data: dict, db: Session = Depends(get_db)):
         db.execute(text("CALL silver.load_econ_silver()"))
         
         db.commit()
+        
+        # Small delay to ensure data is fully processed
+        time.sleep(0.5)
+        
         logging.info("Value generated record created and processed to silver layer successfully")
         
         return {"message": "Value generated record created successfully"}
@@ -309,6 +530,10 @@ def create_expenditure(expenditure_data: dict, db: Session = Depends(get_db)):
         db.execute(text("CALL silver.load_econ_silver()"))
         
         db.commit()
+        
+        # Small delay to ensure data is fully processed
+        time.sleep(0.5)
+        
         logging.info("Expenditure record created and processed to silver layer successfully")
         
         return {"message": "Expenditure record created successfully"}
@@ -356,6 +581,10 @@ def create_capital_provider_payment(payment_data: dict, db: Session = Depends(ge
         db.execute(text("CALL silver.load_econ_silver()"))
         
         db.commit()
+        
+        # Small delay to ensure data is fully processed
+        time.sleep(0.5)
+        
         logging.info("Capital provider payment created and processed to silver layer successfully")
         
         return {"message": "Capital provider payment created successfully"}
@@ -379,6 +608,10 @@ def process_all_bronze_to_silver(db: Session = Depends(get_db)):
         db.execute(text("CALL silver.load_econ_silver()"))
         
         db.commit()
+        
+        # Small delay to ensure data is fully processed
+        time.sleep(0.5)
+        
         logging.info("All bronze economic data processed to silver layer successfully")
         
         return {"message": "All bronze economic data processed to silver layer successfully"}
@@ -387,4 +620,160 @@ def process_all_bronze_to_silver(db: Session = Depends(get_db)):
         db.rollback()
         logging.error(f"Error processing bronze to silver: {str(e)}")
         logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Template generation routes using helper function
+@router.get("/template-generated")
+async def download_economic_generated_template():
+    """Generate Excel template for economic generated data"""
+    try:
+        headers = ['Year', 'Electricity Sales', 'Oil Revenues', 'Other Revenues', 'Interest Income', 'Share in Net Income of Associate', 'Miscellaneous Income']
+        filename = 'economic_generated_template.xlsx'
+        output = create_excel_template(headers, filename)
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue()),
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+
+@router.get("/template-expenditures")
+async def download_economic_expenditures_template():
+    """Generate Excel template for economic expenditures data"""
+    try:
+        headers = ['Year', 'Company ID', 'Type ID', 'Government Payments', 'Local Supplier Spending', 'Foreign Supplier Spending', 'Employee Wages & Benefits', 'Community Investments', 'Depreciation', 'Depletion', 'Others']
+        filename = 'economic_expenditures_template.xlsx'
+        output = create_excel_template(headers, filename)
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue()),
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+
+@router.get("/template-capital-provider")
+async def download_economic_capital_provider_template():
+    """Generate Excel template for economic capital provider payments data"""
+    try:
+        headers = ['Year', 'Interest Payments', 'Dividends to NCI', 'Dividends to Parent']
+        filename = 'economic_capital_provider_template.xlsx'
+        output = create_excel_template(headers, filename)
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue()),
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+
+# Import routes using helper function
+@router.post("/import-generated")
+async def import_economic_generated_data(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Import economic generated data from Excel file"""
+    config = {
+        'expected_columns': {
+            'year': ['Year'],
+            'electricity_sales': ['Electricity Sales'],
+            'oil_revenues': ['Oil Revenues'],
+            'other_revenues': ['Other Revenues'],
+            'interest_income': ['Interest Income'],
+            'share_in_net_income_of_associate': ['Share in Net Income of Associate'],
+            'miscellaneous_income': ['Miscellaneous Income']
+        },
+        'required_fields': ['year'],
+        'insert_query': """
+            INSERT INTO bronze.econ_value (
+                year, electricity_sales, oil_revenues, other_revenues, interest_income,
+                share_in_net_income_of_associate, miscellaneous_income
+            ) VALUES (
+                :year, :electricity_sales, :oil_revenues, :other_revenues, :interest_income,
+                :share_in_net_income_of_associate, :miscellaneous_income
+            )
+            ON CONFLICT (year) 
+            DO UPDATE SET
+                electricity_sales = EXCLUDED.electricity_sales,
+                oil_revenues = EXCLUDED.oil_revenues,
+                other_revenues = EXCLUDED.other_revenues,
+                interest_income = EXCLUDED.interest_income,
+                share_in_net_income_of_associate = EXCLUDED.share_in_net_income_of_associate,
+                miscellaneous_income = EXCLUDED.miscellaneous_income
+        """
+    }
+    
+    return await process_excel_import(file, config, db)
+
+@router.post("/import-expenditures")
+async def import_economic_expenditures_data(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Import economic expenditures data from Excel file"""
+    config = {
+        'expected_columns': {
+            'year': ['Year'],
+            'company_id': ['Company ID'],
+            'type_id': ['Type ID'],
+            'government_payments': ['Government Payments'],
+            'supplier_spending_local': ['Local Supplier Spending'],
+            'supplier_spending_abroad': ['Foreign Supplier Spending'],
+            'employee_wages_benefits': ['Employee Wages & Benefits'],
+            'community_investments': ['Community Investments'],
+            'depreciation': ['Depreciation'],
+            'depletion': ['Depletion'],
+            'others': ['Others']
+        },
+        'required_fields': ['year', 'company_id', 'type_id'],
+        'validate_expenditures': True,
+        'insert_query': """
+            INSERT INTO bronze.econ_expenditures (
+                year, company_id, type_id, government_payments, supplier_spending_local,
+                supplier_spending_abroad, employee_wages_benefits, community_investments,
+                depreciation, depletion, others
+            ) VALUES (
+                :year, :company_id, :type_id, :government_payments, :supplier_spending_local,
+                :supplier_spending_abroad, :employee_wages_benefits, :community_investments,
+                :depreciation, :depletion, :others
+            )
+            ON CONFLICT (year, company_id, type_id) 
+            DO UPDATE SET
+                government_payments = EXCLUDED.government_payments,
+                supplier_spending_local = EXCLUDED.supplier_spending_local,
+                supplier_spending_abroad = EXCLUDED.supplier_spending_abroad,
+                employee_wages_benefits = EXCLUDED.employee_wages_benefits,
+                community_investments = EXCLUDED.community_investments,
+                depreciation = EXCLUDED.depreciation,
+                depletion = EXCLUDED.depletion,
+                others = EXCLUDED.others
+        """
+    }
+    
+    return await process_excel_import(file, config, db)
+
+@router.post("/import-capital-provider")
+async def import_economic_capital_provider_data(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Import economic capital provider payments data from Excel file"""
+    config = {
+        'expected_columns': {
+            'year': ['Year'],
+            'interest': ['Interest Payments'],
+            'dividends_to_nci': ['Dividends to NCI'],
+            'dividends_to_parent': ['Dividends to Parent']
+        },
+        'required_fields': ['year'],
+        'insert_query': """
+            INSERT INTO bronze.econ_capital_provider_payment (
+                year, interest, dividends_to_nci, dividends_to_parent
+            ) VALUES (
+                :year, :interest, :dividends_to_nci, :dividends_to_parent
+            )
+            ON CONFLICT (year) 
+            DO UPDATE SET
+                interest = EXCLUDED.interest,
+                dividends_to_nci = EXCLUDED.dividends_to_nci,
+                dividends_to_parent = EXCLUDED.dividends_to_parent
+        """
+    }
+    
+    return await process_excel_import(file, config, db) 
