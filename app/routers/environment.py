@@ -1729,7 +1729,3 @@ async def export_excel(request: Request):
             "Content-Disposition": "attachment; filename=exported_data.xlsx"
         }
     )
-
-@router.get("/test_export")
-async def test_export():
-    return {"message": "Export route is registered!"}
