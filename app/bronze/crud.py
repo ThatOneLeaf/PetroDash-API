@@ -1400,7 +1400,8 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         
     return len(records)
 
-# =================== HR DATA =================
+# =============================== HR DATA ======================================
+# =========== RETRIEVE DATA BY ID ===========
 # --- Demographics ---
 def get_employee_demographics_by_id(db: Session, employee_id: str):
     return get_one(db, HRDemographics, "employee_id", employee_id)
@@ -1424,3 +1425,290 @@ def get_parental_leave_by_id(db: Session, pl_id: str):
 # --- Occupational Safety and Health ---
 def get_osh_by_id(db: Session, osh_id: str):
     return get_one(db, HROsh, "osh_id", osh_id)
+
+# =========== INSERT SINGLE DATA ===========
+# --- Employability ---
+def insert_employability(db: Session, data: dict):
+    record_demo = HRDemographics(
+        employee_id=data["employee_id"],
+        gender=data["gender"],
+        birthdate=data["birthdate"],
+        position_id=data["position_id"],
+        p_np=data["p_np"],
+        company_id=data["company_id"],
+        employment_status=data["employment_status"]
+    )
+    db.add(record_demo)
+    db.commit()
+    db.refresh(record_demo)
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := TRUE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    record_tenure = HRTenure(
+        employee_id=data["employee_id"],
+        start_date=data["start_date"],
+        end_date=data.get("end_date", None)
+    )
+    db.add(record_tenure)
+    db.commit()
+    db.refresh(record_tenure)
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_demographics := FALSE,
+                load_tenure := TRUE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    return record_demo, record_tenure
+
+# --- Safety Workdata ---
+def insert_safety_workdata(db: Session, data: dict):
+    record = HRSafetyWorkdata(
+        company_id=data["company_id"],
+        contractor=data["contractor"],
+        date=data["date"],
+        manpower=data["manpower"],
+        manhours=data["manhours"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := TRUE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    return record
+
+# --- Parental Leave ---
+def insert_parental_leave(db: Session, data: dict):
+    record = HRParentalLeave(
+        employee_id=data["employee_id"],
+        type_of_leave=data["type_of_leave"],
+        date=data["date"],
+        days=data["days"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := TRUE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    return record
+
+# --- Training ---
+def insert_training(db: Session, data: dict):
+    record = HRTraining(
+        company_id=data["company_id"],
+        date=data["date"],
+        training_title=data["training_title"],
+        training_hours=data["training_hours"],
+        number_of_participants=data["number_of_participants"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := TRUE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    return record
+
+# --- Occupational Safety Health ---
+def insert_occupational_safety_health(db: Session, data: dict):
+    record = HROsh(
+        company_id=data["company_id"],
+        workforce_type=data["workforce_type"],
+        lost_time=data["lost_time"],
+        date=data["date"],
+        incident_type=data["incident_type"],
+        incident_title=data["incident_title"],
+        incident_count=data["incident_count"]
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := TRUE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    return record
+
+from datetime import datetime
+
+today_str = datetime.today().strftime('%Y%m%d')
+
+
+
+def bulk_demographics(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+
+    records = []
+    checker_logs = []
+
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+
+    for i, row in enumerate(rows):
+        key = (row["employee_id"])
+        grouped_rows[key].append((i, row))
+
+    id_mapping = {}
+    for (employee_id, employee_id), row_list in grouped_rows.items():
+        ids = generate_bulk_pkey_ids(
+            db=db,
+            employee_id=employee_id,
+            model_class=HRDemographics,
+            count=len(row_list)
+        )
+
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+
+    # Build abstraction records and collect logs
+    base_timestamp = datetime.now().date() - timedelta(days=1)
+
+        # Create abstraction record
+    record = HRDemographics(
+        employee_id=row["employee_id"],
+        gender=row["gender"],
+        birthdate=row["birthdate"],
+        position_id=row["position_id"],
+        p_np=row["p_np"],
+        company_id=row["company_id"],
+        employment_status=row["employment_status"]
+    )
+    records.append(record)
+        
+        # Create checker_status_log insert params
+    status_time = base_timestamp + timedelta(hours=i + 1)
+    checker_logs.append({
+        "cs_id": f"CS{today_str}",
+        "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
+        "record_id": employee_id,
+        "status_id": "PND",
+        "status_timestamp": status_time,
+        "remarks": "real-data inserted"
+    })
+
+    # Insert records
+    db.bulk_save_objects(records)
+    db.commit()
+
+    # Call stored procedure
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := TRUE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+        print("Stored procedure executed successfully")
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+
+    # Insert checker_status_log entries
+    try:
+        insert_sql = text("""
+            INSERT INTO checker_status_log (
+                cs_id,
+                checker_id,
+                record_id,
+                status_id,
+                status_timestamp,
+                remarks
+            ) VALUES (
+                :cs_id,
+                :checker_id,
+                :record_id,
+                :status_id,
+                :status_timestamp,
+                :remarks
+            )
+        """)
+
+        db.execute(insert_sql, checker_logs)  # this is the correct executemany usage
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+
+    return len(records)

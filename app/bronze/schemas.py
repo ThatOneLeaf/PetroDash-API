@@ -201,30 +201,6 @@ class EmployabilityCombinedOut(BaseModel):
     demographics: HRDemographicsOut
     tenure: HRTenureOut
 
-class AddEmployabilityRecord(BaseModel):
-    demographics: HRDemographicsOut
-    tenure: HRTenureOut
-    
-class AddSafetyWorkdataRecord(BaseModel):
-    company_id: str
-    contractor: str
-    date: dt
-    manpower: int
-    manhours: int
-
-'''
-class AddEmployabilityRecord(BaseModel):
-    employee_id: str
-    gender: Optional[str]
-    birthdate: Optional[dt]
-    position_id: Optional[str]
-    p_np: Optional[str]
-    company_id: Optional[str]
-    employment_status: Optional[str]
-    start_date: dt
-    end_date: Optional[dt]
-'''
-
 # Define the full request model
 class FilteredDataRequest(BaseModel):
     filteredData: List[EnviElectricConsumptionOut]

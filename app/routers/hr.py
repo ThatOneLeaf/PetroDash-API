@@ -1,8 +1,11 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
+import pandas as pd
+from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.dependencies import get_db
+from io import BytesIO
 import logging
 import traceback
 
@@ -13,7 +16,12 @@ from app.bronze.crud import (
     HROsh,
     HRParentalLeave,
     HRSafetyWorkdata,
-    HRTraining
+    HRTraining,
+    insert_employability,
+    insert_safety_workdata,
+    insert_parental_leave,
+    insert_occupational_safety_health,
+    insert_training
 )
 from app.bronze.schemas import (
     HRDemographicsOut,
@@ -22,9 +30,7 @@ from app.bronze.schemas import (
     HRParentalLeaveOut,
     HRSafetyWorkdataOut,
     HRTrainingOut,
-    EmployabilityCombinedOut,
-    AddEmployabilityRecord,
-    AddSafetyWorkdataRecord
+    EmployabilityCombinedOut
 )
 
 
@@ -329,45 +335,207 @@ def get_hr_training_by_id(training_id: str, db: Session = Depends(get_db)):
     return record
 '''
 
-# ====================== ADD RECORD ====================== 
+# ====================== ADD SINGLE RECORD ====================== 
 # --- EMPLOYABILITY ---
-@router.post("/add_employability_record")
-def add_employability_record(record: AddEmployabilityRecord, db: Session = Depends(get_db)):
-    new_record = AddEmployabilityRecord(
-        employee_id=record.demographics.employee_id,
-        gender=record.demographics.gender,
-        birthdate=record.demographics.birthdate,
-        position_id=record.demographics.position_id,
-        p_np=record.demographics.p_np,
-        company_id=record.demographics.company_id,
-        employment_status=record.demographics.employment_status,
-        start_date=record.tenure.start_date,
-        end_date=record.tenure.end_date,
-    )
-    db.add(new_record)
-    db.commit()
-    db.refresh(new_record)
-    
-    # update silver
-    db.execute(text("CALL silver.load_hr_silver();"))
-    db.commit()
-    return new_record
-# --- SAFETY WORKDATA ---
-@router.post("/add_safety_workdata_record")
-def add_safety_workdata_record(record: AddSafetyWorkdataRecord, db: Session = Depends(get_db)):
-    new_record = AddSafetyWorkdataRecord(
-        company_id=record.company_id,
-        contractor=record.contractor,
-        date=record.date,
-        manpower=record.manpower,
-        manhours=record.manhours
+@router.post("/single_upload_employability_record")
+def single_upload_employability_record(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single employability record")
 
-    )
-    db.add(new_record)
-    db.commit()
-    db.refresh(new_record)
+        required_fields = ['employee_id', 'gender', 'birthdate', 'position_id', 'p_np', 'company_id', 'employment_status', 'start_date', 'end_date']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["p_np"], str) or not data["p_np"].strip():
+            raise HTTPException(status_code=422, detail="Invalid p_np")
+        
+        if not isinstance(data["gender"], str) or not data["gender"].strip():
+            raise HTTPException(status_code=422, detail="Invalid gender")
+        
+        if not isinstance(data["position_id"], str) or not data["position_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid position_id")
+
+        if data["employment_status"] not in {"Permanent", "Temporary"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['employment_status']}'")
+
+        record = {
+            "employee_id": data["employee_id"],
+            "gender": data["gender"],
+            "birthdate": data["birthdate"],
+            "position_id": data["position_id"],
+            "p_np": data["p_np"],
+            "company_id": data["company_id"],
+            "employment_status": data["employment_status"],
+            "start_date": data["start_date"],
+            "end_date": data["end_date"],
+        }
+
+        insert_employability(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+        
+# --- SAFETY WORKDATA ---
+def single_upload_safety_workdata_record(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single safety workdata record")
+
+        required_fields = ['company_id', 'contractor', 'date', 'manpower', 'manhours']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["contractor"], str) or not data["contractor"].strip():
+            raise HTTPException(status_code=422, detail="Invalid contractor")
+
+        record = {
+            "company_id": data["company_id"],
+            "contractor": data["contractor"],
+            "date": data["date"],
+            "manpower": int(data["manpower"]),
+            "manhours": int(data["manhours"]),
+        }
+
+        insert_safety_workdata(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     
-    # update silver
-    db.execute(text("CALL silver.load_hr_silver();"))
-    db.commit()
-    return new_record
+# --- Parental Leave ---
+def single_upload_parental_leave_record(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single parental leave record")
+
+        required_fields = ['employee_id', 'type_of_leave', 'date', 'days']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        record = {
+            "employee_id": data["employee_id"],
+            "type_of_leave": data["type_of_leave"],
+            "date": data["date"],
+            "days": int(data["days"]),
+        }
+
+        insert_parental_leave(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# --- Training ---
+def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single training record")
+
+        required_fields = ['company_id', 'date', 'training_title', 'training_hours', 'number_of_participants']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        record = {
+            "company_id": data["company_id"],
+            "date": data["date"],
+            "training_title": data["training_title"],
+            "training_hours": int(data["training_hours"]),
+            "number_of_participants": int(data["number_of_participants"]),
+        }
+
+        insert_training(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# --- Occupational Safety Health ---
+def single_upload_occupational_safety_health_record(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single occupational safety health record")
+
+        required_fields = ['company_id', 'workforce_type', 'lost_time', 'date', 'incident_type', 'incident_title', 'incident_count']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if data["lost_time"] not in {"TRUE", "FALSE"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['lost_time']}'")
+
+        record = {
+            "company_id": data["company_id"],
+            "workforce_type": data["workforce_type"],
+            "lost_time": data["lost_time"] == "TRUE",
+            "date": data["date"],
+            "incident_type": data["incident_type"],
+            "incident_title": data["incident_title"],
+            "incident_count": int(data["incident_count"]),
+        }
+
+        # Assuming you have a single insert function
+        insert_occupational_safety_health(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# ====================== ADD BULK RECORD ====================== 
+# --- EMPLOYABILITY ---
+
+
+# ====================== EXPORT DATA ======================
+@router.post("/export_excel")
+async def export_excel(request: Request):
+    data = await request.json()
+    
+    # Convert list of dicts to DataFrame
+    df = pd.DataFrame(data)
+
+    # Write to Excel in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Filtered Data")
+
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=exported_data.xlsx"
+        }
+    )
