@@ -3,6 +3,7 @@ from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviComp
 from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
+from app.utils.gen_help_id import generate_pkey_id
 from sqlalchemy import text
 from sqlalchemy.sql import text
 from datetime import datetime, timedelta
@@ -52,35 +53,78 @@ def get_filtered_csr_programs(db: Session, filters: dict, skip: int = 0, limit: 
     return get_many_filtered(db, CSRProgram, filters=filters, skip=skip, limit=limit)
 
 # ========================== INSERT SINGLE DATA ============================
-def insert_activity(db: Session, data: dict):
-    record_activity = CSRActivity(
-        csr_id=data["employee_id"],
-        company_id=data["gender"],
-        project_id=data["birthdate"],
-        project_year=data["position_id"],
-        csr_report=data["p_np"],
-        project_expenses=data["company_id"]
-    )
-    db.add(record_activity)
-    db.commit()
-    db.refresh(record_activity)
+def insert_csr_activity(db: Session, data: dict):
+    print(data)
+    csr_id = data.get("csr_id")
+    if not csr_id:
+        csr_id = generate_pkey_id(
+            db=db,
+            company_id=data["company_id"],
+            year=data["project_year"],
+            model_class=CSRActivity,
+            id_field="csr_id"
+        )
+    
+    print(csr_id)
+    # record_activity = CSRActivity(
+    #     csr_id=data["csr_id"],
+    #     company_id=data["company_id"],
+    #     project_id=data["project_id"],
+    #     project_year=data["project_year"],
+    #     csr_report=data["csr_report"],
+    #     project_expenses=data["project_expenses"]
+    # )
+
+    # logging.info(f"Inserting CSR activity: {record_activity}")
+    # db.add(record_activity)
+    # db.commit()
+    # db.refresh(record_activity)
     try:
         db.execute(text("""
-            CALL silver.load_hr_silver(
-                load_demographics := TRUE,
-                load_tenure := FALSE,
-                load_parental_leave := FALSE,
-                load_training := FALSE,
-                load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+            INSERT INTO bronze.csr_activity (
+                csr_id, 
+                company_id,
+                project_id,
+                project_year,
+                csr_report,
+                project_expenses
+            ) VALUES (
+                :csr_id,
+                :company_id,
+                :project_id,
+                :project_year,
+                :csr_report,
+                :project_expenses
             )
-        """))
+            ON CONFLICT (csr_id) DO UPDATE SET
+                company_id = EXCLUDED.company_id,
+                project_id = EXCLUDED.project_id,
+                project_year = EXCLUDED.project_year,
+                csr_report = EXCLUDED.csr_report,
+                project_expenses = EXCLUDED.project_expenses
+        """), 
+        {
+            'csr_id': csr_id,
+            'company_id': data["company_id"],
+            'project_id': data["project_id"],
+            'project_year': data["project_year"],
+            'csr_report': data["csr_report"],
+            'project_expenses': data["project_expenses"]
+        })
+
         db.commit()
+
+        db.execute(text("CALL silver.load_csr_silver()"))
+
+        db.commit()
+
+        logging.info("CSR Activity record created and processed to silver layer successfully")
+
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    return record_activity
+    return  {"message": "CSR Activity record created successfully"}
 
 # ====================================== ENVIRONMENTAL DATA ====================================
 # ====================================== RETRIEVE DATA ====================================
