@@ -45,14 +45,28 @@ def get_energy_records_by_status(
         logging.info(f"Fetching energy records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT er.*,pp.*, csl.status_id
-            FROM silver.csv_energy_records er
-			JOIN gold.dim_powerplant_profile pp 
-                ON pp.power_plant_id=er.power_plant_id
-            JOIN public.checker_status_log csl
-                ON er.energy_id = csl.record_id
-            WHERE (:status_id IS NULL OR csl.status_id = :status_id)
-            ORDER BY er.create_at desc, er.date_generated desc, er.updated_at desc
+                WITH latest_status AS (
+                    SELECT csl.*
+                    FROM (
+                        SELECT *,
+                            ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY status_timestamp DESC) AS rn
+                        FROM public.checker_status_log
+                    ) csl
+                    WHERE csl.rn = 1
+                )
+                SELECT     
+                    er.energy_id,
+                    er.power_plant_id,
+                    er.date_generated::date AS date_generated,
+                    er.energy_generated_kwh,
+                    er.co2_avoidance_kg, 
+                    pp.*, ls.status_id
+                FROM silver.csv_energy_records er
+                JOIN gold.dim_powerplant_profile pp 
+                    ON pp.power_plant_id = er.power_plant_id
+                JOIN latest_status ls
+                    ON er.energy_id = ls.record_id
+                ORDER BY er.create_at DESC, er.date_generated DESC, er.updated_at DESC;
         """)
 
         result = db.execute(query, {"status_id": status_id})
