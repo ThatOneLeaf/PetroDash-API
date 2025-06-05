@@ -8,6 +8,7 @@ from app.dependencies import get_db
 from io import BytesIO
 import logging
 import traceback
+import io
 
 from app.crud.base import get_all, get_many_filtered, get_one
 from app.bronze.crud import (
@@ -45,6 +46,22 @@ from app.bronze.schemas import (
 
 
 router = APIRouter()
+
+# Function to get the template
+def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
+    df = pd.DataFrame({header: [] for header in headers})
+    output = io.BytesIO()
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+        worksheet = writer.sheets['Sheet1']
+        
+        for column in worksheet.columns:
+            max_length = len(str(column[0].value)) + 2
+            worksheet.column_dimensions[column[0].column_letter].width = max_length
+    
+    output.seek(0)
+    return output
 
 @router.get("/gender_dist_by_position", response_model=List[dict])
 def get_gender_dist_by_position(
@@ -733,3 +750,79 @@ async def export_excel(request: Request):
             "Content-Disposition": "attachment; filename=exported_data.xlsx"
         }
     )
+    
+# ====================== TEMPLATE GENERATION DATA ======================
+@router.get("/template-employability")
+async def download_economic_generated_template():
+    try:
+        headers = ['employee_id', 'gender', 'birthdate', 'position_id', 'p_np', 'company_id', 'employment_status', 'start_date', 'end_date']
+        filename = 'hr_employability_template.xlsx'
+        output = create_excel_template(headers, filename)
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue()),
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+    
+@router.get("/template-safety-workdata")
+async def download_economic_generated_template():
+    try:
+        headers = ['company_id', 'contractor', 'date', 'manpower', 'manhours']
+        filename = 'hr_safety_workdata_template.xlsx'
+        output = create_excel_template(headers, filename)
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue()),
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+    
+@router.get("/template-parental-leave")
+async def download_economic_generated_template():
+    try:
+        headers = ['employee_id', 'type_of_leave', 'date', 'days']
+        filename = 'hr_parental_leave_template.xlsx'
+        output = create_excel_template(headers, filename)
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue()),
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+    
+@router.get("/template-training")
+async def download_economic_generated_template():
+    try:
+        headers = ['company_id', 'date', 'training_title', 'training_hours', 'number_of_participants']
+        filename = 'hr_training_template.xlsx'
+        output = create_excel_template(headers, filename)
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue()),
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+    
+@router.get("/template-osh")
+async def download_economic_generated_template():
+    try:
+        headers = ['company_id', 'workforce_type', 'lost_time', 'date', 'incident_type', 'incident_title', 'incident_count']
+        filename = 'hr_occupational_safety_health_template.xlsx'
+        output = create_excel_template(headers, filename)
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue()),
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
