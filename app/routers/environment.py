@@ -648,7 +648,7 @@ def get_water_abstraction_records(db: Session = Depends(get_db)):
         query = text("""
             SELECT
                 bewa.wa_id,
-				cm.company_name AS company,
+                cm.company_name AS company,
                 bewa.year,
                 COALESCE(bewa.month, 'N/A') AS month,
                 COALESCE(bewa.quarter, 'N/A') AS quarter,
@@ -656,11 +656,11 @@ def get_water_abstraction_records(db: Session = Depends(get_db)):
                 bewa.unit_of_measurement AS unit,
                 s.status_name AS status
             FROM bronze.envi_water_abstraction bewa
-            INNER JOIN silver.wa_id_mapping wim ON bewa.wa_id = wim.wa_id_bronze
-            INNER JOIN silver.envi_water_abstraction sewa ON sewa.wa_id = wim.wa_id_silver
-            INNER JOIN public.checker_status_log csl ON csl.record_id = sewa.wa_id 
+            LEFT JOIN silver.wa_id_mapping wim ON bewa.wa_id = wim.wa_id_bronze
+            LEFT JOIN silver.envi_water_abstraction sewa ON sewa.wa_id = wim.wa_id_silver
+            INNER JOIN public.checker_status_log csl ON csl.record_id = bewa.wa_id
             INNER JOIN public.status s ON s.status_id = csl.status_id
-			INNER JOIN ref.company_main cm ON cm.company_id = bewa.company_id
+            INNER JOIN ref.company_main cm ON cm.company_id = bewa.company_id
         """)
 
         result = db.execute(query)

@@ -6,6 +6,8 @@ from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
 from sqlalchemy import text
 from sqlalchemy.sql import text
 from datetime import datetime, timedelta
+from app.public.models import CheckerStatus
+
 
 # =================== POWER PLANT ENERGY DATA =================
 def get_energy_record_by_id(db: Session, energy_id: str):
@@ -521,7 +523,7 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
         return 0
 
     records = []
-    checker_logs = []
+    checker_log_objects = []
 
     from collections import defaultdict
     grouped_rows = defaultdict(list)
@@ -545,7 +547,7 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
         for (original_index, _), generated_id in zip(row_list, ids):
             id_mapping[original_index] = generated_id
 
-    # Build abstraction records and collect logs
+    # Build abstraction records and CheckerStatus logs
     base_timestamp = datetime.now().date() - timedelta(days=1)
     for i, row in enumerate(rows):
         wa_id = id_mapping[i]
@@ -562,18 +564,19 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
         )
         records.append(record)
 
-        # Create checker_status_log insert params
+        # Create checker_status_log model instance
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_logs.append({
-            "cs_id": f"CS-{wa_id}",
-            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-            "record_id": wa_id,
-            "status_id": "PND",
-            "status_timestamp": status_time,
-            "remarks": "real-data inserted"
-        })
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{wa_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=wa_id,
+            status_id="PND",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_log_objects.append(checker_log)
 
-    # Insert records
+    # Insert records into EnviWaterAbstraction
     db.bulk_save_objects(records)
     db.commit()
 
@@ -598,27 +601,9 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
 
-    # Insert checker_status_log entries
+    # Insert checker_status_log using ORM model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)  # this is the correct executemany usage
+        db.bulk_save_objects(checker_log_objects)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
@@ -626,9 +611,6 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
         db.rollback()
 
     return len(records)
-
-from datetime import datetime, timedelta
-from sqlalchemy.sql import text
 
 def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -677,16 +659,17 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
         )
         records.append(record)
         
-        # Create checker_status_log insert params
+        # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_logs.append({
-            "cs_id": f"CS-{wd_id}",
-            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-            "record_id": wd_id,
-            "status_id": "PND",
-            "status_timestamp": status_time,
-            "remarks": "real-data inserted"
-        })
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{wd_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
+            record_id=wd_id,
+            status_id="PND",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_logs.append(checker_log)
     
     # Insert records
     db.bulk_save_objects(records)
@@ -715,27 +698,9 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
     
-    # Insert checker_status_log entries
+    # Insert checker_status_log entries using CheckerStatus model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)
+        db.bulk_save_objects(checker_logs)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
@@ -791,16 +756,17 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
         )
         records.append(record)
         
-        # Create checker_status_log insert params
+        # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_logs.append({
-            "cs_id": f"CS-{wc_id}",
-            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-            "record_id": wc_id,
-            "status_id": "PND",
-            "status_timestamp": status_time,
-            "remarks": "real-data inserted"
-        })
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{wc_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
+            record_id=wc_id,
+            status_id="PND",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_logs.append(checker_log)
     
     # Insert records
     db.bulk_save_objects(records)
@@ -829,27 +795,9 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    # Insert checker_status_log entries
+    # Insert checker_status_log entries using CheckerStatus model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)
+        db.bulk_save_objects(checker_logs)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
@@ -906,16 +854,17 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
         )
         records.append(record)
         
-        # Create checker_status_log insert params
+        # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_logs.append({
-            "cs_id": f"CS-{ec_id}",
-            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-            "record_id": ec_id,
-            "status_id": "PND",
-            "status_timestamp": status_time,
-            "remarks": "real-data inserted"
-        })
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{ec_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
+            record_id=ec_id,
+            status_id="PND",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_logs.append(checker_log)
     
     # Insert records
     db.bulk_save_objects(records)
@@ -944,27 +893,9 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    # Insert checker_status_log entries
+    # Insert checker_status_log entries using CheckerStatus model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)
+        db.bulk_save_objects(checker_logs)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
@@ -1022,16 +953,17 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
         )
         records.append(record)
         
-        # Create checker_status_log insert params
+        # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_logs.append({
-            "cs_id": f"CS-{nhw_id}",
-            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-            "record_id": nhw_id,
-            "status_id": "PND",
-            "status_timestamp": status_time,
-            "remarks": "real-data inserted"
-        })
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{nhw_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
+            record_id=nhw_id,
+            status_id="PND",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_logs.append(checker_log)
     
     # Insert records
     db.bulk_save_objects(records)
@@ -1060,27 +992,9 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    # Insert checker_status_log entries
+    # Insert checker_status_log entries using CheckerStatus model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)
+        db.bulk_save_objects(checker_logs)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
@@ -1137,16 +1051,17 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
         )
         records.append(record)
         
-        # Create checker_status_log insert params
+        # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_logs.append({
-            "cs_id": f"CS-{hwg_id}",
-            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-            "record_id": hwg_id,
-            "status_id": "PND",
-            "status_timestamp": status_time,
-            "remarks": "real-data inserted"
-        })
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{hwg_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
+            record_id=hwg_id,
+            status_id="PND",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_logs.append(checker_log)
     
     # Insert records
     db.bulk_save_objects(records)
@@ -1175,27 +1090,9 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    # Insert checker_status_log entries
+    # Insert checker_status_log entries using CheckerStatus model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)
+        db.bulk_save_objects(checker_logs)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
@@ -1251,16 +1148,17 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
         )
         records.append(record)
         
-        # Create checker_status_log insert params
+        # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_logs.append({
-            "cs_id": f"CS-{hwd_id}",
-            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-            "record_id": hwd_id,
-            "status_id": "PND",
-            "status_timestamp": status_time,
-            "remarks": "real-data inserted"
-        })
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{hwd_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
+            record_id=hwd_id,
+            status_id="PND",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_logs.append(checker_log)
     
     # Insert records
     db.bulk_save_objects(records)
@@ -1289,27 +1187,9 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    # Insert checker_status_log entries
+    # Insert checker_status_log entries using CheckerStatus model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)
+        db.bulk_save_objects(checker_logs)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
@@ -1365,16 +1245,17 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         )
         records.append(record)
         
-        # Create checker_status_log insert params
+        # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_logs.append({
-            "cs_id": f"CS-{dc_id}",
-            "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-            "record_id": dc_id,
-            "status_id": "PND",
-            "status_timestamp": status_time,
-            "remarks": "real-data inserted"
-        })
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{dc_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
+            record_id=dc_id,
+            status_id="PND",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_logs.append(checker_log)
     
     # Insert records
     db.bulk_save_objects(records)
@@ -1403,27 +1284,9 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    # Insert checker_status_log entries
+    # Insert checker_status_log entries using CheckerStatus model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)
+        db.bulk_save_objects(checker_logs)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
