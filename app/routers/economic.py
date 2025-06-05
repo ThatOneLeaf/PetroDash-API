@@ -319,19 +319,21 @@ def get_economic_expenditures(db: Session = Depends(get_db)):
         result = db.execute(text("""
             SELECT 
                 year,
-                company_name as comp,
-                type_description as type,
+                company_id as comp,
+                type_id as type,
                 ROUND(government_payments::numeric, 2) as government,
-                ROUND(local_supplier_spending::numeric, 2) as local_suppl,
+                ROUND(local_supplier_spending::numeric, 2) as local_supplier_spending,
                 ROUND(foreign_supplier_spending::numeric, 2) as foreign_supplier_spending,
                 ROUND(employee_wages_benefits::numeric, 2) as employee,
                 ROUND(community_investments::numeric, 2) as community,
                 ROUND(depreciation::numeric, 2) as depreciation,
                 ROUND(depletion::numeric, 2) as depletion,
                 ROUND(other_expenditures::numeric, 2) as others,
-                ROUND(total_distributed_value_by_company::numeric, 2) as total_value
+                ROUND(total_distributed_value_by_company::numeric, 2) as total_distributed,
+                ROUND((total_distributed_value_by_company + depreciation + 
+                       depletion + other_expenditures)::numeric, 2) as total_expenditures
             FROM gold.vw_economic_expenditure_by_company
-            ORDER BY year DESC, company_name, type_description
+            ORDER BY year DESC, company_id, type_id
         """))
         
         data = [
@@ -340,14 +342,15 @@ def get_economic_expenditures(db: Session = Depends(get_db)):
                 'comp': row.comp,
                 'type': row.type,
                 'government': float(row.government) if row.government else 0,
-                'localSuppl': float(row.local_suppl) if row.local_suppl else 0,
+                'localSupplierSpending': float(row.local_supplier_spending) if row.local_supplier_spending else 0,
                 'foreignSupplierSpending': float(row.foreign_supplier_spending) if row.foreign_supplier_spending else 0,
                 'employee': float(row.employee) if row.employee else 0,
                 'community': float(row.community) if row.community else 0,
                 'depreciation': float(row.depreciation) if row.depreciation else 0,
                 'depletion': float(row.depletion) if row.depletion else 0,
                 'others': float(row.others) if row.others else 0,
-                'totalValue': float(row.total_value) if row.total_value else 0
+                'totalDistributed': float(row.total_distributed) if row.total_distributed else 0,
+                'totalExpenditures': float(row.total_expenditures) if row.total_expenditures else 0
             }
             for row in result
         ]
@@ -517,7 +520,7 @@ def create_expenditure(expenditure_data: dict, db: Session = Depends(get_db)):
             'company_id': expenditure_data['comp'],
             'type_id': expenditure_data['type'],
             'government_payments': float(expenditure_data.get('government', 0) or 0),
-            'supplier_spending_local': float(expenditure_data.get('localSuppl', 0) or 0),
+            'supplier_spending_local': float(expenditure_data.get('localSupplierSpending', 0) or 0),
             'supplier_spending_abroad': float(expenditure_data.get('foreignSupplierSpending', 0) or 0),
             'employee_wages_benefits': float(expenditure_data.get('employee', 0) or 0),
             'community_investments': float(expenditure_data.get('community', 0) or 0),
