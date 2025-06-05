@@ -17,11 +17,21 @@ from app.bronze.crud import (
     HRParentalLeave,
     HRSafetyWorkdata,
     HRTraining,
+    # SINGLE INSERT FUNCTIONS
     insert_employability,
     insert_safety_workdata,
     insert_parental_leave,
     insert_occupational_safety_health,
-    insert_training
+    insert_training,
+    # BULK INSERT FUNCTIONS
+    # insert_employability_bulk,
+    
+    # UPDATE FUNCTIONS
+    update_employability,
+    update_safety_workdata,
+    update_parental_leave,
+    update_occupational_safety_health,
+    update_training
 )
 from app.bronze.schemas import (
     HRDemographicsOut,
@@ -385,6 +395,7 @@ def single_upload_employability_record(data: dict, db: Session = Depends(get_db)
         raise HTTPException(status_code=500, detail=str(e))
         
 # --- SAFETY WORKDATA ---
+@router.post("/single_upload_safety_workdata_record")
 def single_upload_safety_workdata_record(data: dict, db: Session = Depends(get_db)):
     try:
         logging.info("Add single safety workdata record")
@@ -419,6 +430,7 @@ def single_upload_safety_workdata_record(data: dict, db: Session = Depends(get_d
         raise HTTPException(status_code=500, detail=str(e))
     
 # --- Parental Leave ---
+@router.post("/single_upload_parental_leave_record")
 def single_upload_parental_leave_record(data: dict, db: Session = Depends(get_db)):
     try:
         logging.info("Add single parental leave record")
@@ -446,6 +458,7 @@ def single_upload_parental_leave_record(data: dict, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail=str(e))
     
 # --- Training ---
+@router.post("/single_upload_training_record")
 def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
     try:
         logging.info("Add single training record")
@@ -477,6 +490,7 @@ def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
     
 # --- Occupational Safety Health ---
+@router.post("/single_upload_occupational_safety_health_record")
 def single_upload_occupational_safety_health_record(data: dict, db: Session = Depends(get_db)):
     try:
         logging.info("Add single occupational safety health record")
@@ -516,6 +530,186 @@ def single_upload_occupational_safety_health_record(data: dict, db: Session = De
 # ====================== ADD BULK RECORD ====================== 
 # --- EMPLOYABILITY ---
 
+
+# ====================== EDIT RECORD ====================== 
+# --- EMPLOYABILITY ---
+@router.post("/edit_employability")
+def edit_employability(
+    data: dict, db: Session = Depends(get_db)
+):
+    try:
+        required_fields = ['employee_id', 'gender', 'birthdate', 'position_id', 'p_np', 'company_id', 'employment_status', 'start_date', 'end_date']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["p_np"], str) or not data["p_np"].strip():
+            raise HTTPException(status_code=422, detail="Invalid p_np")
+        
+        if not isinstance(data["gender"], str) or not data["gender"].strip():
+            raise HTTPException(status_code=422, detail="Invalid gender")
+        
+        if not isinstance(data["position_id"], str) or not data["position_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid position_id")
+
+        if data["employment_status"] not in {"Permanent", "Temporary"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['employment_status']}'")
+        
+        employee_id = data["employee_id"]
+        record_demo = {
+            "employee_id": data["employee_id"],
+            "gender": data["gender"],
+            "birthdate": data["birthdate"],
+            "position_id": data["position_id"],
+            "p_np": data["p_np"],
+            "company_id": data["company_id"],
+            "employment_status": data["employment_status"]
+        }
+        
+        record_tenure = {
+            "employee_id": data["employee_id"],
+            "start_date": data["start_date"],
+            "end_date": data["end_date"]
+        }
+        
+        update_employability(db, employee_id, record_demo, record_tenure)
+        return {"message": "employability record successfully updated."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Safety Workdata ---
+@router.post("/edit_safety_workdata")
+def edit_safety_workdata(
+    data: dict, db: Session = Depends(get_db)
+):
+    try:
+        required_fields = ['company_id', 'contractor', 'date', 'manpower', 'manhours']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["contractor"], str) or not data["contractor"].strip():
+            raise HTTPException(status_code=422, detail="Invalid contractor")
+        
+        safety_workdata_id = data["safety_workdata_id"]
+        record = {
+            "company_id": data["company_id"],
+            "contractor": data["contractor"],
+            "date": data["date"],
+            "manpower": int(data["manpower"]),
+            "manhours": int(data["manhours"]),
+        }
+        
+        update_safety_workdata(db, safety_workdata_id, record)
+        return {"message": "safety workdata record successfully updated."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# --- Parental Leave ---
+@router.post("/edit_parental_leave")
+def edit_parental_leave(
+    data: dict, db: Session = Depends(get_db)
+):
+    try:
+        required_fields = ['employee_id', 'type_of_leave', 'date', 'days']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+        
+        parental_leave_id = data["parental_leave_id"]
+        record = {
+            "employee_id": data["employee_id"],
+            "type_of_leave": data["type_of_leave"],
+            "date": data["date"],
+            "days": int(data["days"]),
+        }
+        
+        update_parental_leave(db, parental_leave_id, record)
+        return {"message": "parental leave record successfully updated."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# --- Training ---
+@router.post("/edit_training")
+def edit_training(
+    data: dict, db: Session = Depends(get_db)
+):
+    try:
+        required_fields = ['company_id', 'date', 'training_title', 'training_hours', 'number_of_participants']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        training_id = data["training_id"]
+        record = {
+            "company_id": data["company_id"],
+            "date": data["date"],
+            "training_title": data["training_title"],
+            "training_hours": int(data["training_hours"]),
+            "number_of_participants": int(data["number_of_participants"]),
+        }
+        
+        update_training(db, training_id, record)
+        return {"message": "training record successfully updated."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# --- Occupational Safety Health ---
+@router.post("/edit_osh")
+def edit_osh(
+    data: dict, db: Session = Depends(get_db)
+):
+    try:
+        required_fields = ['company_id', 'workforce_type', 'lost_time', 'date', 'incident_type', 'incident_title', 'incident_count']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if data["lost_time"] not in {"TRUE", "FALSE"}:
+            raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['lost_time']}'")
+
+        osh_id = data["osh_id"]
+        record = {
+            "company_id": data["company_id"],
+            "workforce_type": data["workforce_type"],
+            "lost_time": data["lost_time"] == "TRUE",
+            "date": data["date"],
+            "incident_type": data["incident_type"],
+            "incident_title": data["incident_title"],
+            "incident_count": int(data["incident_count"]),
+        }
+        
+        update_occupational_safety_health(db, osh_id, record)
+        return {"message": "training record successfully updated."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ====================== EXPORT DATA ======================
 @router.post("/export_excel")

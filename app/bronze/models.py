@@ -155,6 +155,8 @@ class TableType(str, Enum):
     ALL = "all"
     
 #============================HUMAN RESOURCES=================================
+metadata_silver = MetaData(schema="silver")
+Base_silver = declarative_base(metadata=metadata_silver)
 class HRDemographics(Base):
     __tablename__ = "hr_demographics"
     
@@ -173,35 +175,39 @@ class HRTenure(Base):
     start_date = Column(TIMESTAMP, primary_key=True, index=True)
     end_date = Column(TIMESTAMP, nullable=True)
     
-class HRTraining(Base):
+class HRTraining(Base_silver):
     __tablename__ = "hr_training"
     
+    training_id = Column(String(20), primary_key=True, index=True)
     company_id = Column(String(20), primary_key=True, index=True)
     date = Column(String(50), primary_key=True, index=True)
     training_title = Column(TEXT, primary_key=True, index=True)
     training_hours = Column(TIMESTAMP)
     number_of_participants = Column(Numeric)
     
-class HRSafetyWorkdata(Base):
+class HRSafetyWorkdata(Base_silver):
     __tablename__ = "hr_safety_workdata"
     
+    safety_workdata_id = Column(String(20), primary_key=True, index=True)
     company_id = Column(String(20), primary_key=True, index=True)
     contractor = Column(SmallInteger, primary_key=True, index=True)
     date = Column(String(10), primary_key=True, index=True)
     manpower = Column(Integer)
     manhours = Column(Integer)
     
-class HRParentalLeave(Base):
+class HRParentalLeave(Base_silver):
     __tablename__ = "hr_parental_leave"
     
+    parental_leave_id = Column(String(20), primary_key=True, index=True)
     employee_id = Column(String(20), primary_key=True, index=True)
     type_of_leave = Column(String(50))
     date = Column(TIMESTAMP)
     days = Column(Integer)
     
-class HROsh(Base):
+class HROsh(Base_silver):
     __tablename__ = "hr_occupational_safety_health"
     
+    osh_id = Column(String(20), primary_key=True, index=True)
     company_id = Column(String(20), primary_key=True, index=True)
     workforce_type = Column(TEXT, primary_key=True, index=True)
     lost_time = Column(BOOLEAN, primary_key=True, index=True)

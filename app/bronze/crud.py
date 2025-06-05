@@ -1904,7 +1904,183 @@ from datetime import datetime
 
 today_str = datetime.today().strftime('%Y%m%d')
 
+# ====================================== UPDATE HR DATA ======================================
+# --- Employability ---
+def update_employability(db: Session, employee_id: str, data_demo: dict, data_tenure: dict):
+    # Demographics
+    record_demo = get_one(db, HRDemographics, "employee_id", employee_id)
+    if not record_demo:
+        return None
+    
+    for key, value in data_demo.items():
+        setattr(record_demo, key, value)
+    
+    db.commit()
+    db.refresh(record_demo)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := TRUE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    # Tenure
+    record_tenure = get_one(db, HRTenure, "employee_id", employee_id)
+    if not record_tenure:
+        return None
+    
+    for key, value in data_tenure.items():
+        setattr(record_tenure, key, value)
+    
+    db.commit()
+    db.refresh(record_tenure)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := TRUE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record_demo, record_tenure
 
+# --- Safety Workdata ---
+def update_safety_workdata(db: Session, safety_workdata_id: str, data):
+    record = get_one(db, HRSafetyWorkdata, "safety_workdata_id", safety_workdata_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := TRUE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# --- Parental Leave ---
+def update_parental_leave(db: Session, parental_leave_id: str, data):
+    record = get_one(db, HRParentalLeave, "parental_leave_id", parental_leave_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := TRUE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# --- Occupational Safety Health ---
+def update_occupational_safety_health(db: Session, osh_id: str, data):
+    record = get_one(db, HROsh, "osh_id", osh_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := TRUE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# --- Occupational Safety Health ---
+def update_training(db: Session, training_id: str, data):
+    record = get_one(db, HRTraining, "training_id", training_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := TRUE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    return record
+
+# ====================================== BULK INSERT HR DATA ======================================
+# --- Demographics ---
 
 def bulk_demographics(db: Session, rows: list[dict]) -> int:
     if not rows:
