@@ -2470,16 +2470,16 @@ def edit_electric_consumption(
 ):
     try:
         logging.info("Edit electric consumption record")
-        required_fields = ['company_name', 'year', 'quarter', 'source', 'unit_of_measurement', 'consumption']
+        required_fields = ['company', 'year', 'quarter', 'source', 'unit', 'consumption']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
-        if not isinstance(data["company_name"], str) or not data["company_name"].strip():
-            raise HTTPException(status_code=422, detail="Invalid company_name")
+        if not isinstance(data["company"], str) or not data["company"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company name")
 
         # Look up company_id using company_name
-        company_name = data["company_name"].strip()
+        company_name = data["company"].strip()
         company = db.query(CompanyMain).filter(CompanyMain.company_name.ilike(company_name)).first()
 
         if not company:
@@ -2499,19 +2499,19 @@ def edit_electric_consumption(
         if not isinstance(data["source"], str) or not data["source"].strip():
             raise HTTPException(status_code=422, detail="Invalid source")
 
-        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
-            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+        if not isinstance(data["unit"], str) or not data["unit"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit")
 
         if not isinstance(data["consumption"], (int, float)) or data["consumption"] < 0:
             raise HTTPException(status_code=422, detail="Invalid consumption")
 
-        ec_id = data["id"]
+        ec_id = data["ec_id"]
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
             "quarter": data["quarter"],
             "source": data["source"].strip(),
-            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "unit_of_measurement": data["unit"].strip(),
             "consumption": float(data["consumption"]),
         }
 
@@ -2711,19 +2711,19 @@ def edit_diesel_consumption(
         logging.info("Edit diesel consumption record")
 
         # Expect company_name instead of company_id
-        required_fields = ['company_name', 'cp_name', 'unit_of_measurement', 'consumption', 'date']
+        required_fields = ['company', 'property', 'unit', 'consumption', 'date']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
-        if not isinstance(data["company_name"], str) or not data["company_name"].strip():
-            raise HTTPException(status_code=422, detail="Invalid company_name")
+        if not isinstance(data["company"], str) or not data["company"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company name")
 
-        if not isinstance(data["cp_name"], str) or not data["cp_name"].strip():
+        if not isinstance(data["property"], str) or not data["property"].strip():
             raise HTTPException(status_code=422, detail="Invalid cp_name")
 
         # Look up company_id using company_name
-        company_name = data["company_name"].strip()
+        company_name = data["company"].strip()
         company = db.query(CompanyMain).filter(CompanyMain.company_name.ilike(company_name)).first()
 
         if not company:
@@ -2735,7 +2735,7 @@ def edit_diesel_consumption(
         company_id = company.company_id
 
         # Look up cp_id using company_id and cp_name (case-insensitive)
-        cp_name = data["cp_name"].strip()
+        cp_name = data["property"].strip()
         cp_lookup_key = (company_id.lower(), cp_name.lower())
         
         company_properties = db.query(EnviCompanyProperty).all()
@@ -2744,13 +2744,13 @@ def edit_diesel_consumption(
         if cp_lookup_key not in cp_lookup:
             raise HTTPException(
                 status_code=422, 
-                detail=f"Company property not found for company_id '{company_id}' and cp_name '{cp_name}'"
+                detail=f"Company property not found for company '{company_id}' and property '{cp_name}'"
             )
         
         cp_id = cp_lookup[cp_lookup_key]
 
-        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
-            raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
+        if not isinstance(data["unit"], str) or not data["unit"].strip():
+            raise HTTPException(status_code=422, detail="Invalid unit")
 
         if not isinstance(data["consumption"], (int, float)) or data["consumption"] < 0:
             raise HTTPException(status_code=422, detail="Invalid consumption")
@@ -2769,12 +2769,12 @@ def edit_diesel_consumption(
             raise HTTPException(status_code=422, detail="Invalid date format")
 
         year = parsed_date.year
-        dc_id = data["id"]
+        dc_id = data["dc_id"]
 
         record_data = {
             "company_id": company_id,
             "cp_id": cp_id,
-            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "unit_of_measurement": data["unit"].strip(),
             "consumption": float(data["consumption"]),
             "date": parsed_date,
             "year": year
