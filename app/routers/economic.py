@@ -363,6 +363,77 @@ def get_economic_expenditures(db: Session = Depends(get_db)):
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/expenditures/{comp}/{year}", response_model=Dict)
+def get_expenditure_by_company_year(comp: str, year: int, db: Session = Depends(get_db)):
+    """
+    Get expenditure records for a specific company and year with company name and type descriptions
+    Returns data formatted for the edit modal
+    """
+    try:
+        logging.info(f"Fetching expenditure records for company {comp}, year {year}")
+        
+        result = db.execute(text("""
+            SELECT 
+                e.year,
+                e.company_id,
+                e.type_id,
+                c.company_name,
+                t.type_description,
+                ROUND(e.government_payments::numeric, 2) as government_payments,
+                ROUND(e.supplier_spending_local::numeric, 2) as supplier_spending_local,
+                ROUND(e.supplier_spending_abroad::numeric, 2) as supplier_spending_abroad,
+                ROUND(e.employee_wages_benefits::numeric, 2) as employee_wages_benefits,
+                ROUND(e.community_investments::numeric, 2) as community_investments,
+                ROUND(e.depreciation::numeric, 2) as depreciation,
+                ROUND(e.depletion::numeric, 2) as depletion,
+                ROUND(e.others::numeric, 2) as others
+            FROM bronze.econ_expenditures e
+            JOIN ref.company_main c ON e.company_id = c.company_id
+            JOIN ref.expenditure_type t ON e.type_id = t.type_id
+            WHERE e.company_id = :company_id AND e.year = :year
+            ORDER BY e.type_id
+        """), {
+            'company_id': comp,
+            'year': year
+        })
+        
+        records = result.fetchall()
+        
+        if not records:
+            raise HTTPException(status_code=404, detail=f"No expenditure records found for company {comp}, year {year}")
+        
+        # Format response with company info and types
+        response = {
+            'comp': comp,
+            'year': year,
+            'companyName': records[0].company_name,
+            'types': {}
+        }
+        
+        for record in records:
+            type_key = record.type_description
+            response['types'][type_key] = {
+                'type_id': record.type_id,
+                'government': float(record.government_payments) if record.government_payments else 0,
+                'localSupplierSpending': float(record.supplier_spending_local) if record.supplier_spending_local else 0,
+                'foreignSupplierSpending': float(record.supplier_spending_abroad) if record.supplier_spending_abroad else 0,
+                'employee': float(record.employee_wages_benefits) if record.employee_wages_benefits else 0,
+                'community': float(record.community_investments) if record.community_investments else 0,
+                'depreciation': float(record.depreciation) if record.depreciation else 0,
+                'depletion': float(record.depletion) if record.depletion else 0,
+                'others': float(record.others) if record.others else 0
+            }
+        
+        logging.info(f"Retrieved expenditure records: {response}")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching expenditure record: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/capital-provider-payments", response_model=List[Dict])
 def get_capital_provider_payments(db: Session = Depends(get_db)):
     """
@@ -544,6 +615,74 @@ def create_expenditure(expenditure_data: dict, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         logging.error(f"Error creating expenditure record: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/expenditures/{comp}/{year}/{type}")
+def update_expenditure(comp: str, year: int, type: str, expenditure_data: dict, db: Session = Depends(get_db)):
+    """
+    Update economic expenditure data in bronze layer and process to silver
+    """
+    try:
+        logging.info(f"Updating expenditure record: comp={comp}, year={year}, type={type}, data={expenditure_data}")
+        
+        # Validate that the record exists
+        existing_record = db.execute(text("""
+            SELECT 1 FROM bronze.econ_expenditures 
+            WHERE company_id = :company_id AND year = :year AND type_id = :type_id
+        """), {
+            'company_id': comp,
+            'year': year,
+            'type_id': type
+        }).fetchone()
+        
+        if not existing_record:
+            raise HTTPException(status_code=404, detail=f"Expenditure record not found for company {comp}, year {year}, type {type}")
+        
+        # Update the record in bronze layer
+        db.execute(text("""
+            UPDATE bronze.econ_expenditures 
+            SET 
+                government_payments = :government_payments,
+                supplier_spending_local = :supplier_spending_local,
+                supplier_spending_abroad = :supplier_spending_abroad,
+                employee_wages_benefits = :employee_wages_benefits,
+                community_investments = :community_investments,
+                depreciation = :depreciation,
+                depletion = :depletion,
+                others = :others
+            WHERE company_id = :company_id AND year = :year AND type_id = :type_id
+        """), {
+            'company_id': comp,
+            'year': year,
+            'type_id': type,
+            'government_payments': float(expenditure_data.get('government', 0) or 0),
+            'supplier_spending_local': float(expenditure_data.get('localSupplierSpending', 0) or 0),
+            'supplier_spending_abroad': float(expenditure_data.get('foreignSupplierSpending', 0) or 0),
+            'employee_wages_benefits': float(expenditure_data.get('employee', 0) or 0),
+            'community_investments': float(expenditure_data.get('community', 0) or 0),
+            'depreciation': float(expenditure_data.get('depreciation', 0) or 0),
+            'depletion': float(expenditure_data.get('depletion', 0) or 0),
+            'others': float(expenditure_data.get('others', 0) or 0)
+        })
+        
+        # Call silver layer load procedure
+        db.execute(text("CALL silver.load_econ_silver()"))
+        
+        db.commit()
+        
+        # Small delay to ensure data is fully processed
+        time.sleep(0.5)
+        
+        logging.info("Expenditure record updated and processed to silver layer successfully")
+        
+        return {"message": "Expenditure record updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error updating expenditure record: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 

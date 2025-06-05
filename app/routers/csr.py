@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Dict, Optional
 from decimal import Decimal
 import logging
 import traceback
+from datetime import datetime
+import pandas as pd
+from io import BytesIO
+from app.bronze.crud import insert_csr_activity
 
 from ..dependencies import get_db
 
@@ -40,6 +44,7 @@ def get_csr_programs(db: Session = Depends(get_db)):
         ]
         
         logging.info(f"Query returned {len(data)} CSR programs")
+        return data
 
     except Exception as e:
         logging.error(f"Error fetching CSR programs: {str(e)}")
@@ -64,13 +69,13 @@ def get_csr_projects(program_id: Optional[str] = None, db: Session = Depends(get
         
         result = db.execute(text(f"""
             SELECT 
-                cp.project_id,
                 cp.program_id,
+                pr.program_name,
+                cp.project_id,
                 cp.project_name,
                 cp.project_metrics,
                 cp.date_created,
-                cp.date_updated,
-                pr.program_name
+                cp.date_updated
             FROM silver.csr_projects cp
             JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
             {where_clause}
@@ -188,4 +193,153 @@ def get_csr_activities(
     except Exception as e:
         logging.error(f"Error fetching CSR activities: {str(e)}")
         logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/activities-single")
+def insert_csr_activity_single(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single csr activity record")
+        CURRENT_YEAR = datetime.now().year
+
+        required_fields = ['company_id', 'project_id', 'project_year', 'csr_report', 'project_expenses']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["project_id"], str) or not data["project_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid project ID")
+        
+        if not isinstance(data["project_year"], int) or not (1900 <= int(data["project_year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid project_year")
+        
+        if not isinstance(data["csr_report"], int) or (int(data["csr_report"]) < 0):
+            raise HTTPException(status_code=422, detail="Invalid beneficiaries")
+
+        if not isinstance(data["project_expenses"], (int, float)) or (data["project_expenses"] < 0):
+            raise HTTPException(status_code=422, detail="Invalid project investment")
+
+        record = {
+            # "csr_id": data["csr_id"],
+            "company_id": data["company_id"],
+            "project_id": data["project_id"],
+            "project_year": data["project_year"],
+            "csr_report": data["csr_report"],
+            "project_expenses": data["project_expenses"]
+        }
+
+        insert_csr_activity(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error inserting CSR activity: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/activities-bulk")
+def insert_csr_activity_bulk(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single csr activity record")
+        CURRENT_YEAR = datetime.now().year
+
+        required_fields = ['csr_id', 'company_id', 'project_id', 'project_year', 'csr_report', 'project_expenses']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        if not isinstance(data["project_id"], str) or not data["project_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid project ID")
+        
+        if not isinstance(data["project_year"], int) or not (1900 <= int(data["project_year"]) <= CURRENT_YEAR + 1):
+            raise HTTPException(status_code=422, detail="Invalid project_year")
+        
+        if not isinstance(data["csr_report"], int) or (int(data["csr_report"]) < 0):
+            raise HTTPException(status_code=422, detail="Invalid beneficiaries")
+
+        if not isinstance(data["project_expenses"], (int, float)) or (data["project_expenses"] < 0):
+            raise HTTPException(status_code=422, detail="Invalid project investment")
+
+        record = {
+            "csr_id": data["csr_id"],
+            "company_id": data["company_id"],
+            "project_id": data["project_id"],
+            "project_year": data["project_year"],
+            "csr_report": data["csr_report"],
+            "project_expenses": data["project_expenses"]
+        }
+
+        insert_csr_activity(db, record)
+
+        return {"message": "1 record successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_water_abstraction")
+def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info(f"Add bulk data")
+        contents = file.file.read()  # If not using async def
+        df = pd.read_excel(BytesIO(contents))
+
+        # basic validation...
+        required_columns = {'company_id', 'year', 'month', 'quarter', 'volume', 'unit_of_measurement'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # data cleaning & row-level validation
+        rows = []
+        CURRENT_YEAR = datetime.now().year
+        for i, row in df.iterrows():
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid company_id")
+
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid year")
+
+            if row["month"] not in [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            ]:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid month '{row['month']}'")
+
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid quarter '{row['quarter']}'")
+
+            if not isinstance(row["volume"], (int, float)) or row["volume"] < 0:
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid volume")
+
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                raise HTTPException(status_code=422, detail=f"Row {i+2}: Invalid unit_of_measurement")
+
+            rows.append({
+                "company_id": row["company_id"].strip(),
+                "year": int(row["year"]),
+                "month": row["month"],
+                "quarter": row["quarter"],
+                "volume": float(row["volume"]),
+                "unit_of_measurement": row["unit_of_measurement"].strip(),
+            })
+
+        count = bulk_create_water_abstractions(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

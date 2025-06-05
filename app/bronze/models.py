@@ -22,7 +22,7 @@ class EnergyRecords(Base):
 class CSRActivity(Base):
     __tablename__ = "csr_activity"
 
-    csr_id = Column(String(10), primary_key=True, index=True)
+    csr_id = Column(String(15), primary_key=True, index=True)
     company_id = Column(String(20), index=True)
     project_id = Column(String(20), index=True)
     project_year = Column(SmallInteger)
