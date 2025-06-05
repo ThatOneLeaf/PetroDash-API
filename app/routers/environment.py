@@ -1716,6 +1716,237 @@ def get_distinct_cp_names(db: Session = Depends(get_db)):
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
     
+@router.get("/distinct_diesel_consumption_unit", response_model=List[Dict[str, str]])
+def get_distinct_diesel_consumption_unit(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    """
+    try:
+        logging.info("Fetching distinct unit from bronze.envi_diesel_consumption")
+
+        query = text("""
+            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_diesel_consumption
+        """)
+
+        result = db.execute(query)
+        data = [{"unit": row.unit} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct unit")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct unit: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/distinct_water_unit", response_model=List[Dict[str, str]])
+def get_distinct_water_unit(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    """
+    try:
+        logging.info("Fetching distinct unit from bronze.envi_water_abstraction")
+
+        query = text("""
+            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_water_abstraction
+        """)
+
+        result = db.execute(query)
+        data = [{"unit": row.unit} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct unit")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct unit: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/distinct_haz_waste_generated", response_model=List[Dict[str, str]])
+def get_distinct_haz_waste_generated(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'metrics' from the envi_hazard_waste_generated table.
+    """
+    try:
+        logging.info("Fetching distinct metrics from silver.envi_hazard_waste_generated")
+
+        query = text("""
+            SELECT DISTINCT metrics FROM silver.envi_hazard_waste_generated
+        """)
+
+        result = db.execute(query)
+        data = [{"metrics": row.metrics} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct metrics")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct metrics: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/distinct_hazard_waste_gen_unit", response_model=List[Dict[str, str]])
+def get_distinct_hazard_waste_gen_unit(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    """
+    try:
+        logging.info("Fetching distinct unit from bronze.envi_hazard_waste_generated")
+
+        query = text("""
+            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_hazard_waste_generated
+        """)
+
+        result = db.execute(query)
+        data = [{"unit": row.unit} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct unit")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct unit: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/distinct_haz_waste_disposed", response_model=List[Dict[str, str]])
+def get_distinct_haz_waste_disposed(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'metrics' from the envi_hazard_waste_disposed table.
+    """
+    try:
+        logging.info("Fetching distinct metrics from silver.envi_hazard_waste_disposed")
+
+        query = text("""
+            SELECT DISTINCT metrics FROM silver.envi_hazard_waste_disposed
+        """)
+
+        result = db.execute(query)
+        data = [{"metrics": row.metrics} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct metrics")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct metrics: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/distinct_hazard_waste_dis_unit", response_model=List[Dict[str, str]])
+def get_distinct_hazard_waste_dis_unit(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    """
+    try:
+        logging.info("Fetching distinct unit from bronze.envi_hazard_waste_generated")
+
+        query = text("""
+            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_hazard_waste_disposed
+        """)
+
+        result = db.execute(query)
+        data = [{"unit": row.unit} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct unit")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct unit: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/distinct_non_haz_waste_metrics", response_model=List[Dict[str, str]])
+def get_distinct_non_haz_waste_metrics(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'metrics' from the envi_non_hazard_waste table.
+    """
+    try:
+        logging.info("Fetching distinct metrics from silver.envi_non_hazard_waste")
+
+        query = text("""
+            SELECT DISTINCT metrics FROM silver.envi_non_hazard_waste
+        """)
+
+        result = db.execute(query)
+        data = [{"metrics": row.metrics} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct metrics")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct metrics: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/distinct_non_haz_waste_unit", response_model=List[Dict[str, str]])
+def get_distinct_non_haz_waste_unit(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    """
+    try:
+        logging.info("Fetching distinct unit from bronze.envi_non_hazard_waste")
+
+        query = text("""
+            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_non_hazard_waste
+        """)
+
+        result = db.execute(query)
+        data = [{"unit": row.unit} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct unit")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct unit: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/distinct_electric_source", response_model=List[Dict[str, str]])
+def get_distinct_electric_source(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'source' from the envi_electric_consumption table.
+    """
+    try:
+        logging.info("Fetching distinct source from silver.envi_electric_consumption")
+
+        query = text("""
+            SELECT DISTINCT source FROM silver.envi_electric_consumption
+        """)
+
+        result = db.execute(query)
+        data = [{"source": row.source} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct source")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct source: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/distinct_electric_consumption_unit", response_model=List[Dict[str, str]])
+def get_distinct_electric_consumption_unit(db: Session = Depends(get_db)):
+    """
+    Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    """
+    try:
+        logging.info("Fetching distinct unit from bronze.envi_electric_consumption")
+
+        query = text("""
+            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_electric_consumption
+        """)
+
+        result = db.execute(query)
+        data = [{"unit": row.unit} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct unit")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct unit: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# for experorting data to Excel
 @router.post("/export_excel")
 async def export_excel(request: Request):
     data = await request.json()
