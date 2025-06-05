@@ -1494,102 +1494,107 @@ def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session =
 def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
-        
+
     try:
-        logging.info(f"Add bulk non-hazard waste data")
+        logging.info("Add bulk non-hazard waste data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
-        
-        # basic validation...
-        required_columns = {'company_id', 'year', 'month', 'quarter', 'metrics', 'unit_of_measurement', 'waste'}
+
+        required_columns = {
+            "company_id", "year", "month", "quarter",
+            "metrics", "unit_of_measurement", "waste"
+        }
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
-        
-        # Pre-fetch validation data from database to avoid repeated queries
-        # Get valid units of measurement from database
-        valid_units_query = db.query(EnviNonHazardWaste.unit_of_measurement).all()  # Adjust table/column names as needed
-        valid_units_set = {unit[0] for unit in valid_units_query}
-        
-        # Get valid metrics from database
-        valid_metrics_query = db.query(EnviNonHazardWaste.metrics).all()  # Adjust table/column names as needed
-        valid_metrics_set = {metric[0] for metric in valid_metrics_query}
-        
-        # Month to quarter mapping for validation
+
+        # Pre-fetch valid entries from the database
+        valid_units = {row[0] for row in db.query(EnviNonHazardWaste.unit_of_measurement).all()}
+        valid_metrics = {row[0] for row in db.query(EnviNonHazardWaste.metrics).all()}
+
         month_to_quarter = {
             "January": "Q1", "February": "Q1", "March": "Q1",
             "April": "Q2", "May": "Q2", "June": "Q2",
             "July": "Q3", "August": "Q3", "September": "Q3",
             "October": "Q4", "November": "Q4", "December": "Q4"
         }
-        
-        # data cleaning & row-level validation
-        rows = []
+
         CURRENT_YEAR = datetime.now().year
-        
+        rows = []
+        validation_errors = []
+
         for i, row in df.iterrows():
-            row_num = i + 2  # Excel row number (accounting for header)
-            
-            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid company_id")
-                
-            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid year")
-                
-            if row["month"] not in [
-                "January", "February", "March", "April", "May", "June",
-                "July", "August", "September", "October", "November", "December"
-            ]:
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid month '{row['month']}'")
-                
-            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid quarter '{row['quarter']}'")
-            
-            # NEW VALIDATION: Month-Quarter consistency
-            expected_quarter = month_to_quarter[row["month"]]
-            if row["quarter"] != expected_quarter:
-                raise HTTPException(
-                    status_code=422, 
-                    detail=f"Row {row_num}: Month '{row['month']}' should be in {expected_quarter}, not {row['quarter']}"
-                )
-                
-            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid metrics")
-            
-            # NEW VALIDATION: Check if metrics exists in database
-            metrics_value = row["metrics"].strip()
-            if metrics_value not in valid_metrics_set:
-                raise HTTPException(
-                    status_code=422, 
-                    detail=f"Row {row_num}: Metrics '{metrics_value}' does not exist in database. Available metrics: {', '.join(sorted(valid_metrics_set))}"
-                )
-                
-            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid unit_of_measurement")
-            
-            # NEW VALIDATION: Check if unit of measurement exists in database (exact match)
-            unit_value = row["unit_of_measurement"].strip()
-            if unit_value not in valid_units_set:
-                raise HTTPException(
-                    status_code=422, 
-                    detail=f"Row {row_num}: Unit of measurement '{unit_value}' does not exist in database. Available units: {', '.join(sorted(valid_units_set))}"
-                )
-                
-            if not isinstance(row["waste"], (int, float)) or row["waste"] < 0:
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid waste")
-                
+            row_number = i + 2  # Excel row number (accounting for header)
+
+            company_id = str(row["company_id"]).strip()
+            year = int(row["year"]) if isinstance(row["year"], (int, float)) else None
+            month = row["month"]
+            quarter = row["quarter"]
+            metrics = str(row["metrics"]).strip()
+            unit = str(row["unit_of_measurement"]).strip()
+            waste = float(row["waste"]) if isinstance(row["waste"], (int, float)) else None
+
+            # Field validations
+            if not company_id:
+                validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            if year is None or not (1900 <= year <= CURRENT_YEAR + 1):
+                validation_errors.append(f"Row {row_number}: Invalid year")
+                continue
+
+            if month not in month_to_quarter:
+                validation_errors.append(f"Row {row_number}: Invalid month '{month}'")
+                continue
+
+            if quarter not in {"Q1", "Q2", "Q3", "Q4"}:
+                validation_errors.append(f"Row {row_number}: Invalid quarter '{quarter}'")
+                continue
+
+            expected_quarter = month_to_quarter[month]
+            if quarter != expected_quarter:
+                validation_errors.append(f"Row {row_number}: Month '{month}' should be in quarter '{expected_quarter}', but '{quarter}' was provided")
+                continue
+
+            if not metrics:
+                validation_errors.append(f"Row {row_number}: Invalid metrics")
+                continue
+
+            if metrics not in valid_metrics:
+                validation_errors.append(f"Row {row_number}: Metrics '{metrics}' not found. Valid: {', '.join(sorted(valid_metrics))}")
+                continue
+
+            if not unit:
+                validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
+                continue
+
+            if unit not in valid_units:
+                validation_errors.append(f"Row {row_number}: Unit '{unit}' not found. Valid: {', '.join(sorted(valid_units))}")
+                continue
+
+            if waste is None or waste < 0:
+                validation_errors.append(f"Row {row_number}: Invalid waste")
+                continue
+
             rows.append({
-                "company_id": row["company_id"].strip(),
-                "year": int(row["year"]),
-                "month": row["month"],
-                "quarter": row["quarter"],
-                "metrics": metrics_value,
-                "unit_of_measurement": unit_value,
-                "waste": float(row["waste"]),
+                "company_id": company_id,
+                "year": year,
+                "month": month,
+                "quarter": quarter,
+                "metrics": metrics,
+                "unit_of_measurement": unit,
+                "waste": waste,
             })
-            
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
+
         count = bulk_create_non_hazard_waste(db, rows)
         return {"message": f"{count} records successfully inserted."}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1611,64 +1616,70 @@ def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
 
-        # Pre-fetch validation data from database to avoid repeated queries
-        # Get valid units of measurement from database
-        valid_units_query = db.query(EnviHazardWasteGenerated.unit_of_measurement).all()  # Adjust table/column names as needed
-        valid_units_set = {unit[0] for unit in valid_units_query}
-        
-        # Get valid metrics from database
-        valid_metrics_query = db.query(EnviHazardWasteGenerated.metrics).all()  # Adjust table/column names as needed
-        valid_metrics_set = {metric[0] for metric in valid_metrics_query}
+        # Get valid units and metrics from database
+        valid_units = db.query(EnviHazardWasteGenerated.unit_of_measurement).all()
+        valid_units_set = {unit[0] for unit in valid_units}
+
+        valid_metrics = db.query(EnviHazardWasteGenerated.metrics).all()
+        valid_metrics_set = {metric[0] for metric in valid_metrics}
 
         # data cleaning & row-level validation
         rows = []
+        validation_errors = []
         CURRENT_YEAR = datetime.now().year
-        
+
         for i, row in df.iterrows():
-            row_num = i + 2  # Excel row number (accounting for header)
-            
+            row_number = i + 2  # Excel row number (accounting for header)
+
             if not isinstance(row["company_id"], str) or not row["company_id"].strip():
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid company_id")
+                validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
 
             if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid year")
+                validation_errors.append(f"Row {row_number}: Invalid year")
+                continue
 
             if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid quarter '{row['quarter']}'")
+                validation_errors.append(f"Row {row_number}: Invalid quarter '{row['quarter']}'")
+                continue
 
             if not isinstance(row["metrics"], str) or not row["metrics"].strip():
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid metrics")
+                validation_errors.append(f"Row {row_number}: Invalid metrics")
+                continue
 
-            # NEW VALIDATION: Check if metrics exists in database
-            metrics_value = row["metrics"].strip()
-            if metrics_value not in valid_metrics_set:
-                raise HTTPException(
-                    status_code=422, 
-                    detail=f"Row {row_num}: Metrics '{metrics_value}' does not exist in database. Available metrics: {', '.join(sorted(valid_metrics_set))}"
-                )
+            metrics_stripped = row["metrics"].strip()
+            if metrics_stripped not in valid_metrics_set:
+                validation_errors.append(f"Row {row_number}: Metrics '{metrics_stripped}' does not exist in database. Valid metrics: {', '.join(sorted(valid_metrics_set))}")
+                continue
 
             if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid unit_of_measurement")
+                validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
+                continue
 
-            # NEW VALIDATION: Check if unit of measurement exists in database (exact match)
-            unit_value = row["unit_of_measurement"].strip()
-            if unit_value not in valid_units_set:
-                raise HTTPException(
-                    status_code=422, 
-                    detail=f"Row {row_num}: Unit of measurement '{unit_value}' does not exist in database. Available units: {', '.join(sorted(valid_units_set))}"
-                )
+            unit_stripped = row["unit_of_measurement"].strip()
+            if unit_stripped not in valid_units_set:
+                validation_errors.append(f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}")
+                continue
 
             if not isinstance(row["waste_generated"], (int, float)) or row["waste_generated"] < 0:
-                raise HTTPException(status_code=422, detail=f"Row {row_num}: Invalid waste_generated")
+                validation_errors.append(f"Row {row_number}: Invalid waste_generated")
+                continue
 
             rows.append({
                 "company_id": row["company_id"].strip(),
                 "year": int(row["year"]),
                 "quarter": row["quarter"],
-                "metrics": metrics_value,
-                "unit_of_measurement": unit_value,
+                "metrics": metrics_stripped,
+                "unit_of_measurement": unit_stripped,
                 "waste_generated": float(row["waste_generated"]),
             })
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
         count = bulk_create_hazard_waste_generated(db, rows)
         return {"message": f"{count} records successfully inserted."}
