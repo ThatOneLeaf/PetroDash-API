@@ -47,7 +47,7 @@ from app.bronze.schemas import (
 
 router = APIRouter()
 
-# Function to get the template
+# Function to create a template
 def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
     df = pd.DataFrame({header: [] for header in headers})
     output = io.BytesIO()
