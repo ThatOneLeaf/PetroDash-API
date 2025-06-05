@@ -6,6 +6,7 @@ from .energy import router as energy_router  # ✅ Must be named 'router'
 from .environment import router as environment_router  # ✅ Must be named 'router'
 from .hr import router as hr_router
 from .csr import router as csr_router
+from .usable_apis import router as usable_apis_router
 
 
 api_router = APIRouter()
@@ -15,3 +16,4 @@ api_router.include_router(reference_router, prefix="/reference", tags=["referenc
 api_router.include_router(environment_router, prefix="/environment", tags=["environment"])
 api_router.include_router(hr_router, prefix="/hr", tags=["hr"])
 api_router.include_router(csr_router, prefix="/help", tags=["help"])
+api_router.include_router(usable_apis_router, prefix="/usable_apis", tags=["usable_apis"])

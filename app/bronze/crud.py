@@ -118,7 +118,7 @@ def insert_csr_activity(db: Session, data: dict):
 
         db.commit()
 
-        logging.info("CSR Activity record created and processed to silver layer successfully")
+        #logging.info("CSR Activity record created and processed to silver layer successfully")
 
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
@@ -704,7 +704,7 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
             id_mapping[original_index] = generated_id
 
     # Build abstraction records and CheckerStatus logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
+    base_timestamp = datetime.now()
     for i, row in enumerate(rows):
         wa_id = id_mapping[i]
 
@@ -804,7 +804,7 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
             id_mapping[original_index] = generated_id
     
     # Build discharge records and collect logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
+    base_timestamp = datetime.now()
     for i, row in enumerate(rows):
         wd_id = id_mapping[i]
         
@@ -905,7 +905,7 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
             id_mapping[original_index] = generated_id
     
     # Build consumption records and collect logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
+    base_timestamp = datetime.now()
     for i, row in enumerate(rows):
         wc_id = id_mapping[i]
         
@@ -1006,7 +1006,7 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
             id_mapping[original_index] = generated_id
     
     # Build electric consumption records and collect logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
+    base_timestamp = datetime.now()
     for i, row in enumerate(rows):
         ec_id = id_mapping[i]
         
@@ -1108,7 +1108,7 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
             id_mapping[original_index] = generated_id
     
     # Build non-hazard waste records and collect logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
+    base_timestamp = datetime.now()
     for i, row in enumerate(rows):
         nhw_id = id_mapping[i]
         
@@ -1211,7 +1211,7 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
             id_mapping[original_index] = generated_id
     
     # Build hazard waste generated records and collect logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
+    base_timestamp = datetime.now()
     for i, row in enumerate(rows):
         hwg_id = id_mapping[i]
         
@@ -1313,7 +1313,7 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
             id_mapping[original_index] = generated_id
     
     # Build hazard waste disposed records and collect logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
+    base_timestamp = datetime.now()
     for i, row in enumerate(rows):
         hwd_id = id_mapping[i]
         
@@ -1414,7 +1414,7 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
             id_mapping[original_index] = generated_id
     
     # Build diesel consumption records and collect logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
+    base_timestamp = datetime.now()
     for i, row in enumerate(rows):
         dc_id = id_mapping[i]
         
