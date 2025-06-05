@@ -541,6 +541,112 @@ def create_value_generated(value_data: dict, db: Session = Depends(get_db)):
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/value-generated/{year}", response_model=Dict)
+def get_value_generated_by_year(year: int, db: Session = Depends(get_db)):
+    """
+    Get value generated record for a specific year
+    Returns data formatted for the edit modal
+    """
+    try:
+        logging.info(f"Fetching value generated record for year {year}")
+        
+        result = db.execute(text("""
+            SELECT 
+                year,
+                ROUND(electricity_sales::numeric, 2) as electricity_sales,
+                ROUND(oil_revenues::numeric, 2) as oil_revenues,
+                ROUND(other_revenues::numeric, 2) as other_revenues,
+                ROUND(interest_income::numeric, 2) as interest_income,
+                ROUND(share_in_net_income_of_associate::numeric, 2) as share_in_net_income_of_associate,
+                ROUND(miscellaneous_income::numeric, 2) as miscellaneous_income
+            FROM bronze.econ_value
+            WHERE year = :year
+        """), {'year': year})
+        
+        record = result.fetchone()
+        
+        if not record:
+            raise HTTPException(status_code=404, detail=f"No value generated record found for year {year}")
+        
+        # Format response
+        response = {
+            'year': record.year,
+            'electricitySales': float(record.electricity_sales) if record.electricity_sales else 0,
+            'oilRevenues': float(record.oil_revenues) if record.oil_revenues else 0,
+            'otherRevenues': float(record.other_revenues) if record.other_revenues else 0,
+            'interestIncome': float(record.interest_income) if record.interest_income else 0,
+            'shareInNetIncomeOfAssociate': float(record.share_in_net_income_of_associate) if record.share_in_net_income_of_associate else 0,
+            'miscellaneousIncome': float(record.miscellaneous_income) if record.miscellaneous_income else 0
+        }
+        
+        logging.info(f"Retrieved value generated record: {response}")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching value generated record: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/value-generated/{year}")
+def update_value_generated(year: int, value_data: dict, db: Session = Depends(get_db)):
+    """
+    Update economic value generated data in bronze layer and process to silver
+    """
+    try:
+        logging.info(f"Updating value generated record for year {year}: {value_data}")
+        
+        # Validate that the record exists
+        existing_record = db.execute(text("""
+            SELECT 1 FROM bronze.econ_value 
+            WHERE year = :year
+        """), {'year': year}).fetchone()
+        
+        if not existing_record:
+            raise HTTPException(status_code=404, detail=f"Value generated record not found for year {year}")
+        
+        # Update the record in bronze layer
+        db.execute(text("""
+            UPDATE bronze.econ_value 
+            SET 
+                electricity_sales = :electricity_sales,
+                oil_revenues = :oil_revenues,
+                other_revenues = :other_revenues,
+                interest_income = :interest_income,
+                share_in_net_income_of_associate = :share_in_net_income_of_associate,
+                miscellaneous_income = :miscellaneous_income
+            WHERE year = :year
+        """), {
+            'year': year,
+            'electricity_sales': float(value_data.get('electricitySales', 0) or 0),
+            'oil_revenues': float(value_data.get('oilRevenues', 0) or 0),
+            'other_revenues': float(value_data.get('otherRevenues', 0) or 0),
+            'interest_income': float(value_data.get('interestIncome', 0) or 0),
+            'share_in_net_income_of_associate': float(value_data.get('shareInNetIncomeOfAssociate', 0) or 0),
+            'miscellaneous_income': float(value_data.get('miscellaneousIncome', 0) or 0)
+        })
+        
+        # Call silver layer load procedure
+        db.execute(text("CALL silver.load_econ_silver()"))
+        
+        db.commit()
+        
+        # Small delay to ensure data is fully processed
+        time.sleep(0.5)
+        
+        logging.info("Value generated record updated and processed to silver layer successfully")
+        
+        return {"message": "Value generated record updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error updating value generated record: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/expenditures")
 def create_expenditure(expenditure_data: dict, db: Session = Depends(get_db)):
     """
@@ -737,6 +843,100 @@ def create_capital_provider_payment(payment_data: dict, db: Session = Depends(ge
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/capital-provider-payments/{year}", response_model=Dict)
+def get_capital_provider_payment_by_year(year: int, db: Session = Depends(get_db)):
+    """
+    Get capital provider payment record for a specific year
+    Returns data formatted for the edit modal
+    """
+    try:
+        logging.info(f"Fetching capital provider payment record for year {year}")
+        
+        result = db.execute(text("""
+            SELECT 
+                year,
+                ROUND(interest::numeric, 2) as interest,
+                ROUND(dividends_to_nci::numeric, 2) as dividends_to_nci,
+                ROUND(dividends_to_parent::numeric, 2) as dividends_to_parent
+            FROM bronze.econ_capital_provider_payment
+            WHERE year = :year
+        """), {'year': year})
+        
+        record = result.fetchone()
+        
+        if not record:
+            raise HTTPException(status_code=404, detail=f"No capital provider payment record found for year {year}")
+        
+        # Format response
+        response = {
+            'year': record.year,
+            'interest': float(record.interest) if record.interest else 0,
+            'dividendsToNci': float(record.dividends_to_nci) if record.dividends_to_nci else 0,
+            'dividendsToParent': float(record.dividends_to_parent) if record.dividends_to_parent else 0
+        }
+        
+        logging.info(f"Retrieved capital provider payment record: {response}")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching capital provider payment record: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/capital-provider-payments/{year}")
+def update_capital_provider_payment(year: int, payment_data: dict, db: Session = Depends(get_db)):
+    """
+    Update capital provider payment data in bronze layer and process to silver
+    """
+    try:
+        logging.info(f"Updating capital provider payment record for year {year}: {payment_data}")
+        
+        # Validate that the record exists
+        existing_record = db.execute(text("""
+            SELECT 1 FROM bronze.econ_capital_provider_payment 
+            WHERE year = :year
+        """), {'year': year}).fetchone()
+        
+        if not existing_record:
+            raise HTTPException(status_code=404, detail=f"Capital provider payment record not found for year {year}")
+        
+        # Update the record in bronze layer
+        db.execute(text("""
+            UPDATE bronze.econ_capital_provider_payment 
+            SET 
+                interest = :interest,
+                dividends_to_nci = :dividends_to_nci,
+                dividends_to_parent = :dividends_to_parent
+            WHERE year = :year
+        """), {
+            'year': year,
+            'interest': float(payment_data.get('interest', 0) or 0),
+            'dividends_to_nci': float(payment_data.get('dividendsToNci', 0) or 0),
+            'dividends_to_parent': float(payment_data.get('dividendsToParent', 0) or 0)
+        })
+        
+        # Call silver layer load procedure
+        db.execute(text("CALL silver.load_econ_silver()"))
+        
+        db.commit()
+        
+        # Small delay to ensure data is fully processed
+        time.sleep(0.5)
+        
+        logging.info("Capital provider payment record updated and processed to silver layer successfully")
+        
+        return {"message": "Capital provider payment record updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error updating capital provider payment record: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/process-bronze-to-silver")
 def process_all_bronze_to_silver(db: Session = Depends(get_db)):
     """
@@ -918,4 +1118,50 @@ async def import_economic_capital_provider_data(file: UploadFile = File(...), db
         """
     }
     
-    return await process_excel_import(file, config, db) 
+    return await process_excel_import(file, config, db)
+
+@router.get("/reference-data", response_model=Dict)
+def get_reference_data(db: Session = Depends(get_db)):
+    """
+    Get reference data for companies and expenditure types
+    Returns valid IDs and names that can be used in templates
+    """
+    try:
+        # Get company reference data
+        company_result = db.execute(text("""
+            SELECT company_id, company_name 
+            FROM ref.company_main 
+            ORDER BY company_id
+        """))
+        
+        companies = [
+            {
+                'id': row.company_id,
+                'name': row.company_name
+            }
+            for row in company_result
+        ]
+        
+        # Get expenditure type reference data
+        type_result = db.execute(text("""
+            SELECT type_id, type_description 
+            FROM ref.expenditure_type 
+            ORDER BY type_id
+        """))
+        
+        types = [
+            {
+                'id': row.type_id,
+                'description': row.type_description
+            }
+            for row in type_result
+        ]
+        
+        return {
+            'companies': companies,
+            'expenditure_types': types
+        }
+        
+    except Exception as e:
+        logging.error(f"Error fetching reference data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 
