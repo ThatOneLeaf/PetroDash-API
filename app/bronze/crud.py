@@ -18,6 +18,7 @@ def get_filtered_energy_records(db: Session, filters: dict, skip: int = 0, limit
     return get_many_filtered(db, EnergyRecords, filters=filters, skip=skip, limit=limit)
 
 # ============================ CSR/HELP DATA============================
+# ========================== RETRIEVE DATA ============================
 # --- CSR Activity ---
 def get_csr_activity_by_id(db: Session, csr_id: str):
     return get_one(db, CSRActivity, "csr_id", csr_id)
@@ -47,6 +48,37 @@ def get_all_csr_programs(db: Session):
 
 def get_filtered_csr_programs(db: Session, filters: dict, skip: int = 0, limit: int = 100):
     return get_many_filtered(db, CSRProgram, filters=filters, skip=skip, limit=limit)
+
+# ========================== INSERT SINGLE DATA ============================
+def insert_activity(db: Session, data: dict):
+    record_activity = CSRActivity(
+        csr_id=data["employee_id"],
+        company_id=data["gender"],
+        project_id=data["birthdate"],
+        project_year=data["position_id"],
+        csr_report=data["p_np"],
+        project_expenses=data["company_id"]
+    )
+    db.add(record_activity)
+    db.commit()
+    db.refresh(record_activity)
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := TRUE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    return record_activity
 
 # ====================================== ENVIRONMENTAL DATA ====================================
 # ====================================== RETRIEVE DATA ====================================

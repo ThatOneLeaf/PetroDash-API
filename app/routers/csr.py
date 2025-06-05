@@ -154,10 +154,15 @@ def get_csr_activities(
             JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
             JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
             JOIN public.checker_status_log as csl ON csl.record_id = ca.csr_id
-            {where_clause}
-            ORDER BY ca.project_year DESC, cm.company_name, pr.program_name, cp.project_name
+            {where_clause} AND
+                (
+                    ca.project_id LIKE 'HE%' 
+                    OR ca.project_id LIKE 'ED%' 
+                    OR ca.project_id LIKE 'LI%'
+                )
+            ORDER BY ca.csr_report DESC NULLS LAST, cm.company_name, pr.program_name, cp.project_name
         """), params)
-        
+
         data = [
             {
                 'csrId': row.csr_id,

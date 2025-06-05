@@ -28,8 +28,6 @@ class CSRActivity(Base):
     project_year = Column(SmallInteger)
     csr_report = Column(Numeric)
     project_expenses = Column(Numeric)
-    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 class CSRProject(Base):
     __tablename__ = "csr_project"
