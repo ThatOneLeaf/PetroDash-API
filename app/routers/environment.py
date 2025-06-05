@@ -1715,6 +1715,26 @@ def get_distinct_cp_names(db: Session = Depends(get_db)):
         logging.error(f"Error retrieving cp_id and cp_name values: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/distinct_cp_type", response_model=List[dict])
+def get_distinct_cp_type(db: Session = Depends(get_db)):
+    try:
+        logging.info("Fetching distinct cp_id, cp_name values from envi_company_property")
+
+        query = text("""
+            SELECT DISTINCT cp_type FROM silver.envi_company_property
+        """)
+
+        result = db.execute(query)
+        data = [{"cp_type": row.cp_type} for row in result]
+
+        logging.info(f"Returned {len(data)} distinct cp_type")
+        return data
+
+    except Exception as e:
+        logging.error(f"Error retrieving distinct cp_type: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
     
 @router.get("/distinct_diesel_consumption_unit", response_model=List[Dict[str, str]])
 def get_distinct_diesel_consumption_unit(db: Session = Depends(get_db)):
