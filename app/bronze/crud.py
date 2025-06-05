@@ -170,9 +170,7 @@ def get_filtered_hazard_waste_disposed(db: Session, filters: dict, skip: int = 0
 #water abstraction
 def insert_create_water_abstraction(db: Session, data: dict):
     # Generate a primary key if needed
-    wa_id = data.get("wa_id")
-    if not wa_id:
-        wa_id = generate_pkey_id(
+    wa_id = data.get("wa_id") or generate_pkey_id(
             db=db,
             indicator="WA",
             company_id=data["company_id"],
@@ -180,6 +178,8 @@ def insert_create_water_abstraction(db: Session, data: dict):
             model_class=EnviWaterAbstraction,
             id_field="wa_id"
         )
+
+    # Create the water abstraction record
     record = EnviWaterAbstraction(
         wa_id=wa_id,
         company_id=data["company_id"],
@@ -192,7 +192,24 @@ def insert_create_water_abstraction(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
-    # Optionally call the stored procedure if you want to trigger it on single insert
+
+    # Add corresponding checker status log (PND)
+    try:
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{wa_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=wa_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+
+    # Optionally call the stored procedure
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
@@ -213,18 +230,18 @@ def insert_create_water_abstraction(db: Session, data: dict):
         db.rollback()
     return record
 
+
 #water discharge
 def insert_create_water_discharge(db: Session, data: dict):
-    wd_id = data.get("wd_id")
-    if not wd_id:
-        wd_id = generate_pkey_id(
-            db=db,
-            indicator="WD",
-            company_id=data["company_id"],
-            year=data["year"],
-            model_class=EnviWaterDischarge,
-            id_field="wd_id"
-        )
+    wd_id = data.get("wd_id") or generate_pkey_id(
+        db=db,
+        indicator="WD",
+        company_id=data["company_id"],
+        year=data["year"],
+        model_class=EnviWaterDischarge,
+        id_field="wd_id"
+    )
+
     record = EnviWaterDischarge(
         wd_id=wd_id,
         company_id=data["company_id"],
@@ -236,6 +253,22 @@ def insert_create_water_discharge(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+
+    try:
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{wd_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
+            record_id=wd_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
@@ -258,16 +291,14 @@ def insert_create_water_discharge(db: Session, data: dict):
 
 # water consumption
 def insert_create_water_consumption(db: Session, data: dict):
-    wc_id = data.get("wc_id")
-    if not wc_id:
-        wc_id = generate_pkey_id(
-            db=db,
-            indicator="WC",
-            company_id=data["company_id"],
-            year=data["year"],
-            model_class=EnviWaterConsumption,
-            id_field="wc_id"
-        )
+    wc_id = data.get("wc_id") or generate_pkey_id(
+        db=db,
+        indicator="WC",
+        company_id=data["company_id"],
+        year=data["year"],
+        model_class=EnviWaterConsumption,
+        id_field="wc_id"
+    )
     record = EnviWaterConsumption(
         wc_id=wc_id,
         company_id=data["company_id"],
@@ -279,6 +310,21 @@ def insert_create_water_consumption(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+
+    try:
+        db.add(CheckerStatus(
+            cs_id=f"CS-{wc_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
+            record_id=wc_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        ))
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
@@ -301,16 +347,14 @@ def insert_create_water_consumption(db: Session, data: dict):
 
 # electric consumption
 def insert_create_electric_consumption(db: Session, data: dict):
-    ec_id = data.get("ec_id")
-    if not ec_id:
-        ec_id = generate_pkey_id(
-            db=db,
-            indicator="EC",
-            company_id=data["company_id"],
-            year=data["year"],
-            model_class=EnviElectricConsumption,
-            id_field="ec_id"
-        )
+    ec_id = data.get("ec_id") or generate_pkey_id(
+        db=db,
+        indicator="EC",
+        company_id=data["company_id"],
+        year=data["year"],
+        model_class=EnviElectricConsumption,
+        id_field="ec_id"
+    )
     record = EnviElectricConsumption(
         ec_id=ec_id,
         company_id=data["company_id"],
@@ -323,6 +367,21 @@ def insert_create_electric_consumption(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+
+    try:
+        db.add(CheckerStatus(
+            cs_id=f"CS-{ec_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
+            record_id=ec_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        ))
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
@@ -345,27 +404,41 @@ def insert_create_electric_consumption(db: Session, data: dict):
 
 # diesel consumption
 def insert_create_diesel_consumption(db: Session, data: dict):
-    dc_id = data.get("dc_id")
-    if not dc_id:
-        dc_id = generate_pkey_id(
-            db=db,
-            indicator="DC",
-            company_id=data["company_id"],
-            year=data["year"],
-            model_class=EnviDieselConsumption,
-            id_field="dc_id"
-        )
+    dc_id = data.get("dc_id") or generate_pkey_id(
+        db=db,
+        indicator="DC",
+        company_id=data["company_id"],
+        year=data["year"],
+        model_class=EnviDieselConsumption,
+        id_field="dc_id"
+    )
+
     record = EnviDieselConsumption(
         dc_id=dc_id,
         company_id=data["company_id"],
         unit_of_measurement=data["unit_of_measurement"],
         consumption=data["consumption"],
         quarter=data["quarter"],
-        year=data["year"]
+        year=data["year"],        
     )
     db.add(record)
     db.commit()
     db.refresh(record)
+
+    try:
+        db.add(CheckerStatus(
+            cs_id=f"CS-{dc_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
+            record_id=dc_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        ))
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
@@ -388,9 +461,7 @@ def insert_create_diesel_consumption(db: Session, data: dict):
 
 # non-hazard waste
 def insert_create_non_hazard_waste(db: Session, data: dict):
-    nhw_id = data.get("nhw_id")
-    if not nhw_id:
-        nhw_id = generate_pkey_id(
+    nhw_id = data.get("nhw_id") or generate_pkey_id(
             db=db,
             indicator="NHW",
             company_id=data["company_id"],
@@ -411,6 +482,21 @@ def insert_create_non_hazard_waste(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        db.add(CheckerStatus(
+            cs_id=f"CS-{nhw_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
+            record_id=nhw_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        ))
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
@@ -433,9 +519,7 @@ def insert_create_non_hazard_waste(db: Session, data: dict):
 
 # hazard waste generated
 def insert_create_hazard_waste_generated(db: Session, data: dict):
-    hwg_id = data.get("hwg_id")
-    if not hwg_id:
-        hwg_id = generate_pkey_id(
+    hwg_id = data.get("hwg_id") or generate_pkey_id(
             db=db,
             indicator="HW",
             company_id=data["company_id"],
@@ -455,6 +539,21 @@ def insert_create_hazard_waste_generated(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        db.add(CheckerStatus(
+            cs_id=f"CS-{hwg_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
+            record_id=hwg_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        ))
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
@@ -477,9 +576,7 @@ def insert_create_hazard_waste_generated(db: Session, data: dict):
 
 # hazard waste disposed
 def insert_create_hazard_waste_disposed(db: Session, data: dict):
-    hwd_id = data.get("hwd_id")
-    if not hwd_id:
-        hwd_id = generate_pkey_id(
+    hwd_id = data.get("hwd_id") or generate_pkey_id(
             db=db,
             indicator="HWD",
             company_id=data["company_id"],
@@ -498,6 +595,21 @@ def insert_create_hazard_waste_disposed(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        db.add(CheckerStatus(
+            cs_id=f"CS-{hwd_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
+            record_id=hwd_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        ))
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_envi_silver(
