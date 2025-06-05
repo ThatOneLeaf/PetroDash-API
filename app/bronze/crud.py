@@ -580,6 +580,10 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
     db.bulk_save_objects(records)
     db.commit()
 
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
+
     # Call stored procedure
     try:
         db.execute(text("""
@@ -674,6 +678,10 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
     # Insert records
     db.bulk_save_objects(records)
     db.commit()
+
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
 
     # Call the stored procedure after inserting data
     try:
@@ -772,6 +780,10 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
     db.bulk_save_objects(records)
     db.commit()
 
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
+
     # Call the stored procedure after inserting data
     try:
         db.execute(text("""
@@ -869,6 +881,10 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
     # Insert records
     db.bulk_save_objects(records)
     db.commit()
+
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
 
     # Call the stored procedure after inserting data
     try:
@@ -969,6 +985,10 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
     db.bulk_save_objects(records)
     db.commit()
 
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
+
     # Call the stored procedure after inserting data
     try:
         db.execute(text("""
@@ -1067,6 +1087,10 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
     db.bulk_save_objects(records)
     db.commit()
 
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
+
     # Call the stored procedure after inserting data
     try:
         db.execute(text("""
@@ -1164,6 +1188,10 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
     db.bulk_save_objects(records)
     db.commit()
 
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
+
     # Call the stored procedure after inserting data
     try:
         db.execute(text("""
@@ -1260,6 +1288,10 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
     # Insert records
     db.bulk_save_objects(records)
     db.commit()
+
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
 
     # Call the stored procedure after inserting data
     try:
