@@ -448,11 +448,25 @@ def insert_create_electric_consumption(db: Session, data: dict):
 
 # diesel consumption
 def insert_create_diesel_consumption(db: Session, data: dict):
+    
+    if "date" not in data:
+        raise ValueError("Missing 'date' field.")
+    
+    if isinstance(data["date"], str):
+        try:
+            parsed_date = datetime.strptime(data["date"], "%Y-%m-%d")
+        except ValueError:
+            parsed_date = datetime.strptime(data["date"], "%m/%d/%Y")
+    else:
+        parsed_date = data["date"]
+    
+    year = parsed_date.year
+    
     dc_id = data.get("dc_id") or generate_pkey_id(
         db=db,
-        indicator="DC",
+        #indicator="DC",
         company_id=data["company_id"],
-        year=data["year"],
+        year=year,
         model_class=EnviDieselConsumption,
         id_field="dc_id"
     )
@@ -462,8 +476,8 @@ def insert_create_diesel_consumption(db: Session, data: dict):
         company_id=data["company_id"],
         unit_of_measurement=data["unit_of_measurement"],
         consumption=data["consumption"],
-        quarter=data["quarter"],
-        year=data["year"],        
+        #quarter=data["quarter"],
+        date=parsed_date       
     )
     db.add(record)
     db.commit()
