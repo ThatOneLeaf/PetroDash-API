@@ -1327,6 +1327,263 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         
     return len(records)
 
+# ====================================== EDIT ENVI RECORD ======================================
+def update_water_abstraction(db: Session, wa_id: str, data: dict):
+    record = get_one(db, EnviWaterAbstraction, "wa_id", wa_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := TRUE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record
+
+def update_water_discharge(db: Session, wd_id: str, data: dict):    
+    record = get_one(db, EnviWaterDischarge, "wd_id", wd_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := TRUE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record
+
+def update_water_consumption(db: Session, wc_id: str, data: dict):
+    record = get_one(db, EnviWaterConsumption, "wc_id", wc_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := TRUE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record
+
+def update_electric_consumption(db: Session, ec_id: str, data: dict):
+    record = get_one(db, EnviElectricConsumption, "ec_id", ec_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := TRUE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record
+
+def update_non_hazard_waste(db: Session, nhw_id: str, data: dict):
+    record = get_one(db, EnviNonHazardWaste, "nhw_id", nhw_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := TRUE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record
+
+def update_hazard_waste_generated(db: Session, hwg_id: str, data: dict):
+    record = get_one(db, EnviHazardWasteGenerated, "hwg_id", hwg_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := TRUE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record
+
+def update_hazard_waste_disposed(db: Session, hwd_id: str, data: dict):
+    record = get_one(db, EnviHazardWasteDisposed, "hwd_id", hwd_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := FALSE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := TRUE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record
+
+def update_diesel_consumption(db: Session, dc_id: str, data: dict):
+    record = get_one(db, EnviDieselConsumption, "dc_id", dc_id)
+    if not record:
+        return None
+    
+    for key, value in data.items():
+        setattr(record, key, value)
+    
+    db.commit()
+    db.refresh(record)
+    
+    try:
+        db.execute(text("""
+            CALL silver.load_envi_silver(
+                load_company_property := FALSE,
+                load_water_abstraction := FALSE,
+                load_water_discharge := FALSE,
+                load_water_consumption := FALSE,
+                load_diesel_consumption := TRUE,
+                load_electric_consumption := FALSE,
+                load_non_hazard_waste := FALSE,
+                load_hazard_waste_generated := FALSE,
+                load_hazard_waste_disposed := FALSE
+            )
+        """))
+        db.commit()
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    return record
+
 # =============================== HR DATA ======================================
 # =========== RETRIEVE DATA BY ID ===========
 # --- Demographics ---
