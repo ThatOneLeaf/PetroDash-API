@@ -4,7 +4,7 @@ from sqlalchemy.schema import MetaData
 from enum import Enum
 
 # Define MetaData with schema
-metadata = MetaData(schema="reference")
+metadata = MetaData(schema="ref")
 Base = declarative_base(metadata=metadata)
 
 #============================ Checker Status ============================
@@ -13,5 +13,5 @@ class CompanyMain(Base):
     
     company_id = Column(String(10), primary_key=True, index=True)
     company_name = Column(String(225))  # TEXT in SQL, so String here
-    parent_company = Column(String(10))
+    parent_company_id = Column(String(10))
     address = Column(String)
