@@ -536,9 +536,9 @@ def get_hazard_waste_generated(db: Session = Depends(get_db), hwg_id: Optional[s
             data = {
                 "hwg_id": row.hazard_waste_generated_id,
                 "company": row.company_name,
-                "type": row.waste_type,
+                "metrics": row.waste_type,
                 "unit": row.unit,
-                "waste generated": float(row.waste_generated) if row.waste_generated is not None else 0,
+                "waste": float(row.waste_generated) if row.waste_generated is not None else 0,
                 "quarter": row.quarter,
                 "year": row.year,
                 "status": row.status_name
@@ -555,9 +555,9 @@ def get_hazard_waste_generated(db: Session = Depends(get_db), hwg_id: Optional[s
                 {
                     "hwg_id": row.hazard_waste_generated_id,
                     "company": row.company_name,
-                    "type": row.waste_type,
+                    "metrics": row.waste_type,
                     "unit": row.unit,
-                    "waste generated": float(row.waste_generated) if row.waste_generated is not None else 0,
+                    "waste": float(row.waste_generated) if row.waste_generated is not None else 0,
                     "quarter": row.quarter,
                     "year": row.year,
                     "status": row.status_name
@@ -607,9 +607,9 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
             data = {
                 "hwd_id": row.hazard_waste_disposed_id,
                 "company": row.company_name,
-                "type": row.waste_type,
+                "metrics": row.waste_type,
                 "unit": row.unit,
-                "waste disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
+                "waste": float(row.waste_disposed) if row.waste_disposed is not None else 0,
                 "year": row.year,
                 "status": row.status_name
             }
@@ -625,9 +625,9 @@ def get_hazard_waste_disposed(db: Session = Depends(get_db), hwd_id: Optional[st
                 {
                     "hwd_id": row.hazard_waste_disposed_id,
                     "company": row.company_name,
-                    "type": row.waste_type,
+                    "metrics": row.waste_type,
                     "unit": row.unit,
-                    "waste disposed": float(row.waste_disposed) if row.waste_disposed is not None else 0,
+                    "waste": float(row.waste_disposed) if row.waste_disposed is not None else 0,
                     "year": row.year,
                     "status": row.status_name
                 }
@@ -2298,16 +2298,16 @@ def edit_water_abstraction(
 ):
     try:
         logging.info("Edit water abstraction record")
-        required_fields = ['company_name', 'year', 'month', 'quarter', 'volume', 'unit_of_measurement']
+        required_fields = ['company', 'year', 'month', 'quarter', 'volume', 'unit']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
-        if not isinstance(data["company_name"], str) or not data["company_name"].strip():
-            raise HTTPException(status_code=422, detail="Invalid company_name")
+        if not isinstance(data["company"], str) or not data["company"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company name")
 
         # Look up company_id using company_name
-        company_name = data["company_name"].strip()
+        company_name = data["company"].strip()
         company = db.query(CompanyMain).filter(CompanyMain.company_name.ilike(company_name)).first()
 
         if not company:
@@ -2333,17 +2333,17 @@ def edit_water_abstraction(
         if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
             raise HTTPException(status_code=422, detail="Invalid volume")
 
-        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+        if not isinstance(data["unit"], str) or not data["unit"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
-        wa_id = data["id"]
+        wa_id = data["wa_id"]
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
             "month": data["month"],
             "quarter": data["quarter"],
             "volume": float(data["volume"]),
-            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "unit_of_measurement": data["unit"].strip(),
         }
 
         update_water_abstraction(db, wa_id, record_data)
@@ -2360,16 +2360,16 @@ def edit_water_discharge(
 ):
     try:
         logging.info("Edit water discharge record")
-        required_fields = ['company_name', 'year', 'quarter', 'volume', 'unit_of_measurement']
+        required_fields = ['company', 'year', 'quarter', 'volume', 'unit']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
-        if not isinstance(data["company_name"], str) or not data["company_name"].strip():
+        if not isinstance(data["company"], str) or not data["company"].strip():
             raise HTTPException(status_code=422, detail="Invalid company_name")
 
         # Look up company_id using company_name
-        company_name = data["company_name"].strip()
+        company_name = data["company"].strip()
         company = db.query(CompanyMain).filter(CompanyMain.company_name.ilike(company_name)).first()
 
         if not company:
@@ -2389,16 +2389,16 @@ def edit_water_discharge(
         if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
             raise HTTPException(status_code=422, detail="Invalid volume")
 
-        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+        if not isinstance(data["unit"], str) or not data["unit"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
-        wd_id = data["id"]
+        wd_id = data["wd_id"]
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
             "quarter": data["quarter"],
             "volume": float(data["volume"]),
-            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "unit_of_measurement": data["unit"].strip(),
         }
 
         update_water_discharge(db, wd_id, record_data)
@@ -2415,16 +2415,16 @@ def edit_water_consumption(
 ):
     try:
         logging.info("Edit water consumption record")
-        required_fields = ['company_name', 'year', 'quarter', 'volume', 'unit_of_measurement']
+        required_fields = ['company', 'year', 'quarter', 'volume', 'unit']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
-        if not isinstance(data["company_name"], str) or not data["company_name"].strip():
+        if not isinstance(data["company"], str) or not data["company"].strip():
             raise HTTPException(status_code=422, detail="Invalid company_name")
 
         # Look up company_id using company_name
-        company_name = data["company_name"].strip()
+        company_name = data["company"].strip()
         company = db.query(CompanyMain).filter(CompanyMain.company_name.ilike(company_name)).first()
 
         if not company:
@@ -2444,16 +2444,16 @@ def edit_water_consumption(
         if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
             raise HTTPException(status_code=422, detail="Invalid volume")
 
-        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+        if not isinstance(data["unit"], str) or not data["unit"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
-        wc_id = data["id"]
+        wc_id = data["wc_id"]
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
             "quarter": data["quarter"],
             "volume": float(data["volume"]),
-            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "unit_of_measurement": data["unit"].strip(),
         }
 
         update_water_consumption(db, wc_id, record_data)
@@ -2529,16 +2529,16 @@ def edit_non_hazard_waste(
 ):
     try:
         logging.info("Edit non-hazard waste record")
-        required_fields = ['company_name', 'year', 'month', 'quarter', 'metrics', 'unit_of_measurement', 'waste']
+        required_fields = ['company', 'year', 'month', 'quarter', 'metrics', 'unit', 'waste']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
-        if not isinstance(data["company_name"], str) or not data["company_name"].strip():
+        if not isinstance(data["company"], str) or not data["company"].strip():
             raise HTTPException(status_code=422, detail="Invalid company_name")
 
         # Look up company_id using company_name
-        company_name = data["company_name"].strip()
+        company_name = data["company"].strip()
         company = db.query(CompanyMain).filter(CompanyMain.company_name.ilike(company_name)).first()
 
         if not company:
@@ -2564,20 +2564,20 @@ def edit_non_hazard_waste(
         if not isinstance(data["metrics"], str) or not data["metrics"].strip():
             raise HTTPException(status_code=422, detail="Invalid metrics")
 
-        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+        if not isinstance(data["unit"], str) or not data["unit"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
         if not isinstance(data["waste"], (int, float)) or data["waste"] < 0:
             raise HTTPException(status_code=422, detail="Invalid waste")
 
-        nhw_id = data["id"]
+        nhw_id = data["nhw_id"]
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
             "month": data["month"],
             "quarter": data["quarter"],
             "metrics": data["metrics"].strip(),
-            "unit_of_measurement": data["unit_of_measurement"].strip(),
+            "unit_of_measurement": data["unit"].strip(),
             "waste": float(data["waste"]),
         }
 
@@ -2595,16 +2595,16 @@ def edit_hazard_waste_generated(
 ):
     try:
         logging.info("Edit hazard waste generated record")
-        required_fields = ['company_name', 'year', 'quarter', 'metrics', 'unit_of_measurement', 'waste_generated']
+        required_fields = ['company', 'year', 'quarter', 'metrics', 'unit', 'waste']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
-        if not isinstance(data["company_name"], str) or not data["company_name"].strip():
+        if not isinstance(data["company"], str) or not data["company"].strip():
             raise HTTPException(status_code=422, detail="Invalid company_name")
 
         # Look up company_id using company_name
-        company_name = data["company_name"].strip()
+        company_name = data["company"].strip()
         company = db.query(CompanyMain).filter(CompanyMain.company_name.ilike(company_name)).first()
 
         if not company:
@@ -2624,20 +2624,20 @@ def edit_hazard_waste_generated(
         if not isinstance(data["metrics"], str) or not data["metrics"].strip():
             raise HTTPException(status_code=422, detail="Invalid metrics")
 
-        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+        if not isinstance(data["unit"], str) or not data["unit"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
-        if not isinstance(data["waste_generated"], (int, float)) or data["waste_generated"] < 0:
+        if not isinstance(data["waste"], (int, float)) or data["waste"] < 0:
             raise HTTPException(status_code=422, detail="Invalid waste_generated")
 
-        hwg_id = data["id"]
+        hwg_id = data["hwg_id"]
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
             "quarter": data["quarter"],
             "metrics": data["metrics"].strip(),
-            "unit_of_measurement": data["unit_of_measurement"].strip(),
-            "waste_generated": float(data["waste_generated"]),
+            "unit_of_measurement": data["unit"].strip(),
+            "waste_generated": float(data["waste"]),
         }
 
         update_hazard_waste_generated(db, hwg_id, record_data)
@@ -2654,16 +2654,16 @@ def edit_hazard_waste_disposed(
 ):
     try:
         logging.info("Edit hazard waste disposed record")
-        required_fields = ['company_name', 'year', 'metrics', 'unit_of_measurement', 'waste_disposed']
+        required_fields = ['company', 'year', 'metrics', 'unit', 'waste']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
-        if not isinstance(data["company_name"], str) or not data["company_name"].strip():
+        if not isinstance(data["company"], str) or not data["company"].strip():
             raise HTTPException(status_code=422, detail="Invalid company_name")
 
         # Look up company_id using company_name
-        company_name = data["company_name"].strip()
+        company_name = data["company"].strip()
         company = db.query(CompanyMain).filter(CompanyMain.company_name.ilike(company_name)).first()
 
         if not company:
@@ -2680,19 +2680,19 @@ def edit_hazard_waste_disposed(
         if not isinstance(data["metrics"], str) or not data["metrics"].strip():
             raise HTTPException(status_code=422, detail="Invalid metrics")
 
-        if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
+        if not isinstance(data["unit"], str) or not data["unit"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
-        if not isinstance(data["waste_disposed"], (int, float)) or data["waste_disposed"] < 0:
+        if not isinstance(data["waste"], (int, float)) or data["waste"] < 0:
             raise HTTPException(status_code=422, detail="Invalid waste_disposed")
 
-        hwd_id = data["id"]
+        hwd_id = data["hwd_id"]
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
             "metrics": data["metrics"].strip(),
-            "unit_of_measurement": data["unit_of_measurement"].strip(),
-            "waste_disposed": float(data["waste_disposed"]),
+            "unit_of_measurement": data["unit"].strip(),
+            "waste_disposed": float(data["waste"]),
         }
 
         update_hazard_waste_disposed(db, hwd_id, record_data)
