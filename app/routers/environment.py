@@ -51,6 +51,7 @@ from app.bronze.crud import (
     update_hazard_waste_disposed
 )
 from app.bronze.schemas import (
+    EnviCompanyPropertyOut,
     EnviWaterAbstractionOut,
     EnviWaterDischargeOut,
     EnviWaterConsumptionOut,
@@ -690,6 +691,13 @@ def get_water_abstraction_records(db: Session = Depends(get_db)):
 This can be used for retrieving specific environmental data records by their IDs and if
 you wish to edit the raw data (that's why this uses bronze schema)
 """
+@router.get("/bronze_company_property_by_id/{cp_id}", response_model=EnviCompanyPropertyOut)
+def get_company_property_by_id(cp_id: str, db: Session = Depends(get_db)):
+    record = get_one(db, EnviCompanyProperty, "cp_id", cp_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Company Property record not found")
+    return record
+
 @router.get("/bronze_water_abstraction_by_id/{wa_id}", response_model=EnviWaterAbstractionOut)
 def get_water_abstraction_by_id(wa_id: str, db: Session = Depends(get_db)):
     record = get_one(db, EnviWaterAbstraction, "wa_id", wa_id)

@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviCompanyProperty, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
 from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
-from app.utils.formatting_id import generate_pkey_id, generate_bulk_pkey_ids
+from app.utils.formatting_id import generate_single_pkey_id, generate_bulk_pkey_ids
 from app.utils.gen_help_id import generate_pkey_id
 from sqlalchemy import text
 from sqlalchemy.sql import text
@@ -214,7 +214,7 @@ def get_filtered_hazard_waste_disposed(db: Session, filters: dict, skip: int = 0
 #water abstraction
 def insert_create_water_abstraction(db: Session, data: dict):
     # Generate a primary key if needed
-    wa_id = data.get("wa_id") or generate_pkey_id(
+    wa_id = data.get("wa_id") or generate_single_pkey_id(
             db=db,
             indicator="WA",
             company_id=data["company_id"],
@@ -277,7 +277,7 @@ def insert_create_water_abstraction(db: Session, data: dict):
 
 #water discharge
 def insert_create_water_discharge(db: Session, data: dict):
-    wd_id = data.get("wd_id") or generate_pkey_id(
+    wd_id = data.get("wd_id") or generate_single_pkey_id(
         db=db,
         indicator="WD",
         company_id=data["company_id"],
@@ -335,7 +335,7 @@ def insert_create_water_discharge(db: Session, data: dict):
 
 # water consumption
 def insert_create_water_consumption(db: Session, data: dict):
-    wc_id = data.get("wc_id") or generate_pkey_id(
+    wc_id = data.get("wc_id") or generate_single_pkey_id(
         db=db,
         indicator="WC",
         company_id=data["company_id"],
@@ -391,7 +391,7 @@ def insert_create_water_consumption(db: Session, data: dict):
 
 # electric consumption
 def insert_create_electric_consumption(db: Session, data: dict):
-    ec_id = data.get("ec_id") or generate_pkey_id(
+    ec_id = data.get("ec_id") or generate_single_pkey_id(
         db=db,
         indicator="EC",
         company_id=data["company_id"],
@@ -462,21 +462,25 @@ def insert_create_diesel_consumption(db: Session, data: dict):
     
     year = parsed_date.year
     
-    dc_id = data.get("dc_id") or generate_pkey_id(
+    dc_id = data.get("dc_id") or generate_single_pkey_id(
         db=db,
-        #indicator="DC",
+        indicator="DC",
         company_id=data["company_id"],
         year=year,
         model_class=EnviDieselConsumption,
         id_field="dc_id"
     )
 
+    property_exists = db.query(EnviCompanyProperty).filter_by(cp_id=data["cp_id"]).first()
+    if not property_exists:
+        raise ValueError(f"cp_id '{data['cp_id']}' does not exist.")
+    
     record = EnviDieselConsumption(
         dc_id=dc_id,
-        company_id=data["company_id"],
-        unit_of_measurement=data["unit_of_measurement"],
-        consumption=data["consumption"],
-        #quarter=data["quarter"],
+        company_id=data["company_id"].strip(),
+        cp_id=data["cp_id"].strip(),
+        unit_of_measurement=data["unit_of_measurement"].strip(),
+        consumption=float(data["consumption"]),
         date=parsed_date       
     )
     db.add(record)
@@ -519,7 +523,7 @@ def insert_create_diesel_consumption(db: Session, data: dict):
 
 # non-hazard waste
 def insert_create_non_hazard_waste(db: Session, data: dict):
-    nhw_id = data.get("nhw_id") or generate_pkey_id(
+    nhw_id = data.get("nhw_id") or generate_single_pkey_id(
             db=db,
             indicator="NHW",
             company_id=data["company_id"],
@@ -577,7 +581,7 @@ def insert_create_non_hazard_waste(db: Session, data: dict):
 
 # hazard waste generated
 def insert_create_hazard_waste_generated(db: Session, data: dict):
-    hwg_id = data.get("hwg_id") or generate_pkey_id(
+    hwg_id = data.get("hwg_id") or generate_single_pkey_id(
             db=db,
             indicator="HW",
             company_id=data["company_id"],
@@ -634,7 +638,7 @@ def insert_create_hazard_waste_generated(db: Session, data: dict):
 
 # hazard waste disposed
 def insert_create_hazard_waste_disposed(db: Session, data: dict):
-    hwd_id = data.get("hwd_id") or generate_pkey_id(
+    hwd_id = data.get("hwd_id") or generate_single_pkey_id(
             db=db,
             indicator="HWD",
             company_id=data["company_id"],

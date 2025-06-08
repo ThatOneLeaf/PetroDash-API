@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 # for single insert use only
-def generate_pkey_id(
+def generate_single_pkey_id(
     db: Session,
     indicator: str,
     company_id: str,
