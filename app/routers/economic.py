@@ -52,15 +52,29 @@ def validate_company_id(company_id, db: Session):
         return False, "Company ID is required"
     
     try:
-        # Convert to string since company_id is VARCHAR in database
-        company_id_str = str(int(company_id))  # Ensure it's a valid number first, then convert to string
-        result = db.execute(text("SELECT company_id FROM ref.company_main WHERE company_id = :company_id"), 
-                          {"company_id": company_id_str})
-        if result.fetchone() is None:
-            return False, f"Company ID {company_id} does not exist"
-        return True, None
-    except (ValueError, TypeError):
-        return False, f"Company ID must be a number, got {company_id}"
+        # First try as numeric ID
+        try:
+            company_id_str = str(int(company_id))
+            result = db.execute(text("SELECT company_id FROM ref.company_main WHERE company_id = :company_id"), 
+                              {"company_id": company_id_str})
+            if result.fetchone() is not None:
+                return True, None
+        except (ValueError, TypeError):
+            pass  # Not a number, try as text
+        
+        # Try as company name or code (case insensitive)
+        company_str = str(company_id).strip()
+        result = db.execute(text("""
+            SELECT company_id FROM ref.company_main 
+            WHERE UPPER(company_name) = UPPER(:company_id) 
+            OR UPPER(company_id) = UPPER(:company_id)
+        """), {"company_id": company_str})
+        
+        if result.fetchone() is not None:
+            return True, None
+            
+        return False, f"Company ID '{company_id}' does not exist"
+        
     except Exception as e:
         return False, f"Database error checking Company ID: {str(e)}"
 
@@ -70,15 +84,29 @@ def validate_type_id(type_id, db: Session):
         return False, "Type ID is required"
     
     try:
-        # Convert to string since type_id might be VARCHAR in database
-        type_id_str = str(int(type_id))  # Ensure it's a valid number first, then convert to string
-        result = db.execute(text("SELECT type_id FROM ref.expenditure_type WHERE type_id = :type_id"), 
-                          {"type_id": type_id_str})
-        if result.fetchone() is None:
-            return False, f"Type ID {type_id} does not exist"
-        return True, None
-    except (ValueError, TypeError):
-        return False, f"Type ID must be a number, got {type_id}"
+        # First try as numeric ID
+        try:
+            type_id_str = str(int(type_id))
+            result = db.execute(text("SELECT type_id FROM ref.expenditure_type WHERE type_id = :type_id"), 
+                              {"type_id": type_id_str})
+            if result.fetchone() is not None:
+                return True, None
+        except (ValueError, TypeError):
+            pass  # Not a number, try as text
+        
+        # Try as type description or code (case insensitive)
+        type_str = str(type_id).strip()
+        result = db.execute(text("""
+            SELECT type_id FROM ref.expenditure_type 
+            WHERE UPPER(type_description) = UPPER(:type_id) 
+            OR UPPER(type_id) = UPPER(:type_id)
+        """), {"type_id": type_str})
+        
+        if result.fetchone() is not None:
+            return True, None
+            
+        return False, f"Type ID '{type_id}' does not exist"
+        
     except Exception as e:
         return False, f"Database error checking Type ID: {str(e)}"
 
@@ -151,14 +179,24 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
                     if not valid:
                         row_errors.append(error_msg)
                         continue
-                    record_data[field] = int(value)
+                    # Convert to actual company ID for database storage
+                    actual_id = get_company_id(value, db)
+                    if actual_id is None:
+                        row_errors.append(f"Could not resolve company ID for '{value}'")
+                        continue
+                    record_data[field] = actual_id
                     
                 elif field == 'type_id' and import_config.get('validate_expenditures', False):
                     valid, error_msg = validate_type_id(value, db)
                     if not valid:
                         row_errors.append(error_msg)
                         continue
-                    record_data[field] = int(value)
+                    # Convert to actual type ID for database storage
+                    actual_id = get_type_id(value, db)
+                    if actual_id is None:
+                        row_errors.append(f"Could not resolve type ID for '{value}'")
+                        continue
+                    record_data[field] = actual_id
                     
                 elif field.endswith('_id'):
                     if value is None or value == '':
@@ -226,6 +264,77 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
         db.rollback()
         logging.error(f"Error in process_excel_import: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
+
+# Helper functions to convert text identifiers to actual IDs
+def get_company_id(company_identifier, db: Session):
+    """Convert company name/code to actual company_id"""
+    if company_identifier is None:
+        return None
+    
+    try:
+        # First try as numeric ID
+        try:
+            company_id_str = str(int(company_identifier))
+            result = db.execute(text("SELECT company_id FROM ref.company_main WHERE company_id = :company_id"), 
+                              {"company_id": company_id_str})
+            row = result.fetchone()
+            if row is not None:
+                return row.company_id
+        except (ValueError, TypeError):
+            pass  # Not a number, try as text
+        
+        # Try as company name or code (case insensitive)
+        company_str = str(company_identifier).strip()
+        result = db.execute(text("""
+            SELECT company_id FROM ref.company_main 
+            WHERE UPPER(company_name) = UPPER(:company_id) 
+            OR UPPER(company_id) = UPPER(:company_id)
+        """), {"company_id": company_str})
+        
+        row = result.fetchone()
+        if row is not None:
+            return row.company_id
+            
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error getting company ID: {str(e)}")
+        return None
+
+def get_type_id(type_identifier, db: Session):
+    """Convert type description/code to actual type_id"""
+    if type_identifier is None:
+        return None
+    
+    try:
+        # First try as numeric ID
+        try:
+            type_id_str = str(int(type_identifier))
+            result = db.execute(text("SELECT type_id FROM ref.expenditure_type WHERE type_id = :type_id"), 
+                              {"type_id": type_id_str})
+            row = result.fetchone()
+            if row is not None:
+                return row.type_id
+        except (ValueError, TypeError):
+            pass  # Not a number, try as text
+        
+        # Try as type description or code (case insensitive)
+        type_str = str(type_identifier).strip()
+        result = db.execute(text("""
+            SELECT type_id FROM ref.expenditure_type 
+            WHERE UPPER(type_description) = UPPER(:type_id) 
+            OR UPPER(type_id) = UPPER(:type_id)
+        """), {"type_id": type_str})
+        
+        row = result.fetchone()
+        if row is not None:
+            return row.type_id
+            
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error getting type ID: {str(e)}")
+        return None
 
 @router.get("/retention", response_model=List[Dict])
 def get_economic_retention(db: Session = Depends(get_db)):
@@ -985,7 +1094,7 @@ async def download_economic_generated_template():
 async def download_economic_expenditures_template():
     """Generate Excel template for economic expenditures data"""
     try:
-        headers = ['Year', 'Company ID', 'Type ID', 'Government Payments', 'Local Supplier Spending', 'Foreign Supplier Spending', 'Employee Wages & Benefits', 'Community Investments', 'Depreciation', 'Depletion', 'Others']
+        headers = ['Company ID', 'Year', 'Type ID', 'Government Payments', 'Local Supplier Spending', 'Foreign Supplier Spending', 'Employee Wages & Benefits', 'Community Investments', 'Depreciation', 'Depletion', 'Others']
         filename = 'economic_expenditures_template.xlsx'
         output = create_excel_template(headers, filename)
         
@@ -1001,7 +1110,7 @@ async def download_economic_expenditures_template():
 async def download_economic_capital_provider_template():
     """Generate Excel template for economic capital provider payments data"""
     try:
-        headers = ['Year', 'Interest Payments', 'Dividends to NCI', 'Dividends to Parent']
+        headers = ['Year', 'Interest', 'Dividends to NCI', 'Dividends to Parent']
         filename = 'economic_capital_provider_template.xlsx'
         output = create_excel_template(headers, filename)
         
@@ -1054,8 +1163,8 @@ async def import_economic_expenditures_data(file: UploadFile = File(...), db: Se
     """Import economic expenditures data from Excel file"""
     config = {
         'expected_columns': {
-            'year': ['Year'],
             'company_id': ['Company ID'],
+            'year': ['Year'],
             'type_id': ['Type ID'],
             'government_payments': ['Government Payments'],
             'supplier_spending_local': ['Local Supplier Spending'],
@@ -1066,7 +1175,7 @@ async def import_economic_expenditures_data(file: UploadFile = File(...), db: Se
             'depletion': ['Depletion'],
             'others': ['Others']
         },
-        'required_fields': ['year', 'company_id', 'type_id'],
+        'required_fields': ['company_id', 'year', 'type_id'],
         'validate_expenditures': True,
         'insert_query': """
             INSERT INTO bronze.econ_expenditures (
@@ -1099,7 +1208,7 @@ async def import_economic_capital_provider_data(file: UploadFile = File(...), db
     config = {
         'expected_columns': {
             'year': ['Year'],
-            'interest': ['Interest Payments'],
+            'interest': ['Interest'],
             'dividends_to_nci': ['Dividends to NCI'],
             'dividends_to_parent': ['Dividends to Parent']
         },
