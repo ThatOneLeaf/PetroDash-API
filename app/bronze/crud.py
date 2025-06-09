@@ -6,6 +6,7 @@ from app.utils.formatting_id import generate_single_pkey_id, generate_bulk_pkey_
 from app.utils.gen_help_id import generate_pkey_id
 from sqlalchemy import text
 from sqlalchemy.sql import text
+from sqlalchemy import func
 from datetime import datetime, timedelta
 from app.public.models import CheckerStatus
 
@@ -1849,6 +1850,17 @@ def get_osh_by_id(db: Session, osh_id: str):
 # =========== INSERT SINGLE DATA ===========
 # --- Employability ---
 def insert_employability(db: Session, data: dict):
+    # Generate cs_id
+    today = datetime.today().date()
+    today_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+    cs_id = f"CS{today_str}{sequence_number}"
+    
     record_demo = HRDemographics(
         employee_id=data["employee_id"],
         gender=data["gender"],
@@ -1861,6 +1873,22 @@ def insert_employability(db: Session, data: dict):
     db.add(record_demo)
     db.commit()
     db.refresh(record_demo)
+    
+    try:
+        checker_log = CheckerStatus(
+            cs_id=cs_id,
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=data["employee_id"],
+            status_id="FRS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -1874,7 +1902,7 @@ def insert_employability(db: Session, data: dict):
         """))
         db.commit()
     except Exception as e:
-        print(f"Error executing stored procedure: {e}")
+        print(f"Demographics: Error executing stored procedure: {e}")
         db.rollback()
     
     record_tenure = HRTenure(
@@ -1887,7 +1915,7 @@ def insert_employability(db: Session, data: dict):
     db.refresh(record_tenure)
     try:
         db.execute(text("""
-            CALL silver.load_envi_silver(
+            CALL silver.load_hr_silver(
                 load_demographics := FALSE,
                 load_tenure := TRUE,
                 load_parental_leave := FALSE,
@@ -1898,13 +1926,24 @@ def insert_employability(db: Session, data: dict):
         """))
         db.commit()
     except Exception as e:
-        print(f"Error executing stored procedure: {e}")
+        print(f"Tenure: Error executing stored procedure: {e}")
         db.rollback()
         
     return record_demo, record_tenure
 
 # --- Safety Workdata ---
 def insert_safety_workdata(db: Session, data: dict):
+    # Generate cs_id
+    today = datetime.today().date()
+    today_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+    cs_id = f"CS{today_str}{sequence_number}"
+    
     record = HRSafetyWorkdata(
         company_id=data["company_id"],
         contractor=data["contractor"],
@@ -1915,6 +1954,22 @@ def insert_safety_workdata(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        checker_log = CheckerStatus(
+            cs_id=cs_id,
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=data["employee_id"],
+            status_id="FRS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -1935,15 +1990,63 @@ def insert_safety_workdata(db: Session, data: dict):
 
 # --- Parental Leave ---
 def insert_parental_leave(db: Session, data: dict):
+    # Generate cs_id
+    today = datetime.today().date()
+    today_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+    cs_id = f"CS{today_str}{sequence_number}"
+    
+    # Generate ID
+    today = datetime.today().date()
+    year_month_day_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(HRParentalLeave.date, 'YYYYMMDD') == year_month_day_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+
+    parental_leave_id = f"PL{year_month_day_str}{sequence_number}"
+    
+    start_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+    num_days = int(data["days"])
+
+    end_date = start_date + timedelta(days=num_days)
+    months_availed = num_days // 30
+    
     record = HRParentalLeave(
+        parental_leave_id=parental_leave_id,
         employee_id=data["employee_id"],
         type_of_leave=data["type_of_leave"],
         date=data["date"],
-        days=data["days"]
+        days=data["days"],
+        end_date=end_date,
+        months_availed=months_availed
     )
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        checker_log = CheckerStatus(
+            cs_id=cs_id,
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=parental_leave_id,
+            status_id="FRS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -1964,7 +2067,30 @@ def insert_parental_leave(db: Session, data: dict):
 
 # --- Training ---
 def insert_training(db: Session, data: dict):
+    # Generate cs_id
+    today = datetime.today().date()
+    today_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+    cs_id = f"CS{today_str}{sequence_number}"
+    
+    # ID Generation
+    today = datetime.today().date()
+    year_month_day_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(HRTraining.date, 'YYYYMMDD') == year_month_day_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+    training_id = f"TR{year_month_day_str}{sequence_number}"
+    
     record = HRTraining(
+        training_id=training_id,
         company_id=data["company_id"],
         date=data["date"],
         training_title=data["training_title"],
@@ -1974,6 +2100,22 @@ def insert_training(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        checker_log = CheckerStatus(
+            cs_id=cs_id,
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=training_id,
+            status_id="FRS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -1994,7 +2136,29 @@ def insert_training(db: Session, data: dict):
 
 # --- Occupational Safety Health ---
 def insert_occupational_safety_health(db: Session, data: dict):
+    # Generate cs_id
+    today = datetime.today().date()
+    today_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+    cs_id = f"CS{today_str}{sequence_number}"
+    
+    today = datetime.today().date()
+    year_month_day_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(HROsh.date, 'YYYYMMDD') == year_month_day_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+    osh_id = f"TR{year_month_day_str}{sequence_number}"
+    
     record = HROsh(
+        osh_id=osh_id,
         company_id=data["company_id"],
         workforce_type=data["workforce_type"],
         lost_time=data["lost_time"],
@@ -2006,6 +2170,22 @@ def insert_occupational_safety_health(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        checker_log = CheckerStatus(
+            cs_id=cs_id,
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=osh_id,
+            status_id="FRS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(

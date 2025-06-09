@@ -203,6 +203,8 @@ class HRParentalLeave(Base_silver):
     type_of_leave = Column(String(50))
     date = Column(TIMESTAMP)
     days = Column(Integer)
+    end_date = Column(TIMESTAMP)
+    months_availed = Column(Integer)
     
 class HROsh(Base_silver):
     __tablename__ = "hr_occupational_safety_health"
