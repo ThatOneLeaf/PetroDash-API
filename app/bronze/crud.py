@@ -64,21 +64,6 @@ def insert_csr_activity(db: Session, data: dict):
             model_class=CSRActivity,
             id_field="csr_id"
         )
-    
-    print(csr_id)
-    # record_activity = CSRActivity(
-    #     csr_id=data["csr_id"],
-    #     company_id=data["company_id"],
-    #     project_id=data["project_id"],
-    #     project_year=data["project_year"],
-    #     csr_report=data["csr_report"],
-    #     project_expenses=data["project_expenses"]
-    # )
-
-    # logging.info(f"Inserting CSR activity: {record_activity}")
-    # db.add(record_activity)
-    # db.commit()
-    # db.refresh(record_activity)
     try:
         db.execute(text("""
             INSERT INTO bronze.csr_activity (
@@ -123,7 +108,22 @@ def insert_csr_activity(db: Session, data: dict):
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-        
+    
+    try:
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{csr_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=csr_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+
     return  {"message": "CSR Activity record created successfully"}
 
 # ====================================== ENVIRONMENTAL DATA ====================================
@@ -2185,7 +2185,7 @@ def bulk_demographics(db: Session, rows: list[dict]) -> int:
     )
     records.append(record)
         
-        # Create checker_status_log insert params
+    # Create checker_status_log insert params
     status_time = base_timestamp + timedelta(hours=i + 1)
     checker_logs.append({
         "cs_id": f"CS{today_str}",
