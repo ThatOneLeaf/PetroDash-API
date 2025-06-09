@@ -62,12 +62,13 @@ def get_energy_records_by_status(
                     er.date_generated::date AS date_generated,
                     er.energy_generated_kwh,
                     er.co2_avoidance_kg, 
-                    pp.*, ls.status_id
+                    pp.*, ls.status_id, st.status_name, ls.remarks
                 FROM silver.csv_energy_records er
                 JOIN gold.dim_powerplant_profile pp 
                     ON pp.power_plant_id = er.power_plant_id
                 JOIN latest_status ls
                     ON er.energy_id = ls.record_id
+                JOIN public.status st on st.status_id = ls.status_id
                 ORDER BY er.create_at DESC, er.date_generated DESC, er.updated_at DESC;
         """)
 
@@ -170,6 +171,7 @@ def generate_cs_id(db: Session) -> str:
     return f"CS{today}{seq}"
 
 # ====================== single add energy record ====================== #
+
 @router.post("/add_energy_record")
 def add_energy_record(
     powerPlant: str = Form(...),
@@ -177,52 +179,72 @@ def add_energy_record(
     energyGenerated: float = Form(...),
     checker: str = Form(...),
     metric: str = Form(...),
+    remarks:str =Form(...),
     db: Session = Depends(get_db),
 ):
-    # Parse date string to datetime
     try:
-        parsed_date = datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+        # Parse date
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+        
+        # Check for existing record
+        existing = db.query(EnergyRecords).filter(
+            EnergyRecords.power_plant_id == powerPlant,
+            EnergyRecords.datetime == parsed_date
+        ).first()
 
-    # Check if record already exists for this powerPlant and date
-    existing = db.query(EnergyRecords).filter(
-        EnergyRecords.power_plant_id == powerPlant,
-        EnergyRecords.datetime == parsed_date
-    ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="A record for this date already exists.")
 
-    if existing:
-        raise HTTPException(status_code=400, detail="A record for this date already exists.")
+        # Create new energy record
+        new_id = generate_energy_id(db)
+        new_record = EnergyRecords(
+            energy_id=new_id,
+            power_plant_id=powerPlant,
+            datetime=parsed_date,
+            energy_generated=energyGenerated,
+            unit_of_measurement=metric,
+        )
 
-    new_id = generate_energy_id(db)
-    new_record = EnergyRecords(
-        energy_id=new_id,
-        power_plant_id=powerPlant,
-        datetime=parsed_date,
-        energy_generated=energyGenerated,
-        unit_of_measurement=metric,
-    )
-    
-    new_log_id = generate_cs_id(db)
-    new_log = CheckerStatus(
-        cs_id = new_log_id,
-        checker_id = checker,
-        record_id = new_id,
-        status_id = "PND",
-        status_timestamp = datetime.now(),
-        remarks = "Newly Added"
-    )
+        # Create checker status log
+        new_log_id = generate_cs_id(db)
+        new_log = CheckerStatus(
+            cs_id=new_log_id,
+            checker_id=checker,
+            record_id=new_id,
+            status_id="URS",
+            status_timestamp=datetime.now(),
+            remarks=remarks
+        )
 
-    db.add(new_record)
-    db.add(new_log)
-    db.commit()
-    db.refresh(new_record)
-    
-    # update silver
-    db.execute(text("CALL silver.load_csv_silver();"))
-    db.commit()
+        db.add(new_record)
+        db.add(new_log)
+        db.commit()
+        db.refresh(new_record)
 
-    return new_record
+        # Call silver load procedure
+        db.execute(text("CALL silver.load_csv_silver();"))
+        db.commit()
+
+        return {
+            "message": "Energy record successfully added.",
+            "data": {
+                "energy_id": new_record.energy_id,
+                "power_plant_id": new_record.power_plant_id,
+                "datetime": new_record.datetime,
+                "energy_generated": new_record.energy_generated,
+                "unit_of_measurement": new_record.unit_of_measurement
+            }
+        }
+
+    except HTTPException as http_err:
+        raise http_err  # FastAPI will automatically return this as response
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 # ====================== bulk add energy record ====================== #
@@ -311,7 +333,7 @@ def bulk_add_energy_record(
                 cs_id=new_log_id,
                 checker_id=checker,
                 record_id=new_id,
-                status_id="PND",
+                status_id="URS",
                 status_timestamp=datetime.now(),
                 remarks="Newly Added"
             )
@@ -406,3 +428,92 @@ def edit_energy_record(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@router.post("/update_status")
+def change_status(
+    energy_id: str = Form(...),
+    checker_id: str = Form(...),
+    remarks: str = Form(...),
+    action: str = Form(...),  # 'approve' or 'reject'
+    db: Session = Depends(get_db),
+):
+    try:
+        # Step 1: Validate action
+        action = action.lower()
+        if action not in {"approve", "revise"}:
+            raise HTTPException(status_code=400, detail="Invalid action. Must be 'approve' or 'revise'.")
+
+        # Step 2: Verify record exists
+        record = db.query(EnergyRecords).filter(EnergyRecords.energy_id == energy_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Energy record not found.")
+
+        # Step 3: Get latest status
+        latest_status = (
+            db.query(CheckerStatus)
+            .filter(CheckerStatus.record_id == energy_id)
+            .order_by(CheckerStatus.status_timestamp.desc())
+            .first()
+        )
+        current_status = latest_status.status_id if latest_status else None
+
+        # Step 4: Define transitions
+        approve_transitions = {
+            None: "URS",
+            "FRS":"URS",
+            "URS": "URH",
+            "FRH":"URH",
+            "URH": "APP",
+        }
+
+        reject_transitions = {
+            "URS": "FRS",
+            "URH": "FRH",
+        }
+
+        # Step 5: Determine next status
+        if action == "approve":
+            next_status = approve_transitions.get(current_status)
+        else:  # reject
+            next_status = reject_transitions.get(current_status)
+
+        if not next_status:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot perform '{action}' from status '{current_status}'."
+            )
+
+        # Step 6: Log new status
+        new_cs_id = generate_cs_id(db)
+        new_log = CheckerStatus(
+            cs_id=new_cs_id,
+            checker_id=checker_id,
+            record_id=energy_id,
+            status_id=next_status,
+            status_timestamp=datetime.now(),
+            remarks=remarks
+        )
+
+        db.add(new_log)
+        db.commit()
+        db.refresh(new_log)
+
+        return {
+            "message": f"Status changed to '{next_status}' via '{action}'.",
+            "data": {
+                "cs_id": new_log.cs_id,
+                "record_id": new_log.record_id,
+                "status_id": new_log.status_id,
+                "timestamp": new_log.status_timestamp,
+                "remarks": new_log.remarks
+            }
+        }
+
+    except HTTPException as http_err:
+        raise http_err
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
