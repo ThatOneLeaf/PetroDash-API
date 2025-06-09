@@ -774,14 +774,30 @@ def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
         if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
             raise HTTPException(status_code=422, detail="Invalid year")
 
-        if data["month"] not in [
+        valid_months = [
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"
-        ]:
+        ]
+        if data["month"] not in valid_months:
             raise HTTPException(status_code=422, detail=f"Invalid month '{data['month']}'")
 
         if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
             raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        # Month-to-quarter validation
+        month_to_quarter = {
+            "January": "Q1", "February": "Q1", "March": "Q1",
+            "April": "Q2", "May": "Q2", "June": "Q2",
+            "July": "Q3", "August": "Q3", "September": "Q3",
+            "October": "Q4", "November": "Q4", "December": "Q4"
+        }
+        expected_quarter = month_to_quarter[data["month"]]
+        if data["quarter"] != expected_quarter:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Mismatch between month '{data['month']}' and quarter '{data['quarter']}'. "
+                       f"Expected quarter is '{expected_quarter}'."
+            )
 
         if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
             raise HTTPException(status_code=422, detail="Invalid volume")
@@ -798,7 +814,6 @@ def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
             "unit_of_measurement": data["unit_of_measurement"].strip(),
         }
 
-        # Assuming you have a single insert function
         insert_create_water_abstraction(db, record)
 
         return {"message": "1 record successfully inserted."}
@@ -1009,10 +1024,11 @@ def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
         if not isinstance(data["waste"], (int, float)) or data["waste"] < 0:
             raise HTTPException(status_code=422, detail="Invalid waste")
 
-        if data["month"] not in [
+        valid_months = [
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"
-        ]:
+        ]
+        if data["month"] not in valid_months:
             raise HTTPException(status_code=422, detail=f"Invalid month '{data['month']}'")
 
         if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
@@ -1020,6 +1036,21 @@ def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
 
         if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
             raise HTTPException(status_code=422, detail="Invalid year")
+
+        # Month-to-quarter validation
+        month_to_quarter = {
+            "January": "Q1", "February": "Q1", "March": "Q1",
+            "April": "Q2", "May": "Q2", "June": "Q2",
+            "July": "Q3", "August": "Q3", "September": "Q3",
+            "October": "Q4", "November": "Q4", "December": "Q4"
+        }
+        expected_quarter = month_to_quarter[data["month"]]
+        if data["quarter"] != expected_quarter:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Mismatch between month '{data['month']}' and quarter '{data['quarter']}'. "
+                       f"Expected quarter is '{expected_quarter}'."
+            )
 
         record = {
             "company_id": data["company_id"].strip(),
@@ -2119,21 +2150,34 @@ def get_distinct_haz_waste_generated(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/distinct_hazard_waste_gen_unit", response_model=List[Dict[str, str]])
-def get_distinct_hazard_waste_gen_unit(db: Session = Depends(get_db)):
+def get_distinct_hazard_waste_gen_unit(
+    metrics: Optional[str] = Query(None, description="Filter by specific metrics"),
+    db: Session = Depends(get_db)
+):
     """
-    Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    Fetch distinct 'unit' from the envi_hazard_waste_generated table.
+    Optionally filter by 'metrics'.
     """
     try:
         logging.info("Fetching distinct unit from bronze.envi_hazard_waste_generated")
 
-        query = text("""
-            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_hazard_waste_generated
-        """)
+        if metrics:
+            query = text("""
+                SELECT DISTINCT trim(unit_of_measurement) as unit 
+                FROM bronze.envi_hazard_waste_generated
+                WHERE trim(metrics) = :metrics
+            """)
+            result = db.execute(query, {"metrics": metrics.strip()})
+        else:
+            query = text("""
+                SELECT DISTINCT trim(unit_of_measurement) as unit 
+                FROM bronze.envi_hazard_waste_generated
+            """)
+            result = db.execute(query)
 
-        result = db.execute(query)
         data = [{"unit": row.unit} for row in result]
 
-        logging.info(f"Returned {len(data)} distinct unit")
+        logging.info(f"Returned {len(data)} distinct unit(s)")
         return data
 
     except Exception as e:
@@ -2165,21 +2209,34 @@ def get_distinct_haz_waste_disposed(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
     
 @router.get("/distinct_hazard_waste_dis_unit", response_model=List[Dict[str, str]])
-def get_distinct_hazard_waste_dis_unit(db: Session = Depends(get_db)):
+def get_distinct_hazard_waste_dis_unit(
+    metrics: Optional[str] = Query(None, description="Filter by specific metrics"),
+    db: Session = Depends(get_db)
+):
     """
-    Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    Fetch distinct 'unit' from the envi_hazard_waste_disposed table.
+    Optionally filter by 'metrics'.
     """
     try:
-        logging.info("Fetching distinct unit from bronze.envi_hazard_waste_generated")
+        logging.info("Fetching distinct unit from bronze.envi_hazard_waste_disposed")
 
-        query = text("""
-            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_hazard_waste_disposed
-        """)
+        if metrics:
+            query = text("""
+                SELECT DISTINCT trim(unit_of_measurement) AS unit 
+                FROM bronze.envi_hazard_waste_disposed
+                WHERE trim(metrics) = :metrics
+            """)
+            result = db.execute(query, {"metrics": metrics.strip()})
+        else:
+            query = text("""
+                SELECT DISTINCT trim(unit_of_measurement) AS unit 
+                FROM bronze.envi_hazard_waste_disposed
+            """)
+            result = db.execute(query)
 
-        result = db.execute(query)
         data = [{"unit": row.unit} for row in result]
 
-        logging.info(f"Returned {len(data)} distinct unit")
+        logging.info(f"Returned {len(data)} distinct unit(s)")
         return data
 
     except Exception as e:
@@ -2211,27 +2268,41 @@ def get_distinct_non_haz_waste_metrics(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
     
 @router.get("/distinct_non_haz_waste_unit", response_model=List[Dict[str, str]])
-def get_distinct_non_haz_waste_unit(db: Session = Depends(get_db)):
+def get_distinct_non_haz_waste_unit(
+    metrics: Optional[str] = Query(None, description="Filter by specific metrics"),
+    db: Session = Depends(get_db)
+):
     """
     Fetch distinct 'unit' from the envi_non_hazard_waste table.
+    Optionally filter by 'metrics'.
     """
     try:
         logging.info("Fetching distinct unit from bronze.envi_non_hazard_waste")
 
-        query = text("""
-            SELECT DISTINCT trim(unit_of_measurement) as unit FROM bronze.envi_non_hazard_waste
-        """)
+        if metrics:
+            query = text("""
+                SELECT DISTINCT trim(unit_of_measurement) AS unit 
+                FROM bronze.envi_non_hazard_waste
+                WHERE trim(metrics) = :metrics
+            """)
+            result = db.execute(query, {"metrics": metrics.strip()})
+        else:
+            query = text("""
+                SELECT DISTINCT trim(unit_of_measurement) AS unit 
+                FROM bronze.envi_non_hazard_waste
+            """)
+            result = db.execute(query)
 
-        result = db.execute(query)
         data = [{"unit": row.unit} for row in result]
 
-        logging.info(f"Returned {len(data)} distinct unit")
+        logging.info(f"Returned {len(data)} distinct unit(s)")
         return data
 
     except Exception as e:
         logging.error(f"Error retrieving distinct unit: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+
 
 @router.get("/distinct_electric_source", response_model=List[Dict[str, str]])
 def get_distinct_electric_source(db: Session = Depends(get_db)):
