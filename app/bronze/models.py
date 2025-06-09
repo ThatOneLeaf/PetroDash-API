@@ -12,7 +12,7 @@ class EnergyRecords(Base):
     
     energy_id = Column(String(20), primary_key=True, index=True)
     power_plant_id = Column(String(10), index=True)
-    datetime = Column(String)  # TEXT in SQL, so String here
+    datetime = Column(Date)
     energy_generated = Column(Numeric)
     unit_of_measurement = Column(String(10))
     create_at = Column(TIMESTAMP, server_default=func.current_timestamp())

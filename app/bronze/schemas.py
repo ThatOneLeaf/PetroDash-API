@@ -1,14 +1,14 @@
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime as dt
+from datetime import datetime as dt, date
 from typing import Optional, List, Dict, Any
 #====================POWER PLANT ENERGY=================================
 class EnergyRecordOut(BaseModel):
     energy_id: str
     power_plant_id: Optional[str]
-    datetime: Optional[dt]
+    datetime: Optional[date]  # Use date, not datetime
     energy_generated: Optional[float]
     unit_of_measurement: Optional[str]
-    create_at: Optional[dt]
+    create_at: Optional[dt]  
     updated_at: Optional[dt]
 
     model_config = ConfigDict(from_attributes=True)
