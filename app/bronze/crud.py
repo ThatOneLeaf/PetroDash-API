@@ -1944,13 +1944,27 @@ def insert_safety_workdata(db: Session, data: dict):
     sequence_number = str(existing_count + 1).zfill(3)
     cs_id = f"CS{today_str}{sequence_number}"
     
+    # Generate ID
+    today = datetime.today().date()
+    year_month_day_str = today.strftime("%Y%m%d")
+
+    existing_count = db.query(func.count()).filter(
+        func.to_char(HRSafetyWorkdata.date, 'YYYYMMDD') == year_month_day_str
+    ).scalar()
+
+    sequence_number = str(existing_count + 1).zfill(3)
+
+    safety_workdata_id = f"PL{year_month_day_str}{sequence_number}"
+    
     record = HRSafetyWorkdata(
+        safety_workdata_id=safety_workdata_id,
         company_id=data["company_id"],
         contractor=data["contractor"],
         date=data["date"],
         manpower=data["manpower"],
         manhours=data["manhours"]
     )
+    
     db.add(record)
     db.commit()
     db.refresh(record)
