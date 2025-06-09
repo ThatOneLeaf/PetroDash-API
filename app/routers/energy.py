@@ -16,6 +16,84 @@ import traceback
 
 router = APIRouter()
 
+def process_status_change(
+    db: Session,
+    energy_id: str,
+    checker_id: str,
+    remarks: str,
+    action: str
+):
+    # Step 1: Validate action
+    action = action.lower()
+    if action not in {"approve", "revise"}:
+        raise HTTPException(status_code=400, detail="Invalid action. Must be 'approve' or 'revise'.")
+
+    # Step 2: Verify record exists
+    record = db.query(EnergyRecords).filter(EnergyRecords.energy_id == energy_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Energy record not found.")
+
+    # Step 3: Get latest status
+    latest_status = (
+        db.query(CheckerStatus)
+        .filter(CheckerStatus.record_id == energy_id)
+        .order_by(CheckerStatus.status_timestamp.desc())
+        .first()
+    )
+    current_status = latest_status.status_id if latest_status else None
+
+    # Step 4: Define transitions
+    approve_transitions = {
+        None: "URS",
+        "FRS": "URS",
+        "URS": "URH",
+        "FRH": "URH",
+        "URH": "APP",
+    }
+
+    reject_transitions = {
+        "URS": "FRS",
+        "URH": "FRH",
+    }
+
+    # Step 5: Determine next status
+    if action == "approve":
+        next_status = approve_transitions.get(current_status)
+    else:  # revise
+        next_status = reject_transitions.get(current_status)
+
+    if not next_status:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot perform '{action}' from status '{current_status}'."
+        )
+
+    # Step 6: Log new status
+    new_cs_id = generate_cs_id(db)
+    new_log = CheckerStatus(
+        cs_id=new_cs_id,
+        checker_id=checker_id,
+        record_id=energy_id,
+        status_id=next_status,
+        status_timestamp=datetime.now(),
+        remarks=remarks
+    )
+
+    db.add(new_log)
+    db.commit()
+    db.refresh(new_log)
+
+    return {
+        "message": f"Status changed to '{next_status}' via '{action}'.",
+        "data": {
+            "cs_id": new_log.cs_id,
+            "record_id": new_log.record_id,
+            "status_id": new_log.status_id,
+            "timestamp": new_log.status_timestamp,
+            "remarks": new_log.remarks
+        }
+    }
+
 @router.get("/energy_record", response_model=EnergyRecordOut)
 def get_energy_record(
     energy_id: str = Query(..., description="ID of the energy record"),
@@ -172,7 +250,7 @@ def generate_cs_id(db: Session) -> str:
 
 # ====================== single add energy record ====================== #
 
-@router.post("/add_energy_record")
+@router.post("/add")
 def add_energy_record(
     powerPlant: str = Form(...),
     date: str = Form(...),
@@ -248,7 +326,7 @@ def add_energy_record(
 
 
 # ====================== bulk add energy record ====================== #
-@router.post("/bulk_add_energy_record")
+@router.post("/bulk_add")
 def bulk_add_energy_record(
     powerPlant: str = Form(...),
     checker: str = Form(...),
@@ -355,33 +433,30 @@ def bulk_add_energy_record(
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 # ====================== update status ====================== #
-@router.post("/update_status_energy")
-def update_status(
-    cs_id: str = Form(...),
-    new_status: str = Form(...),
+@router.post("/update_status")
+def change_status(
+    energy_id: str = Form(...),
+    checker_id: str = Form(...),
+    remarks: str = Form(...),
+    action: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    # update
-    update_stmt = (
-        update(CheckerStatus)
-        .where(CheckerStatus.cs_id == cs_id)
-        .values(
-            cs_id = cs_id,
-            status_id = new_status,
-            status_timestamp = datetime.now()
-        )
-    )
-
     try:
-        db.execute(update_stmt)
-        db.commit()
-        return {"message": "Status updated successfully."}
+        return process_status_change(
+            db=db,
+            energy_id=energy_id,
+            checker_id=checker_id,
+            remarks=remarks,
+            action=action
+        )
+    except HTTPException as http_err:
+        raise http_err
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # ====================== edit energy record ====================== #
-@router.post("/edit_energy_record")
+@router.post("/edit")
 def edit_energy_record(
     energy_id: str = Form(...),
     powerPlant: str = Form(...),
@@ -389,12 +464,25 @@ def edit_energy_record(
     energyGenerated: float = Form(...),
     checker: str = Form(...),
     metric: str = Form(...),
+    remarks:str=Form(...),
     db: Session = Depends(get_db),
 ):
     try:
         parsed_date = datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+    
+    
+    # Step 3: Get latest status
+    latest_status = (
+        db.query(CheckerStatus)
+        .filter(CheckerStatus.record_id == energy_id)
+        .order_by(CheckerStatus.status_timestamp.desc())
+        .first()
+    )
+    current_status = latest_status.status_id if latest_status else None
+    new_status = "URH" if current_status in ['FRH', 'URH'] else "URS"
+
 
     # update
     update_stmt = (
@@ -417,9 +505,9 @@ def edit_energy_record(
             cs_id=new_cs_id,
             checker_id=checker,
             record_id=energy_id,
-            status_id="PND",
+            status_id=new_status,
             status_timestamp=datetime.now(),
-            remarks="Edited",
+            remarks=remarks,
         )
         db.add(new_log)
 
@@ -429,91 +517,4 @@ def edit_energy_record(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-
-@router.post("/update_status")
-def change_status(
-    energy_id: str = Form(...),
-    checker_id: str = Form(...),
-    remarks: str = Form(...),
-    action: str = Form(...),  # 'approve' or 'reject'
-    db: Session = Depends(get_db),
-):
-    try:
-        # Step 1: Validate action
-        action = action.lower()
-        if action not in {"approve", "revise"}:
-            raise HTTPException(status_code=400, detail="Invalid action. Must be 'approve' or 'revise'.")
-
-        # Step 2: Verify record exists
-        record = db.query(EnergyRecords).filter(EnergyRecords.energy_id == energy_id).first()
-        if not record:
-            raise HTTPException(status_code=404, detail="Energy record not found.")
-
-        # Step 3: Get latest status
-        latest_status = (
-            db.query(CheckerStatus)
-            .filter(CheckerStatus.record_id == energy_id)
-            .order_by(CheckerStatus.status_timestamp.desc())
-            .first()
-        )
-        current_status = latest_status.status_id if latest_status else None
-
-        # Step 4: Define transitions
-        approve_transitions = {
-            None: "URS",
-            "FRS":"URS",
-            "URS": "URH",
-            "FRH":"URH",
-            "URH": "APP",
-        }
-
-        reject_transitions = {
-            "URS": "FRS",
-            "URH": "FRH",
-        }
-
-        # Step 5: Determine next status
-        if action == "approve":
-            next_status = approve_transitions.get(current_status)
-        else:  # reject
-            next_status = reject_transitions.get(current_status)
-
-        if not next_status:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot perform '{action}' from status '{current_status}'."
-            )
-
-        # Step 6: Log new status
-        new_cs_id = generate_cs_id(db)
-        new_log = CheckerStatus(
-            cs_id=new_cs_id,
-            checker_id=checker_id,
-            record_id=energy_id,
-            status_id=next_status,
-            status_timestamp=datetime.now(),
-            remarks=remarks
-        )
-
-        db.add(new_log)
-        db.commit()
-        db.refresh(new_log)
-
-        return {
-            "message": f"Status changed to '{next_status}' via '{action}'.",
-            "data": {
-                "cs_id": new_log.cs_id,
-                "record_id": new_log.record_id,
-                "status_id": new_log.status_id,
-                "timestamp": new_log.status_timestamp,
-                "remarks": new_log.remarks
-            }
-        }
-
-    except HTTPException as http_err:
-        raise http_err
-
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
