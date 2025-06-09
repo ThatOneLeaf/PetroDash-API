@@ -2006,19 +2006,22 @@ async def create_individual_template(
 
 
 # FOR COMBOBOX
-@router.get("/distinct_cp_names", response_model=List[dict])
-def get_distinct_cp_names(db: Session = Depends(get_db)):
+@router.get("/distinct_cp_names/{company_name}", response_model=List[dict])
+def get_distinct_cp_names(company_name: str, db: Session = Depends(get_db)):
     try:
-        logging.info("Fetching distinct cp_id, cp_name values from envi_company_property")
+        logging.info(f"Fetching distinct cp_id, cp_name for company_name: {company_name}")
 
         query = text("""
-            SELECT DISTINCT cp_id, cp_name FROM silver.envi_company_property
+            SELECT DISTINCT ecp.cp_id, ecp.cp_name
+            FROM silver.envi_company_property AS ecp
+            JOIN ref.company_main AS cm ON cm.company_id = ecp.company_id
+            WHERE cm.company_name = :company_name
         """)
 
-        result = db.execute(query)
+        result = db.execute(query, {"company_name": company_name})
         data = [dict(row._mapping) for row in result]
 
-        logging.info(f"Returned {len(data)} distinct cp_id, cp_name entries")
+        logging.info(f"Returned {len(data)} entries for company_name: {company_name}")
         return data
 
     except Exception as e:
