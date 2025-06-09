@@ -237,13 +237,13 @@ def insert_create_water_abstraction(db: Session, data: dict):
     db.commit()
     db.refresh(record)
 
-    # Add corresponding checker status log (PND)
+    # Add corresponding checker status log (FRS)
     try:
         checker_log = CheckerStatus(
             cs_id=f"CS-{wa_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=wa_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -303,7 +303,7 @@ def insert_create_water_discharge(db: Session, data: dict):
             cs_id=f"CS-{wd_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=wd_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -360,7 +360,7 @@ def insert_create_water_consumption(db: Session, data: dict):
             cs_id=f"CS-{wc_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=wc_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -417,7 +417,7 @@ def insert_create_electric_consumption(db: Session, data: dict):
             cs_id=f"CS-{ec_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=ec_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -492,7 +492,7 @@ def insert_create_diesel_consumption(db: Session, data: dict):
             cs_id=f"CS-{dc_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=dc_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -550,7 +550,7 @@ def insert_create_non_hazard_waste(db: Session, data: dict):
             cs_id=f"CS-{nhw_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=nhw_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -607,7 +607,7 @@ def insert_create_hazard_waste_generated(db: Session, data: dict):
             cs_id=f"CS-{hwg_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=hwg_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -663,7 +663,7 @@ def insert_create_hazard_waste_disposed(db: Session, data: dict):
             cs_id=f"CS-{hwd_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=hwd_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -744,7 +744,7 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
             cs_id=f"CS-{wa_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=wa_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -843,7 +843,7 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
             cs_id=f"CS-{wd_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=wd_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -944,7 +944,7 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
             cs_id=f"CS-{wc_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=wc_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1046,7 +1046,7 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
             cs_id=f"CS-{ec_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=ec_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1149,7 +1149,7 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
             cs_id=f"CS-{nhw_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=nhw_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1251,7 +1251,7 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
             cs_id=f"CS-{hwg_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=hwg_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1352,7 +1352,7 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
             cs_id=f"CS-{hwd_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=hwd_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1453,7 +1453,7 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
             cs_id=f"CS-{dc_id}",
             checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=dc_id,
-            status_id="PND",
+            status_id="FRS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -2191,7 +2191,7 @@ def bulk_demographics(db: Session, rows: list[dict]) -> int:
         "cs_id": f"CS{today_str}",
         "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
         "record_id": employee_id,
-        "status_id": "PND",
+        "status_id": "FRS",
         "status_timestamp": status_time,
         "remarks": "real-data inserted"
     })
