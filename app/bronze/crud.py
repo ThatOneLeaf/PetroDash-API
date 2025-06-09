@@ -126,6 +126,68 @@ def insert_csr_activity(db: Session, data: dict):
 
     return  {"message": "CSR Activity record created successfully"}
 
+def update_csr_activity(db: Session, data: dict):
+    csr_id = data.get("csr_id")
+    try:
+        db.execute(text("""
+            UPDATE bronze.csr_activity (
+                company_id,
+                project_id,
+                project_year,
+                csr_report,
+                project_expenses
+            ) VALUES (
+                :company_id,
+                :project_id,
+                :project_year,
+                :csr_report,
+                :project_expenses
+            )
+            WHERE csr_id = :csr_id
+            ON CONFLICT (csr_id) DO UPDATE SET
+                company_id = EXCLUDED.company_id,
+                project_id = EXCLUDED.project_id,
+                project_year = EXCLUDED.project_year,
+                csr_report = EXCLUDED.csr_report,
+                project_expenses = EXCLUDED.project_expenses
+        """), 
+        {
+            'company_id': data["company_id"],
+            'project_id': data["project_id"],
+            'project_year': data["project_year"],
+            'csr_report': data["csr_report"],
+            'project_expenses': data["project_expenses"]
+        })
+
+        db.commit()
+
+        db.execute(text("CALL silver.load_csr_silver()"))
+
+        db.commit()
+
+        #logging.info("CSR Activity record created and processed to silver layer successfully")
+
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+    
+    try:
+        checker_log = CheckerStatus(
+            cs_id=f"CS-{csr_id}",
+            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
+            record_id=csr_id,
+            status_id="PND",
+            status_timestamp=datetime.now(),
+            remarks="real-data updated"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+
+    return  {"message": "CSR Activity record updated successfully"}
+
 # ====================================== ENVIRONMENTAL DATA ====================================
 # ====================================== RETRIEVE DATA ====================================
 
