@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, update, select
 from app.bronze.crud import EnergyRecords
 from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
-from app.public.models import CheckerStatus
+from app.public.models import RecordStatus
 from app.dependencies import get_db
 from app.crud.base import get_one, get_all, get_many, get_many_filtered
 from datetime import datetime
@@ -40,8 +40,8 @@ async def update_status(
     }
 
     update_stmt = (
-        update(CheckerStatus)
-        .where(CheckerStatus.record_id == record_id)
+        update(RecordStatus)
+        .where(RecordStatus.record_id == record_id)
         .values(**update_data)
     )
 

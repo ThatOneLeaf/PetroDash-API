@@ -671,7 +671,7 @@ def get_water_abstraction_records(db: Session = Depends(get_db)):
             FROM bronze.envi_water_abstraction bewa
             LEFT JOIN silver.wa_id_mapping wim ON bewa.wa_id = wim.wa_id_bronze
             LEFT JOIN silver.envi_water_abstraction sewa ON sewa.wa_id = wim.wa_id_silver
-            INNER JOIN public.checker_status_log csl ON csl.record_id = bewa.wa_id
+            INNER JOIN public.record_status csl ON csl.record_id = bewa.wa_id
             INNER JOIN public.status s ON s.status_id = csl.status_id
             INNER JOIN ref.company_main cm ON cm.company_id = bewa.company_id
         """)
