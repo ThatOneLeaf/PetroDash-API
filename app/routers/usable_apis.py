@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, update, select
 from app.bronze.crud import EnergyRecords
 from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
-from app.public.models import CheckerStatus
+from app.public.models import RecordStatus
 from app.dependencies import get_db
 from app.crud.base import get_one, get_all, get_many, get_many_filtered
 from datetime import datetime
@@ -22,22 +22,27 @@ async def update_status(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    data = await request.json()  # kunin ang JSON body bilang dict
+    data = await request.json()
 
-    cs_id = data.get("cs_id")
+    record_id = data.get("record_id")
     new_status = data.get("new_status")
+    remarks = data.get("remarks")
 
-    if not cs_id or not new_status:
-        raise HTTPException(status_code=400, detail="cs_id and new_status are required.")
+    if not record_id or not new_status:
+        raise HTTPException(status_code=400, detail="record_id and new_status are required.")
+
+    # Prepare the fields to update
+    update_data = {
+        "record_id": record_id,
+        "status_id": new_status,
+        "status_timestamp": datetime.now(),
+        "remarks": remarks if remarks else None  # Set to None if empty or not provided
+    }
 
     update_stmt = (
-        update(CheckerStatus)
-        .where(CheckerStatus.cs_id == cs_id)
-        .values(
-            cs_id=cs_id,
-            status_id=new_status,
-            status_timestamp=datetime.now()
-        )
+        update(RecordStatus)
+        .where(RecordStatus.record_id == record_id)
+        .values(**update_data)
     )
 
     try:
