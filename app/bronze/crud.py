@@ -8,7 +8,7 @@ from sqlalchemy import text, desc
 from sqlalchemy.sql import text
 from sqlalchemy import func
 from datetime import datetime, timedelta
-from app.public.models import CheckerStatus
+from app.public.models import RecordStatus
 
 # ==================== ID Generation ====================
 def id_generation(db: Session, prefix: str, table_id_column):
@@ -147,9 +147,8 @@ def insert_csr_activity(db: Session, data: dict):
         db.rollback()
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{csr_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=csr_id,
             status_id="PND",
             status_timestamp=datetime.now(),
@@ -209,9 +208,8 @@ def update_csr_activity(db: Session, data: dict):
         db.rollback()
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{csr_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=csr_id,
             status_id="PND",
             status_timestamp=datetime.now(),
@@ -336,13 +334,12 @@ def insert_create_water_abstraction(db: Session, data: dict):
     db.commit()
     db.refresh(record)
 
-    # Add corresponding checker status log (FRS)
+    # Add corresponding checker status log (URS)
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wa_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=wa_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -398,11 +395,10 @@ def insert_create_water_discharge(db: Session, data: dict):
     db.refresh(record)
 
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wd_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=wd_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -455,11 +451,10 @@ def insert_create_water_consumption(db: Session, data: dict):
     db.refresh(record)
 
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{wc_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=wc_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -512,11 +507,10 @@ def insert_create_electric_consumption(db: Session, data: dict):
     db.refresh(record)
 
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{ec_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=ec_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -587,11 +581,10 @@ def insert_create_diesel_consumption(db: Session, data: dict):
     db.refresh(record)
 
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{dc_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=dc_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -645,11 +638,10 @@ def insert_create_non_hazard_waste(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{nhw_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=nhw_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -702,11 +694,10 @@ def insert_create_hazard_waste_generated(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{hwg_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=hwg_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -758,11 +749,10 @@ def insert_create_hazard_waste_disposed(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{hwd_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=hwd_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -839,11 +829,10 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
 
         # Create checker_status_log model instance
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wa_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=wa_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -938,11 +927,10 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wd_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=wd_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1039,11 +1027,10 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wc_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=wc_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1141,11 +1128,10 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{ec_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=ec_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1244,11 +1230,10 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{nhw_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=nhw_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1346,11 +1331,10 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{hwg_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=hwg_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1447,11 +1431,10 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{hwd_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=hwd_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1548,11 +1531,10 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{dc_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=dc_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1888,7 +1870,7 @@ def get_osh_by_id(db: Session, osh_id: str):
 
 # --- Employability ---
 def insert_employability(db: Session, data: dict):
-    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    cs_id = id_generation(db, "CS", RecordStatus.record_id)
     
     record_demo = HRDemographics(
         employee_id=data["employee_id"],
@@ -1904,11 +1886,10 @@ def insert_employability(db: Session, data: dict):
     db.refresh(record_demo)
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=cs_id,
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=data["employee_id"],
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -1962,7 +1943,7 @@ def insert_employability(db: Session, data: dict):
 
 # --- Safety Workdata ---
 def insert_safety_workdata(db: Session, data: dict):
-    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    cs_id = id_generation(db, "CS", RecordStatus.record_id)
     safety_workdata_id = id_generation(db, "SWD", HRSafetyWorkdata.safety_workdata_id)
     
     record = HRSafetyWorkdata(
@@ -1979,11 +1960,10 @@ def insert_safety_workdata(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=cs_id,
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=data["employee_id"],
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -2013,7 +1993,7 @@ def insert_safety_workdata(db: Session, data: dict):
 
 # --- Parental Leave ---
 def insert_parental_leave(db: Session, data: dict):
-    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    cs_id = id_generation(db, "CS", RecordStatus.record_id)
     parental_leave_id = id_generation(db, "PL", HRParentalLeave.parental_leave_id)
     
     start_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
@@ -2036,11 +2016,10 @@ def insert_parental_leave(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=cs_id,
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=parental_leave_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -2070,7 +2049,7 @@ def insert_parental_leave(db: Session, data: dict):
 
 # --- Training ---
 def insert_training(db: Session, data: dict):
-    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    cs_id = id_generation(db, "CS", RecordStatus.record_id)
     training_id = id_generation(db, "TR", HRTraining.training_id)
     
     record = HRTraining(
@@ -2086,11 +2065,10 @@ def insert_training(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=cs_id,
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=training_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -2120,7 +2098,7 @@ def insert_training(db: Session, data: dict):
 
 # --- Occupational Safety Health ---
 def insert_occupational_safety_health(db: Session, data: dict):
-    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    cs_id = id_generation(db, "CS", RecordStatus.record_id)
     osh_id = id_generation(db, "OSH", HROsh.osh_id)
     
     record = HROsh(
@@ -2138,11 +2116,10 @@ def insert_occupational_safety_health(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=cs_id,
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=osh_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -2397,9 +2374,8 @@ def bulk_demographics(db: Session, rows: list[dict]) -> int:
     status_time = base_timestamp + timedelta(hours=i + 1)
     checker_logs.append({
         "cs_id": f"CS{today_str}",
-        "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
         "record_id": employee_id,
-        "status_id": "FRS",
+        "status_id": "URS",
         "status_timestamp": status_time,
         "remarks": "real-data inserted"
     })
@@ -2431,14 +2407,12 @@ def bulk_demographics(db: Session, rows: list[dict]) -> int:
         insert_sql = text("""
             INSERT INTO checker_status_log (
                 cs_id,
-                checker_id,
                 record_id,
                 status_id,
                 status_timestamp,
                 remarks
             ) VALUES (
                 :cs_id,
-                :checker_id,
                 :record_id,
                 :status_id,
                 :status_timestamp,
@@ -2457,6 +2431,6 @@ def bulk_demographics(db: Session, rows: list[dict]) -> int:
 
 # --- DEBUG ---
 def hr_debug(db: Session, data: dict):
-    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    cs_id = id_generation(db, "CS", RecordStatus.record_id)
         
     return cs_id
