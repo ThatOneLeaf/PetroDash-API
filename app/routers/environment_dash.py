@@ -362,3 +362,148 @@ def get_water_summary_line_chart(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+# stacked-bar chart
+@router.get("/stacked-bar", response_model=Dict)
+def get_stacked_bar_summary(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get quarterly water volume totals (abstracted, discharged, consumed) with assigned colors for stacked bar chart.
+    """
+    try:
+        print(f"Received parameters - company_id: {company_id}, quarter: {quarter}, year: {year}")
+        
+        # Convert inputs into lists if necessary
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        years = year if isinstance(year, list) else [year] if year else None
+        
+        print(f"Processed parameters - company_ids: {company_ids}, quarters: {quarters}, years: {years}")
+
+        if not company_ids or not quarters or not years:
+            return {
+                "data": [],
+                "unit": "cubic meters",
+                "message": "Missing required parameters"
+            }
+
+        # Query the database
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_water_summary(
+                ARRAY[:company_ids]::text[], 
+                ARRAY[:quarters]::text[], 
+                ARRAY[:years]::smallint[]
+            )
+        """), {
+            'company_ids': company_ids,
+            'quarters': quarters,
+            'years': years
+        })
+
+        rows = result.fetchall()
+        print(f"Database returned {len(rows)} rows")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "cubic meters",
+                "message": "No data found for the specified parameters"
+            }
+
+        # Convert to DataFrame with explicit column names
+        import pandas as pd
+        df = pd.DataFrame([{
+            "company_id": row.company_id,
+            "year": str(row.year),
+            "quarter": row.quarter,
+            "total_abstracted_volume": float(row.total_abstracted_volume or 0),
+            "total_discharged_volume": float(row.total_discharged_volume or 0),
+            "total_consumption_volume": float(row.total_consumption_volume or 0)
+        } for row in rows])
+
+        # Ensure correct order of quarters
+        quarter_order = ['Q1', 'Q2', 'Q3', 'Q4']
+        df['quarter'] = pd.Categorical(df['quarter'].astype(str), categories=quarter_order, ordered=True)
+
+        # Group by quarter and sum - ADD observed=False to suppress warning
+        grouped = df.groupby('quarter', as_index=False, observed=False).sum(numeric_only=True).sort_values('quarter')
+        
+        print("Grouped DataFrame columns:", grouped.columns.tolist())
+        print("Grouped DataFrame head:", grouped.head())
+
+        # Define consistent colors
+        color_map = {
+            "abstracted": "#3B82F6",   # Blue
+            "discharged": "#F97316",   # Orange
+            "consumed": "#10B981"      # Green
+        }
+
+        # Format output for stacked bar chart - SAFE COLUMN ACCESS
+        data = []
+        for _, row in grouped.iterrows():
+            # Safe column access with fallback
+            abstracted_col = "total_abstracted_volume" if "total_abstracted_volume" in row else "abstracted_volume"
+            discharged_col = "total_discharged_volume" if "total_discharged_volume" in row else "discharged_volume"
+            consumed_col = "total_consumption_volume" if "total_consumption_volume" in row else "consumption_volume"
+            
+            data.append({
+                "quarter": row["quarter"],
+                "abstracted": {
+                    "value": round(row.get(abstracted_col, 0), 2),
+                    "color": color_map["abstracted"]
+                },
+                "discharged": {
+                    "value": round(row.get(discharged_col, 0), 2),
+                    "color": color_map["discharged"]
+                },
+                "consumed": {
+                    "value": round(row.get(consumed_col, 0), 2),
+                    "color": color_map["consumed"]
+                }
+            })
+
+        print(f"Final data: {data}")
+
+        return {
+            "data": data,
+            "unit": "cubic meters",
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in stacked bar water summary:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# water years
+@router.get("/water-years", response_model=Dict)
+def get_distinct_years(db: Session = Depends(get_db)):
+    """
+    Get distinct list of years from environment water summary (all data).
+    """
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT year 
+            FROM gold.func_environment_water_summary(NULL, NULL, NULL)
+            ORDER BY year ASC
+        """))
+        
+        rows = result.fetchall()
+        years = [row.year for row in rows]
+
+        return {
+            "data": years,
+            "message": "Success",
+            "count": len(years)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct years:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
