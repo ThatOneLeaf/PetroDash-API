@@ -24,7 +24,7 @@ def id_generation(db: Session, prefix: str, table_id_column):
         cs_id = id_generation(db, "CS", CheckerStatus.record_id)
 
     Returns:
-        str: A new unique ID (e.g., "CS20250604001").
+        str: A new unique ID (e.g., "CS202506040001").
     """
     
     # Generate CSID
@@ -39,11 +39,11 @@ def id_generation(db: Session, prefix: str, table_id_column):
     )
 
     if latest_id:
-        latest_sequence = int(latest_id[0][-3:])  # last 3 characters
+        latest_sequence = int(latest_id[0][-4:])  # last 4 characters
     else:
         latest_sequence = 0
 
-    new_sequence = str(latest_sequence + 1).zfill(3)
+    new_sequence = str(latest_sequence + 1).zfill(4)
     generated_id = f"{prefix}{today_str}{new_sequence}"
     return generated_id
 
