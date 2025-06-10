@@ -1960,7 +1960,7 @@ def insert_safety_workdata(db: Session, data: dict):
     try:
         checker_log = RecordStatus(
             cs_id=f"CS-{safety_workdata_id}",
-            record_id=data["employee_id"],
+            record_id=safety_workdata_id,
             status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
