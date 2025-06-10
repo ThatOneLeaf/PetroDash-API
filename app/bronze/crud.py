@@ -2048,13 +2048,16 @@ def insert_parental_leave(db: Session, data: dict):
 def insert_training(db: Session, data: dict):
     training_id = id_generation(db, "TR", HRTraining.training_id)
     
+    total_training_hours = int(data["training_hours"]) * int(data["number_of_participants"])
+    
     record = HRTraining(
         training_id=training_id,
         company_id=data["company_id"],
         date=data["date"],
         training_title=data["training_title"],
         training_hours=data["training_hours"],
-        number_of_participants=data["number_of_participants"]
+        number_of_participants=data["number_of_participants"],
+        total_training_hours=total_training_hours
     )
     db.add(record)
     db.commit()
@@ -2340,7 +2343,7 @@ def insert_employability_bulk(db: Session, rows_demo: list[dict], rows_tenure: l
     #     grouped_rows[key].append((i, row))
     
     # Generate IDs for each group
-    # id_mapping = {}
+    id_mapping = {}
     # for (employee_id), row_list in employee_id.items():
     #     ids = generate_bulk_pkey_ids(
     #         db=db,
@@ -2357,17 +2360,18 @@ def insert_employability_bulk(db: Session, rows_demo: list[dict], rows_tenure: l
     
     # Build discharge records and collect logs
     base_timestamp = datetime.now()
-    for i, row in enumerate(rows):
-        wd_id = id_mapping[i]
+    for i, row in enumerate(rows_demo):
+        employee_id = id_mapping[i]
         
         # Create discharge record
-        record = EnviWaterDischarge(
-            wd_id=wd_id,
+        record = HRDemographics(
+            employee_id=row["employee_id"],
+            gender=row["gender"],
+            birthdate=row["birthdate"],
+            position_id=row["position_id"],
+            p_np=row["p_np"],
             company_id=row["company_id"],
-            year=row["year"],
-            quarter=row["quarter"],
-            volume=row["volume"],
-            unit_of_measurement=row["unit_of_measurement"],
+            employment_status=row["employment_status"]
         )
         records.append(record)
         
@@ -2375,7 +2379,7 @@ def insert_employability_bulk(db: Session, rows_demo: list[dict], rows_tenure: l
         status_time = base_timestamp + timedelta(hours=i + 1)
         checker_log = RecordStatus(
             cs_id=f"{rows_demo["employee_id"]}",
-            record_id=wd_id,
+            record_id=employee_id,
             status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"

@@ -184,6 +184,7 @@ class HRTraining(Base_silver):
     training_title = Column(TEXT, primary_key=True, index=True)
     training_hours = Column(TIMESTAMP)
     number_of_participants = Column(Numeric)
+    total_training_hours = Column(Numeric)
     
 class HRSafetyWorkdata(Base_silver):
     __tablename__ = "hr_safety_workdata"
