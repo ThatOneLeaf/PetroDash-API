@@ -246,21 +246,12 @@ def add_energy_record(
     remarks: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    print(f"--- Incoming Request ---")
-    print(f"Power Plant: {powerPlant}")
-    print(f"Date: {date}")
-    print(f"Energy Generated: {energyGenerated}")
-    print(f"Metric: {metric}")
-    print(f"Remarks: {remarks}")
-    print(f"Checker: {checker}")
     
     try:
         # Parse date
         try:
             parsed_date = datetime.strptime(date, "%Y-%m-%d")
-            print(f"Parsed Date: {parsed_date}")
         except ValueError as ve:
-            print(f"Date parsing error: {ve}")
             raise HTTPException(status_code=400, detail=f"Date parsing error: {str(ve)}")
 
         # Check for existing record
@@ -269,7 +260,6 @@ def add_energy_record(
                 EnergyRecords.power_plant_id == powerPlant,
                 EnergyRecords.datetime == parsed_date
             ).first()
-            print(f"Existing Record: {existing}")
             if existing:
                 raise HTTPException(
                     status_code=400,
@@ -279,15 +269,12 @@ def add_energy_record(
                     }
                 )
         except Exception as db_err:
-            print(f"Database query failed: {db_err}")
             raise HTTPException(status_code=500, detail=f"Database query failed: {str(db_err)}")
 
         # Generate ID
         try:
             new_id = generate_energy_id(db)
-            print(f"Generated Energy ID: {new_id}")
         except Exception as id_err:
-            print(f"ID generation failed: {id_err}")
             raise HTTPException(status_code=500, detail=f"ID generation failed: {str(id_err)}")
 
         # Create record and log
@@ -299,8 +286,6 @@ def add_energy_record(
                 energy_generated=energyGenerated,
                 unit_of_measurement=metric,
             )
-            print(f"New EnergyRecord object: {new_record}")
-
             new_log = RecordStatus(
                 cs_id="CS-" + new_id,
                 record_id=new_id,
@@ -308,30 +293,23 @@ def add_energy_record(
                 status_timestamp=datetime.now(),
                 remarks=remarks
             )
-            print(f"New RecordStatus object: {new_log}")
 
             db.add(new_record)
             db.add(new_log)
             db.commit()
             db.refresh(new_record)
-            print("Record and log inserted successfully.")
         except Exception as record_err:
-            print(f"Failed to insert record or log: {record_err}")
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Failed to insert record or log: {str(record_err)}")
 
         # Call stored procedure
         try:
-            print("Calling stored procedure: silver.load_csv_silver()")
             db.execute(text("CALL silver.load_csv_silver();"))
             db.commit()
-            print("Stored procedure executed successfully.")
         except Exception as proc_err:
-            print(f"Stored procedure error: {proc_err}")
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Stored procedure error: {str(proc_err)}")
 
-        print("Energy record successfully added.")
         return {
             "message": "Energy record successfully added.",
             "data": {
@@ -344,14 +322,11 @@ def add_energy_record(
         }
 
     except HTTPException as http_err:
-        print(f"HTTPException: {http_err.detail}")
         raise http_err
 
     except Exception as e:
         db.rollback()
         tb = traceback.format_exc()
-        print(f"Unexpected error: {e}")
-        print(f"Traceback:\n{tb}")
         raise HTTPException(
             status_code=500,
             detail=f"Unexpected error: {str(e)}\nTraceback:\n{tb}"
