@@ -1273,4 +1273,304 @@ def get_reference_data(db: Session = Depends(get_db)):
         
     except Exception as e:
         logging.error(f"Error fetching reference data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/summary", response_model=List[Dict])
+def get_economic_summary(
+    years: str = None,
+    order_by: str = "year", 
+    order_direction: str = "ASC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get economic value summary using gold.func_economic_value_by_year
+    """
+    try:
+        # Parse years parameter
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_value_by_year(
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'totalGenerated': float(row.total_economic_value_generated) if row.total_economic_value_generated else 0,
+                'totalDistributed': float(row.total_economic_value_distributed) if row.total_economic_value_distributed else 0,
+                'valueRetained': float(row.economic_value_retained) if row.economic_value_retained else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching economic summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/generated-details", response_model=List[Dict])
+def get_generated_details(
+    years: str = None,
+    order_by: str = "year",
+    order_direction: str = "ASC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get economic value generated details using gold.func_economic_value_generated_details
+    """
+    try:
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_value_generated_details(
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'electricitySales': float(row.electricity_sales) if row.electricity_sales else 0,
+                'oilRevenues': float(row.oil_revenues) if row.oil_revenues else 0,
+                'otherRevenues': float(row.other_revenues) if row.other_revenues else 0,
+                'interestIncome': float(row.interest_income) if row.interest_income else 0,
+                'shareInNetIncomeOfAssociate': float(row.share_in_net_income_of_associate) if row.share_in_net_income_of_associate else 0,
+                'miscellaneousIncome': float(row.miscellaneous_income) if row.miscellaneous_income else 0,
+                'totalGenerated': float(row.total_economic_value_generated) if row.total_economic_value_generated else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching generated details: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/distributed-details", response_model=List[Dict])
+def get_distributed_details(
+    years: str = None,
+    order_by: str = "year",
+    order_direction: str = "ASC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get economic value distributed details using gold.func_economic_value_distributed_details
+    """
+    try:
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_value_distributed_details(
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'governmentPayments': float(row.total_government_payments) if row.total_government_payments else 0,
+                'localSupplierSpending': float(row.total_local_supplier_spending) if row.total_local_supplier_spending else 0,
+                'foreignSupplierSpending': float(row.total_foreign_supplier_spending) if row.total_foreign_supplier_spending else 0,
+                'employeeWagesBenefits': float(row.total_employee_wages_benefits) if row.total_employee_wages_benefits else 0,
+                'communityInvestments': float(row.total_community_investments) if row.total_community_investments else 0,
+                'depreciation': float(row.total_depreciation) if row.total_depreciation else 0,
+                'depletion': float(row.total_depletion) if row.total_depletion else 0,
+                'otherExpenditures': float(row.total_other_expenditures) if row.total_other_expenditures else 0,
+                'capitalProviderPayments': float(row.total_capital_provider_payments) if row.total_capital_provider_payments else 0,
+                'totalDistributed': float(row.total_economic_value_distributed) if row.total_economic_value_distributed else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching distributed details: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/company-distribution", response_model=List[Dict])
+def get_company_distribution(
+    companies: str = None,
+    years: str = None,
+    order_by: str = "percentage_of_total_distribution",
+    order_direction: str = "DESC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get economic value distribution by company using gold.func_economic_value_distribution_percentage
+    """
+    try:
+        company_array = None
+        if companies:
+            company_list = [c.strip() for c in companies.split(',') if c.strip()]
+            if company_list:
+                company_array = f"ARRAY{company_list}::VARCHAR(10)[]"
+        
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_value_distribution_percentage(
+                {company_array if company_array else 'NULL'},
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'companyName': row.company_name,
+                'totalDistributed': float(row.total_economic_value_distributed_by_company) if row.total_economic_value_distributed_by_company else 0,
+                'percentage': float(row.percentage_of_total_distribution) if row.percentage_of_total_distribution else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching company distribution: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/expenditure-by-company", response_model=List[Dict])
+def get_expenditure_by_company(
+    companies: str = None,
+    types: str = None,
+    years: str = None,
+    order_by: str = "year",
+    order_direction: str = "ASC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get expenditure details by company using gold.func_economic_expenditure_by_company
+    """
+    try:
+        company_array = None
+        if companies:
+            company_list = [c.strip() for c in companies.split(',') if c.strip()]
+            if company_list:
+                company_array = f"ARRAY{company_list}::VARCHAR(10)[]"
+        
+        type_array = None
+        if types:
+            type_list = [t.strip() for t in types.split(',') if t.strip()]
+            if type_list:
+                type_array = f"ARRAY{type_list}::VARCHAR(10)[]"
+        
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_expenditure_by_company(
+                {company_array if company_array else 'NULL'},
+                {type_array if type_array else 'NULL'},
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'companyName': row.company_name,
+                'typeId': row.type_id,
+                'governmentPayments': float(row.government_payments) if row.government_payments else 0,
+                'localSupplierSpending': float(row.local_supplier_spending) if row.local_supplier_spending else 0,
+                'foreignSupplierSpending': float(row.foreign_supplier_spending) if row.foreign_supplier_spending else 0,
+                'employeeWagesBenefits': float(row.employee_wages_benefits) if row.employee_wages_benefits else 0,
+                'communityInvestments': float(row.community_investments) if row.community_investments else 0,
+                'depreciation': float(row.depreciation) if row.depreciation else 0,
+                'depletion': float(row.depletion) if row.depletion else 0,
+                'otherExpenditures': float(row.other_expenditures) if row.other_expenditures else 0,
+                'totalDistributed': float(row.total_distributed_value_by_company) if row.total_distributed_value_by_company else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching expenditure by company: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/filter-options", response_model=Dict)
+def get_dashboard_filter_options(db: Session = Depends(get_db)):
+    """
+    Get available filter options for the dashboard
+    """
+    try:
+        # Get available years
+        years_result = db.execute(text("""
+            SELECT DISTINCT year 
+            FROM gold.vw_economic_value_summary 
+            ORDER BY year DESC
+        """))
+        years = [row.year for row in years_result]
+        
+        # Get available companies
+        companies_result = db.execute(text("""
+            SELECT DISTINCT company_id, company_name 
+            FROM ref.company_main 
+            ORDER BY company_name
+        """))
+        companies = [
+            {'id': row.company_id, 'name': row.company_name}
+            for row in companies_result
+        ]
+        
+        # Get available expenditure types
+        types_result = db.execute(text("""
+            SELECT DISTINCT type_id, type_description 
+            FROM ref.expenditure_type 
+            ORDER BY type_description
+        """))
+        types = [
+            {'id': row.type_id, 'description': row.type_description}
+            for row in types_result
+        ]
+        
+        return {
+            'years': years,
+            'companies': companies,
+            'expenditureTypes': types
+        }
+        
+    except Exception as e:
+        logging.error(f"Error fetching filter options: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 
