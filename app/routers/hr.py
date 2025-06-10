@@ -32,7 +32,10 @@ from app.bronze.crud import (
     update_safety_workdata,
     update_parental_leave,
     update_occupational_safety_health,
-    update_training
+    update_training,
+    
+    # FOR DEBUGGING PURPOSES
+    hr_debug
 )
 from app.bronze.schemas import (
     HRDemographicsOut,
@@ -826,3 +829,35 @@ async def download_economic_generated_template():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
+    
+# ============== DEBUG ===============
+@router.post("/training_debug")
+def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
+    try:
+        logging.info("Add single training record")
+
+        required_fields = ['company_id', 'date', 'training_title', 'training_hours', 'number_of_participants']
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
+
+        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
+            raise HTTPException(status_code=422, detail="Invalid company_id")
+
+        record = {
+            "company_id": data["company_id"],
+            "date": data["date"],
+            "training_title": data["training_title"],
+            "training_hours": int(data["training_hours"]),
+            "number_of_participants": int(data["number_of_participants"]),
+        }
+
+        hr_debug(db, record)
+
+        return hr_debug(db, record)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

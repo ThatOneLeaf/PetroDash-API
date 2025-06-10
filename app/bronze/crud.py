@@ -4,12 +4,48 @@ from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRPa
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_single_pkey_id, generate_bulk_pkey_ids
 from app.utils.gen_help_id import generate_pkey_id
-from sqlalchemy import text
+from sqlalchemy import text, desc
 from sqlalchemy.sql import text
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from app.public.models import CheckerStatus
 
+# ==================== ID Generation ====================
+def id_generation(db: Session, prefix: str, table_id_column):
+    """
+    Generates unique ID with the given prefix and today's date (YYYYMMDD),
+    based on the latest existing ID in the specified table column.
+
+    Arguments:
+        prefix: The prefix for the ID (e.g., "CS", "SWD", "TR").
+        table_id_column: Table Name and Column (e.g. CheckerStatus.record_id)
+
+    Sample Call:
+        cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+
+    Returns:
+        str: A new unique ID (e.g., "CS20250604001").
+    """
+    
+    # Generate CSID
+    today_str = datetime.today().strftime("%Y%m%d")
+    like_pattern = f"{prefix}{today_str}%"
+    
+    latest_id = (
+        db.query(table_id_column)
+        .filter(table_id_column.like(like_pattern))
+        .order_by(desc(table_id_column))
+        .first()
+    )
+
+    if latest_id:
+        latest_sequence = int(latest_id[0][-3:])  # last 3 characters
+    else:
+        latest_sequence = 0
+
+    new_sequence = str(latest_sequence + 1).zfill(3)
+    generated_id = f"{prefix}{today_str}{new_sequence}"
+    return generated_id
 
 # =================== POWER PLANT ENERGY DATA =================
 def get_energy_record_by_id(db: Session, energy_id: str):
@@ -1848,18 +1884,11 @@ def get_osh_by_id(db: Session, osh_id: str):
     return get_one(db, HROsh, "osh_id", osh_id)
 
 # =========== INSERT SINGLE DATA ===========
+
+
 # --- Employability ---
 def insert_employability(db: Session, data: dict):
-    # Generate cs_id
-    today = datetime.today().date()
-    today_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-    cs_id = f"CS{today_str}{sequence_number}"
+    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
     
     record_demo = HRDemographics(
         employee_id=data["employee_id"],
@@ -1933,28 +1962,8 @@ def insert_employability(db: Session, data: dict):
 
 # --- Safety Workdata ---
 def insert_safety_workdata(db: Session, data: dict):
-    # Generate cs_id
-    today = datetime.today().date()
-    today_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-    cs_id = f"CS{today_str}{sequence_number}"
-    
-    # Generate ID
-    today = datetime.today().date()
-    year_month_day_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(HRSafetyWorkdata.date, 'YYYYMMDD') == year_month_day_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-
-    safety_workdata_id = f"PL{year_month_day_str}{sequence_number}"
+    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    safety_workdata_id = id_generation(db, "SWD", HRSafetyWorkdata.safety_workdata_id)
     
     record = HRSafetyWorkdata(
         safety_workdata_id=safety_workdata_id,
@@ -2004,28 +2013,8 @@ def insert_safety_workdata(db: Session, data: dict):
 
 # --- Parental Leave ---
 def insert_parental_leave(db: Session, data: dict):
-    # Generate cs_id
-    today = datetime.today().date()
-    today_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-    cs_id = f"CS{today_str}{sequence_number}"
-    
-    # Generate ID
-    today = datetime.today().date()
-    year_month_day_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(HRParentalLeave.date, 'YYYYMMDD') == year_month_day_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-
-    parental_leave_id = f"PL{year_month_day_str}{sequence_number}"
+    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    parental_leave_id = id_generation(db, "PL", HRParentalLeave.parental_leave_id)
     
     start_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
     num_days = int(data["days"])
@@ -2081,27 +2070,8 @@ def insert_parental_leave(db: Session, data: dict):
 
 # --- Training ---
 def insert_training(db: Session, data: dict):
-    # Generate cs_id
-    today = datetime.today().date()
-    today_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-    cs_id = f"CS{today_str}{sequence_number}"
-    
-    # ID Generation
-    today = datetime.today().date()
-    year_month_day_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(HRTraining.date, 'YYYYMMDD') == year_month_day_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-    training_id = f"TR{year_month_day_str}{sequence_number}"
+    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    training_id = id_generation(db, "TR", HRTraining.training_id)
     
     record = HRTraining(
         training_id=training_id,
@@ -2150,26 +2120,8 @@ def insert_training(db: Session, data: dict):
 
 # --- Occupational Safety Health ---
 def insert_occupational_safety_health(db: Session, data: dict):
-    # Generate cs_id
-    today = datetime.today().date()
-    today_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(CheckerStatus.status_timestamp, 'YYYYMMDD') == today_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-    cs_id = f"CS{today_str}{sequence_number}"
-    
-    today = datetime.today().date()
-    year_month_day_str = today.strftime("%Y%m%d")
-
-    existing_count = db.query(func.count()).filter(
-        func.to_char(HROsh.date, 'YYYYMMDD') == year_month_day_str
-    ).scalar()
-
-    sequence_number = str(existing_count + 1).zfill(3)
-    osh_id = f"TR{year_month_day_str}{sequence_number}"
+    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+    osh_id = id_generation(db, "OSH", HROsh.osh_id)
     
     record = HROsh(
         osh_id=osh_id,
@@ -2502,3 +2454,9 @@ def bulk_demographics(db: Session, rows: list[dict]) -> int:
         db.rollback()
 
     return len(records)
+
+# --- DEBUG ---
+def hr_debug(db: Session, data: dict):
+    cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+        
+    return cs_id
