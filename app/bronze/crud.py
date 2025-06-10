@@ -1906,7 +1906,8 @@ def insert_employability(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -1979,7 +1980,8 @@ def insert_safety_workdata(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := TRUE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2034,7 +2036,8 @@ def insert_parental_leave(db: Session, data: dict):
                 load_parental_leave := TRUE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2085,7 +2088,8 @@ def insert_training(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := TRUE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2135,7 +2139,8 @@ def insert_occupational_safety_health(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := TRUE
+                load_occupational_safety_health := TRUE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
