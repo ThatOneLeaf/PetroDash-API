@@ -507,3 +507,297 @@ def get_distinct_years(db: Session = Depends(get_db)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
+# ELECTRICITY DASHBOARD
+# comsumption-source
+@router.get("/comsumption-source", response_model=Dict)
+def get_distinct_consumption_source(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT consumption_source 
+            FROM gold.func_environment_electric_consumption_by_source(NULL, NULL, NULL, NULL)
+            ORDER BY consumption_source ASC
+        """))
+        
+        rows = result.fetchall()
+        source = [row.consumption_source for row in rows]
+
+        return {
+            "data": source,
+            "message": "Success",
+            "count": len(source)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct source:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# electricity-years
+@router.get("/electricity-years", response_model=Dict)
+def get_distinct_electricity_years(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT year 
+            FROM gold.func_environment_electric_consumption_by_year(NULL, NULL, NULL)
+            ORDER BY year ASC
+        """))
+        
+        rows = result.fetchall()
+        years = [row.year for row in rows]
+
+        return {
+            "data": years,
+            "message": "Success",
+            "count": len(years)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct years:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# key metrics
+@router.get("/electricity-key-metrics", response_model=Dict)
+def get_electricity_key_metrics(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    consumption_source: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get electricity key metrics (total, peak year, average)
+    """
+    try:
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        consumption_sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_electric_consumption_by_year(
+                CAST(:company_ids AS VARCHAR(10)[]),
+                CAST(:consumption_sources AS VARCHAR(30)[]),
+                CAST(:quarters AS VARCHAR(2)[]),
+                CAST(:years AS SMALLINT[])
+            )
+        """), {
+            'company_ids': company_ids,
+            'consumption_sources': consumption_sources,
+            'quarters': quarters,
+            'years': years
+        })
+
+        data = [
+            {
+                key: float(value) if isinstance(value, Decimal) else value
+                for key, value in row._mapping.items()
+            }
+            for row in result
+        ]
+
+        if not data:
+            return {
+                'total_consumption': 0,
+                'unit_of_measurement': None,
+                'peak_year': None,
+                'peak_consumption': 0,
+                'average_consumption': 0
+            }
+
+        # Load data into pandas DataFrame for KPI calculation
+        df = pd.DataFrame(data)
+
+        # KPI 1: Total Electric Consumption
+        total_consumption = df['total_consumption'].sum()
+
+        # KPI 2: Year with Highest Electricity Consumption
+        peak_year_data = df.loc[df['total_consumption'].idxmax()]
+
+        # KPI 3: Average Annual Electricity Consumption
+        avg_consumption = df['total_consumption'].mean()
+
+        return {
+            'total_consumption': round(total_consumption, 2),
+            'unit_of_measurement': df['unit_of_measurement'].iloc[0],
+            'peak_year': int(peak_year_data['year']),
+            'peak_consumption': round(peak_year_data['total_consumption'], 2),
+            'average_consumption': round(avg_consumption, 2)
+        }
+
+    except Exception as e:
+        print("Error in electricity key metrics:", str(e))
+        raise HTTPException
+
+# DIESEL DASHBOARD
+#diesel-years
+@router.get("/diesel-years", response_model=Dict)
+def get_distinct_diesel_years(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT year 
+            FROM gold.func_environment_diesel_consumption_by_year(NULL, NULL, NULL)
+            ORDER BY year ASC
+        """))
+        
+        rows = result.fetchall()
+        years = [row.year for row in rows]
+
+        return {
+            "data": years,
+            "message": "Success",
+            "count": len(years)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct years:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# diesel-cp-name
+@router.get("/diesel-cp-name", response_model=Dict)
+def get_distinct_diesel_cp_name(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT company_property_name 
+            FROM gold.func_environment_diesel_consumption_by_year(NULL, NULL, NULL, NULL, NULL)
+            ORDER BY company_property_name ASC
+        """))
+        
+        rows = result.fetchall()
+        cp_name = [row.company_property_name for row in rows]
+
+        return {
+            "data": cp_name,
+            "message": "Success",
+            "count": len(cp_name)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct years:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# diesel-cp-type
+@router.get("/diesel-cp-type", response_model=Dict)
+def get_distinct_diesel_cp_type(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT company_property_type 
+            FROM gold.func_environment_diesel_consumption_by_year(NULL, NULL, NULL, NULL, NULL)
+            ORDER BY company_property_type ASC
+        """))
+        
+        rows = result.fetchall()
+        cp_type = [row.company_property_type for row in rows]
+
+        return {
+            "data": cp_type,
+            "message": "Success",
+            "count": len(cp_type)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct years:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+#diesel-key-metrics
+@router.get("/diesel-key-metrics", response_model=Dict)
+def get_diesel_key_metrics(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    company_property_name: Optional[Union[str, List[str]]] = Query(None),
+    company_property_type: Optional[Union[str, List[str]]] = Query(None),
+    month: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get diesel key metrics (total consumption, average annual consumption + deviation)
+    """
+    try:
+        # Process params into lists
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        company_property_names = company_property_name if isinstance(company_property_name, list) else [company_property_name] if company_property_name else None
+        company_property_types = company_property_type if isinstance(company_property_type, list) else [company_property_type] if company_property_type else None
+        months = month if isinstance(month, list) else [month] if month else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        # Execute function with proper casts
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_diesel_consumption_by_year(
+                CAST(:company_ids AS VARCHAR(10)[]),
+                CAST(:company_property_names AS VARCHAR(30)[]),
+                CAST(:company_property_types AS VARCHAR(15)[]),
+                CAST(:months AS VARCHAR(10)[]),
+                CAST(:years AS SMALLINT[]),
+                CAST(:quarters AS VARCHAR(2)[])
+            )
+        """), {
+            'company_ids': company_ids,
+            'company_property_names': company_property_names,
+            'company_property_types': company_property_types,
+            'months': months,
+            'years': years,
+            'quarters': quarters
+        })
+
+        # Convert result to list of dicts
+        data = [
+            {
+                key: float(value) if isinstance(value, Decimal) else value
+                for key, value in row._mapping.items()
+            }
+            for row in result
+        ]
+
+        if not data:
+            return {
+                'total_diesel_consumption': 0,
+                'unit_of_measurement': None,
+                'average_annual_consumption': 0,
+                'yearly_deviation': []
+            }
+
+        # Load data into pandas DataFrame for KPI calculation
+        df = pd.DataFrame(data)
+
+        # KPI 1: Total Diesel Consumption
+        total_diesel = df["total_consumption"].sum()
+
+        # KPI 3: Average annual diesel consumption + deviation from avg
+        yearly_totals = df.groupby("year")["total_consumption"].sum()
+        avg_consumption = yearly_totals.mean()
+
+        deviation_df = yearly_totals.reset_index()
+        deviation_df["deviation_from_avg"] = deviation_df["total_consumption"] - avg_consumption
+
+        # Prepare deviations in list format for return
+        yearly_deviation = [
+            {
+                "year": int(row["year"]),
+                "total_consumption": round(row["total_consumption"], 2),
+                "deviation_from_avg": round(row["deviation_from_avg"], 2)
+            }
+            for _, row in deviation_df.iterrows()
+        ]
+
+        # Return KPIs
+        return {
+            'total_diesel_consumption': round(total_diesel, 2),
+            'unit_of_measurement': df['unit_of_measurement'].iloc[0],
+            'average_annual_consumption': round(avg_consumption, 2),
+            'yearly_deviation': yearly_deviation
+        }
+
+    except Exception as e:
+        print("Error in diesel key metrics:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
