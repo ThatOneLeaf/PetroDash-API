@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from fastapi import APIRouter, Depends, Query, HTTPException, Request, UploadFile, File
 import pandas as pd
 from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict
@@ -25,7 +25,7 @@ from app.bronze.crud import (
     insert_occupational_safety_health,
     insert_training,
     # BULK INSERT FUNCTIONS
-    # insert_employability_bulk,
+    insert_employability_bulk,
     
     # UPDATE FUNCTIONS
     update_employability,
@@ -184,7 +184,7 @@ def get_employability_records_by_status(
             FROM silver.hr_demographics demo
             JOIN silver.hr_tenure tenure 
                 ON demo.employee_id = tenure.employee_id
-            JOIN public.checker_status_log csl
+            JOIN public.record_status csl
                 ON demo.employee_id = csl.record_id
             JOIN ref.company_main cm
                 ON demo.company_id = cm.company_id
@@ -214,7 +214,7 @@ def get_parental_leave_records_by_status(
         query = text("""
             SELECT pl.*, cm.company_name, csl.status_id
             FROM silver.hr_parental_leave pl
-            JOIN public.checker_status_log csl
+            JOIN public.record_status csl
                 ON pl.parental_leave_id = csl.record_id
             JOIN silver.hr_demographics demo
                 ON pl.employee_id = demo.employee_id
@@ -246,7 +246,7 @@ def get_safety_workdata_records_by_status(
         query = text("""
             SELECT swd.*, cm.company_name, csl.status_id
             FROM silver.hr_safety_workdata swd
-            JOIN public.checker_status_log csl
+            JOIN public.record_status csl
                 ON swd.safety_workdata_id = csl.record_id
             JOIN ref.company_main cm
                 ON swd.company_id = cm.company_id
@@ -275,7 +275,7 @@ def get_occupational_safety_health_records_by_status(
         query = text("""
             SELECT osh.*, cm.company_name, csl.status_id
             FROM silver.hr_occupational_safety_health osh
-            JOIN public.checker_status_log csl
+            JOIN public.record_status csl
                 ON osh.osh_id = csl.record_id
             JOIN ref.company_main cm
                 ON osh.company_id = cm.company_id
@@ -305,7 +305,7 @@ def get_training_records_by_status(
         query = text("""
             SELECT tr.*, cm.company_name, csl.status_id
             FROM silver.hr_training tr
-            JOIN public.checker_status_log csl
+            JOIN public.record_status csl
                 ON tr.training_id = csl.record_id
             JOIN ref.company_main cm
                 ON tr.company_id = cm.company_id
@@ -549,7 +549,86 @@ def single_upload_occupational_safety_health_record(data: dict, db: Session = De
     
 # ====================== ADD BULK RECORD ====================== 
 # --- EMPLOYABILITY ---
+@router.post("/bulk_upload_employability")
+def bulk_upload_employability(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info("Add bulk employability data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
 
+        required_columns = {'employee_id', 'gender', 'birthdate', 'position_id', 'p_np', 'company_id', 'employment_status', 'start_date', 'end_date'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {required_columns - set(df.columns)}"
+            )
+            
+        rows_demo = []
+        rows_tenure = []
+        validation_errors = []
+
+        for i, row in df.iterrows():
+            row_number = i + 2  # Excel row number
+
+            # # Validate company_id
+            # if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+            #     validation_errors.append(f"Row {row_number}: Invalid company_id")
+            #     continue
+
+            # # Validate cp_name
+            # if not isinstance(row["cp_name"], str) or not row["cp_name"].strip():
+            #     validation_errors.append(f"Row {row_number}: Invalid cp_name")
+            #     continue
+
+            # # Validate consumption
+            # if not isinstance(row["consumption"], (int, float)) or row["consumption"] < 0:
+            #     validation_errors.append(f"Row {row_number}: Invalid consumption")
+            #     continue
+
+            # Validate and parse date
+            try:
+                birthdate = pd.to_datetime(row["birthdate"]).date()
+                start_date = pd.to_datetime(row["start_date"]).date()
+                end_date = pd.to_datetime(row["end_date"]).date()
+            except (ValueError, TypeError):
+                validation_errors.append(f"Row {row_number}: Invalid date format.")
+                continue
+
+            rows_demo.append({
+                "employee_id": str(row["employee_id"]).strip(),
+                "gender": str(row["gender"]).strip(),
+                "birthdate": birthdate,
+                "position_id": str(row["position_id"]).strip(),
+                "p_np": str(row["p_np"]).strip(),
+                "company_id": str(row["company_id"]).strip(),
+                "employment_status": str(row["employment_status"]).strip()
+            })
+            rows_tenure.append({
+                "employee_id": str(row["employee_id"]).strip(),
+                "start_date": start_date,
+                "end_date": end_date
+            })
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows_demo:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
+
+        #count = insert_employability_bulk(db, rows)
+        #return {"message": f"{count} records successfully inserted."}
+        
+        return rows_demo, rows_tenure
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ====================== EDIT RECORD ====================== 
 # --- EMPLOYABILITY ---
