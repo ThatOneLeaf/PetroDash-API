@@ -17,6 +17,7 @@ import traceback
 router = APIRouter()
 
 # ====================== update status ====================== #
+# singe update status
 @router.post("/update_status")
 async def update_status(
     request: Request,
@@ -49,6 +50,41 @@ async def update_status(
         db.execute(update_stmt)
         db.commit()
         return {"message": "Status updated successfully."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+# bulk update status
+@router.post("/bulk_update_status")
+async def bulk_update_status(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    data = await request.json()
+
+    record_ids = data.get("record_ids")  # expecting a list
+    new_status = data.get("new_status")
+    remarks = data.get("remarks")  # optional
+
+    if not record_ids or not isinstance(record_ids, list) or not new_status:
+        raise HTTPException(status_code=400, detail="record_ids (list) and new_status are required.")
+
+    try:
+        update_stmt = (
+            update(RecordStatus)
+            .where(RecordStatus.record_id.in_(record_ids))
+            .values(
+                status_id=new_status,
+                status_timestamp=datetime.now(),
+                remarks=remarks if remarks else None
+            )
+        )
+
+        db.execute(update_stmt)
+        db.commit()
+
+        return {"message": f"Updated {len(record_ids)} record(s) successfully."}
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
