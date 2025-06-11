@@ -1097,6 +1097,219 @@ def get_quarterly_electric_consumption_bar_chart(
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 # DIESEL DASHBOARD
+@router.get("/diesel-pie-chart", response_model=Dict)
+def get_diesel_consumption_pie_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    property_name: Optional[Union[str, List[str]]] = Query(None),
+    property_type: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    month: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get summarized diesel consumption for pie chart by company
+    """
+    try:
+        # Convert inputs to arrays
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        property_names = property_name if isinstance(property_name, list) else [property_name] if property_name else None
+        property_types = property_type if isinstance(property_type, list) else [property_type] if property_type else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        months = month if isinstance(month, list) else [month] if month else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        print(f"Processed parameters - company_ids: {company_ids}, property_names: {property_names}, property_types: {property_types}, months: {months}, quarters: {quarters}, years: {years}")
+
+        if not company_ids or not years or (not months and not quarters):
+            return {
+                "data": [],
+                "unit": "L",
+                "message": "Missing required parameters"
+            }
+
+        # Execute the SQL function
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_diesel_consumption_by_perc_lvl(                                 
+                ARRAY[:company_ids]::text[],
+                ARRAY[:property_names]::text[],
+                ARRAY[:property_types]::text[],
+                ARRAY[:months]::text[],
+                ARRAY[:years]::smallint[],
+                ARRAY[:quarters]::text[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "property_names": property_names,
+            "property_types": property_types,
+            "months": months,
+            "years": years,
+            "quarters": quarters
+        })
+
+        rows = result.fetchall()
+        print(f"Fetched {len(rows)} rows")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "L",
+                "message": "No data found"
+            }
+
+        total = sum(row.total_consumption or 0 for row in rows)
+        print(f"Total diesel consumption: {total}")
+
+        if total == 0:
+            return {
+                "data": [],
+                "unit": rows[0].unit_of_measurement if rows else "L",
+                "message": "All values are zero"
+            }
+
+        # Color palette
+        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+
+        # Format data
+        data = []
+        for idx, row in enumerate(rows):
+            value = row.total_consumption or 0
+            percentage = (value / total) * 100 if total > 0 else 0
+            data.append({
+                "company_id": row.company_id,
+                "value": round(value, 2),
+                "percentage": round(percentage, 2),
+                "color": color_palette[idx % len(color_palette)]
+            })
+
+        return {
+            "data": [item for item in data if item["value"] > 0],
+            "unit": rows[0].unit_of_measurement if rows else "L",
+            "total_records": len(rows),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in diesel consumption pie chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/diesel-cp-chart", response_model=Dict)
+def get_diesel_consumption_by_cp_name_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    company_property_name: Optional[Union[str, List[str]]] = Query(None),
+    company_property_type: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    month: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get summarized diesel consumption for pie chart by company property
+    """
+    try:
+        print(f"Received parameters - company_id: {company_id}, property_name: {company_property_name}, property_type: {company_property_type}, quarter: {quarter}, month: {month}, year: {year}")
+
+        # Normalize input
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        property_names = company_property_name if isinstance(company_property_name, list) else [company_property_name] if company_property_name else None
+        property_types = company_property_type if isinstance(company_property_type, list) else [company_property_type] if company_property_type else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        months = month if isinstance(month, list) else [month] if month else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        print(f"Processed parameters - company_ids: {company_ids}, property_names: {property_names}, property_types: {property_types}, quarters: {quarters}, months: {months}, years: {years}")
+
+        if not company_ids or not years:
+            return {
+                "data": [],
+                "unit": "L",
+                "message": "Missing required parameters"
+            }
+
+        # Execute the stored function
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_diesel_consumption_by_cp_name(
+                ARRAY[:company_ids]::text[],
+                ARRAY[:property_names]::text[],
+                ARRAY[:property_types]::text[],
+                ARRAY[:months]::text[],
+                ARRAY[:years]::smallint[],
+                ARRAY[:quarters]::text[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "property_names": property_names,
+            "property_types": property_types,
+            "months": months,
+            "years": years,
+            "quarters": quarters
+        })
+
+        rows = result.fetchall()
+        print(f"Fetched {len(rows)} rows")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "L",
+                "message": "No data found"
+            }
+
+        # Group by property name and sum total consumption
+        property_totals = {}
+        unit = "L"
+
+        for row in rows:
+            name = row.company_property_name
+            value = float(row.total_consumption or 0)
+            unit = row.unit_of_measurement or unit
+            property_totals[name] = property_totals.get(name, 0) + value
+
+        if not property_totals:
+            return {
+                "data": [],
+                "unit": unit,
+                "message": "All values are zero"
+            }
+
+        total_consumption = sum(property_totals.values())
+        print(f"Total diesel consumption: {total_consumption}")
+
+        if total_consumption == 0:
+            return {
+                "data": [],
+                "unit": unit,
+                "message": "All values are zero"
+            }
+
+        # Prepare pie chart-ready data
+        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
+        data = []
+
+        for idx, (prop, value) in enumerate(sorted(property_totals.items(), key=lambda x: x[1], reverse=True)):
+            percentage = (value / total_consumption) * 100
+            data.append({
+                "label": f"{prop}\n{value:,.2f} {unit} ({percentage:.2f}%)",
+                "value": round(value, 2),
+                "percentage": round(percentage, 2),
+                "color": color_palette[idx % len(color_palette)]
+            })
+
+        return {
+            "data": data,
+            "unit": unit,
+            "total_records": len(property_totals),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in diesel consumption pie chart by company property:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 #diesel-years
 @router.get("/diesel-years", response_model=Dict)
 def get_distinct_diesel_years(db: Session = Depends(get_db)):
