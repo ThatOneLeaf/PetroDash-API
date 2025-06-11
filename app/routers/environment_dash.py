@@ -632,6 +632,470 @@ def get_electricity_key_metrics(
         print("Error in electricity key metrics:", str(e))
         raise HTTPException
 
+@router.get("/elec-pie-chart", response_model=Dict)
+def get_electricity_consumption_pie_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    consumption_source: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get summarized electric consumption for pie chart by company
+    """
+    try:
+        # Debug logs
+        print(f"Received parameters - company_id: {company_id}, source: {consumption_source}, quarter: {quarter}, year: {year}")
+
+        # Convert inputs to arrays
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        print(f"Processed parameters - company_ids: {company_ids}, sources: {sources}, quarters: {quarters}, years: {years}")
+
+        # Required check
+        if not company_ids or not quarters or not years:
+            return {
+                "data": [],
+                "unit": "kWh",
+                "message": "Missing required parameters"
+            }
+
+        # Execute function
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_electric_consumption_by_perc_lvl(
+                ARRAY[:company_ids]::text[], 
+                ARRAY[:sources]::text[],
+                ARRAY[:quarters]::text[], 
+                ARRAY[:years]::smallint[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "sources": sources,
+            "quarters": quarters,
+            "years": years
+        })
+
+        rows = result.fetchall()
+        print(f"Fetched {len(rows)} rows")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "kWh",
+                "message": "No data found"
+            }
+
+        # Data preparation
+        data = []
+        total = sum(row.total_consumption or 0 for row in rows)
+        print(f"Total electric consumption: {total}")
+
+        if total == 0:
+            return {
+                "data": [],
+                "unit": rows[0].unit_of_measurement if rows else "kWh",
+                "message": "All values are zero"
+            }
+
+        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]  # Extend if needed
+
+        for idx, row in enumerate(rows):
+            value = row.total_consumption or 0
+            percentage = (value / total) * 100 if total > 0 else 0
+            data.append({
+                "label": row.company_id,
+                "value": round(value, 2),
+                "percentage": round(percentage, 2),
+                "color": color_palette[idx % len(color_palette)]
+            })
+
+        return {
+            "data": [item for item in data if item["value"] > 0],
+            "unit": rows[0].unit_of_measurement if rows else "kWh",
+            "total_records": len(rows),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in electric consumption pie chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/elect-line-chart", response_model=Dict)
+def get_electricity_consumption_line_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    consumption_source: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get electric consumption data for line chart by company across years
+    """
+    try:
+        print(f"Received parameters - company_id: {company_id}, source: {consumption_source}, quarter: {quarter}, year: {year}")
+
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        print(f"Processed parameters - company_ids: {company_ids}, sources: {sources}, quarters: {quarters}, years: {years}")
+
+        if not company_ids or not years:
+            return {
+                "data": [],
+                "unit": "kWh",
+                "message": "Missing required parameters"
+            }
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_electric_consumption_by_year(
+                ARRAY[:company_ids]::text[], 
+                ARRAY[:sources]::text[],
+                ARRAY[:quarters]::text[], 
+                ARRAY[:years]::smallint[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "sources": sources,
+            "quarters": quarters,
+            "years": years
+        })
+
+        rows = result.fetchall()
+        print(f"Fetched {len(rows)} rows")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "kWh",
+                "message": "No data found"
+            }
+
+        from collections import defaultdict
+
+        company_data = defaultdict(list)
+        unit = rows[0].unit_of_measurement if rows else "kWh"
+
+        for row in rows:
+            company_data[row.company_id].append({
+                "year": int(row.year),
+                "total_consumption": float(row.total_consumption)
+            })
+
+        for company in company_data:
+            company_data[company] = sorted(company_data[company], key=lambda x: x["year"])
+
+        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]  # Extend if needed
+
+        # Map colors to company IDs (consistent ordering)
+        sorted_company_ids = sorted(company_data.keys())
+        color_map = {
+            company: color_palette[idx % len(color_palette)]
+            for idx, company in enumerate(sorted_company_ids)
+        }
+
+        return {
+            "data": company_data,
+            "colors": color_map,
+            "unit": unit,
+            "total_records": len(rows),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in electric consumption line chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/elect-perc-bar-chart", response_model=Dict)
+def get_electricity_consumption_bar_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    consumption_source: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get summarized electricity consumption for bar chart by company
+    """
+    try:
+        # Debug logs
+        print(f"Received parameters - company_id: {company_id}, source: {consumption_source}, quarter: {quarter}, year: {year}")
+
+        # Convert inputs to lists
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        print(f"Processed parameters - company_ids: {company_ids}, sources: {sources}, quarters: {quarters}, years: {years}")
+
+        if not company_ids or not quarters or not years:
+            return {
+                "data": [],
+                "unit": "kWh",
+                "message": "Missing required parameters"
+            }
+
+        # Execute function
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_electric_consumption_by_perc_lvl(
+                ARRAY[:company_ids]::text[],
+                ARRAY[:sources]::text[],
+                ARRAY[:quarters]::text[],
+                ARRAY[:years]::smallint[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "sources": sources,
+            "quarters": quarters,
+            "years": years
+        })
+
+        rows = result.fetchall()
+        print(f"Fetched {len(rows)} rows")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "kWh",
+                "message": "No data found"
+            }
+
+        # Aggregate total consumption per company
+        company_totals = {}
+        for row in rows:
+            if row.company_id in company_totals:
+                company_totals[row.company_id] += float(row.total_consumption or 0)
+            else:
+                company_totals[row.company_id] = float(row.total_consumption or 0)
+
+        # Sort in descending order
+        sorted_totals = sorted(company_totals.items(), key=lambda x: x[1], reverse=True)
+
+        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]  # Extend if needed
+
+        # Prepare response data
+        data = []
+        for idx, (company, value) in enumerate(sorted_totals):
+            data.append({
+                "label": company,
+                "value": round(value, 2),
+                "color": color_palette[idx % len(color_palette)]
+            })
+
+        return {
+            "data": data,
+            "unit": rows[0].unit_of_measurement if rows else "kWh",
+            "total_records": len(rows),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in electricity consumption bar chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/elect-source-bar-chart", response_model=Dict)
+def get_electricity_source_bar_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    consumption_source: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get summarized electric consumption by company and source for bar chart.
+    """
+    try:
+        print(f"Received parameters - company_id: {company_id}, source: {consumption_source}, quarter: {quarter}, year: {year}")
+
+        # Convert inputs to arrays
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        print(f"Processed parameters - company_ids: {company_ids}, sources: {sources}, quarters: {quarters}, years: {years}")
+
+        if not company_ids or not quarters or not years:
+            return {
+                "data": [],
+                "unit": "kWh",
+                "message": "Missing required parameters"
+            }
+
+        # Execute function
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_electric_consumption_by_source(
+                ARRAY[:company_ids]::text[],
+                ARRAY[:sources]::text[],
+                ARRAY[:quarters]::text[],
+                ARRAY[:years]::smallint[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "sources": sources,
+            "quarters": quarters,
+            "years": years
+        })
+
+        rows = result.fetchall()
+        print(f"Fetched {len(rows)} rows")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "kWh",
+                "message": "No data found"
+            }
+
+        # Prepare structured data for bar chart
+        data = []
+        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
+
+        source_color_map = {}
+        color_index = 0
+
+        for row in rows:
+            source = row.consumption_source
+            if source not in source_color_map:
+                source_color_map[source] = color_palette[color_index % len(color_palette)]
+                color_index += 1
+
+            data.append({
+                "company_id": row.company_id,
+                "source": row.consumption_source,
+                "value": float(row.total_consumption or 0),
+                "color": source_color_map[row.consumption_source]
+            })
+
+        return {
+            "data": [item for item in data if item["value"] > 0],
+            "unit": rows[0].unit_of_measurement if rows else "kWh",
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in electric consumption bar chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/elect-quarter-bar-chart", response_model=Dict)
+def get_quarterly_electric_consumption_bar_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    consumption_source: Optional[Union[str, List[str]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None)
+):
+    """
+    Get quarterly electric consumption per company for bar chart
+    """
+    try:
+        # Convert parameters to array form
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        years = year if isinstance(year, list) else [year] if year else None
+
+        # Safety check for required fields
+        if not company_ids or not quarters or not years:
+            return {
+                "data": [],
+                "unit": "",
+                "message": "Missing required parameters"
+            }
+
+        # Call stored function
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_electric_consumption_by_quarter(
+                ARRAY[:company_ids]::text[],
+                ARRAY[:sources]::text[],
+                ARRAY[:quarters]::text[],
+                ARRAY[:years]::smallint[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "sources": sources,
+            "quarters": quarters,
+            "years": years
+        })
+
+        rows = result.fetchall()
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "",
+                "message": "No data found"
+            }
+
+        # Clean and organize data
+        quarter_order = ['Q1', 'Q2', 'Q3', 'Q4']
+        valid_rows = []
+        unique_companies = set()
+
+        for row in rows:
+            if not row.year or not row.quarter or not row.total_consumption or not row.company_id:
+                continue
+
+            quarter_cleaned = str(row.quarter).upper().replace(" ", "")
+            if quarter_cleaned not in quarter_order:
+                continue
+
+            unique_companies.add(row.company_id)
+            valid_rows.append({
+                "company_id": row.company_id,
+                "quarter": quarter_cleaned,
+                "value": float(row.total_consumption),
+            })
+
+        if not valid_rows:
+            return {
+                "data": [],
+                "unit": rows[0].unit_of_measurement if rows else "",
+                "message": "No valid data after filtering"
+            }
+
+        # Assign colors
+        sorted_companies = sorted(unique_companies)
+        color_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+        company_color_dict = {
+            company: color_palette[idx % len(color_palette)]
+            for idx, company in enumerate(sorted_companies)
+        }
+
+        data = []
+        for item in valid_rows:
+            data.append({
+                "company_id": item["company_id"],
+                "quarter": item["quarter"],
+                "value": round(item["value"], 2),
+                "color": company_color_dict[item["company_id"]]
+            })
+
+        return {
+            "data": data,
+            "unit": rows[0].unit_of_measurement if rows else "",
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in /elect-quarter-bar-chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
 # DIESEL DASHBOARD
 #diesel-years
 @router.get("/diesel-years", response_model=Dict)
