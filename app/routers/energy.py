@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Form, UploadFile, File
+from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text, update, select
@@ -268,6 +269,24 @@ def get_energy_dashboard(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
+# ====================== template ====================== #
+@router.get("/download_template")
+def download_template():
+    columns = ["date", "energy_generated", "powerPlant", "metric"]
+    df = pd.DataFrame(columns=columns)
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Template")
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=energy_template.xlsx"}
+    )
+
 # ====================== energy records by id ====================== #
 @router.get("/{energy_id}", response_model=EnergyRecordOut)
 def get_energy_by_id(energy_id: str, db: Session = Depends(get_db)):
@@ -405,12 +424,13 @@ def add_energy_record(
         )
 
 
+
 # ====================== bulk add energy record ====================== #
 @router.post("/bulk_add")
 def bulk_add_energy_record(
-    powerPlant: str = Form(...),
-    checker: str = Form(...),
-    metric: str = Form(...),
+    # powerPlant: str = Form(...),
+    # checker: str = Form(...),
+    # metric: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -426,8 +446,8 @@ def bulk_add_energy_record(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {e}")
 
-    if 'date' not in df.columns or 'energy_generated' not in df.columns:
-        raise HTTPException(status_code=400, detail="Excel must contain 'date' and 'energy_generated' columns.")
+    if 'date' not in df.columns or 'energy_generated' not in df.columns or 'powerPlant' not in df.columns or 'metric' not in df.columns:
+        raise HTTPException(status_code=400, detail="Excel must contain 'date', 'energy_generated', 'powerPlant', and 'metric' columns.")
 
     # Generate base energy_id prefix for bronze.energy records
     first_id = generate_energy_id(db)
@@ -447,6 +467,8 @@ def bulk_add_energy_record(
         try:
             date_val = pd.to_datetime(row["date"], format="%Y-%m-%d").date()
             energy_val = float(row["energy_generated"])
+            powerPlant = str(row["powerPlant"])
+            metric = str(row["metric"])
         except Exception:
             raise HTTPException(status_code=400, detail=f"Invalid format at row {i+2}.")
 
@@ -489,7 +511,7 @@ def bulk_add_energy_record(
             
             new_log = RecordStatus(
                 cs_id=new_log_id,
-                checker_id=checker,
+                #checker_id=checker,
                 record_id=new_id,
                 status_id="URS",
                 status_timestamp=datetime.now(),
