@@ -2,7 +2,10 @@
 FastAPI-based REST API for PetroEnergy's data warehouse analytics.
 
 # Create virtual environment
+# on Windows
 python -m venv venv
+# on Lunix
+python3 -m venv venv
 
 # Activate virtual environment
 # On Windows:
