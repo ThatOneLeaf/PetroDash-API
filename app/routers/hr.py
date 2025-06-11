@@ -26,16 +26,16 @@ from app.bronze.crud import (
     insert_training,
     # BULK INSERT FUNCTIONS
     insert_employability_bulk,
-    
+    insert_parental_leave_bulk,
+    insert_safety_workdata_bulk,
+    insert_occupational_safety_health_bulk,
+    insert_training_bulk,
     # UPDATE FUNCTIONS
     update_employability,
     update_safety_workdata,
     update_parental_leave,
     update_occupational_safety_health,
     update_training,
-    
-    # FOR DEBUGGING PURPOSES
-    hr_debug
 )
 from app.bronze.schemas import (
     HRDemographicsOut,
@@ -566,48 +566,34 @@ def bulk_upload_employability(file: UploadFile = File(...), db: Session = Depend
                 detail=f"Missing required columns: {required_columns - set(df.columns)}"
             )
             
-        rows_demo = []
-        rows_tenure = []
+        rows = []
         validation_errors = []
 
         for i, row in df.iterrows():
             row_number = i + 2  # Excel row number
 
-            # # Validate company_id
-            # if not isinstance(row["company_id"], str) or not row["company_id"].strip():
-            #     validation_errors.append(f"Row {row_number}: Invalid company_id")
-            #     continue
-
-            # # Validate cp_name
-            # if not isinstance(row["cp_name"], str) or not row["cp_name"].strip():
-            #     validation_errors.append(f"Row {row_number}: Invalid cp_name")
-            #     continue
-
-            # # Validate consumption
-            # if not isinstance(row["consumption"], (int, float)) or row["consumption"] < 0:
-            #     validation_errors.append(f"Row {row_number}: Invalid consumption")
-            #     continue
-
+            # INSERT VALIDATION FOR GENDER, POSITION ID, P_NP, COMPANY ID, AND EMPLOYMENT STATUS
+            
             # Validate and parse date
             try:
                 birthdate = pd.to_datetime(row["birthdate"]).date()
                 start_date = pd.to_datetime(row["start_date"]).date()
-                end_date = pd.to_datetime(row["end_date"]).date()
+                if pd.isnull(row["end_date"]) or row["end_date"] in ["", "NaT"]:
+                    end_date = None
+                else:
+                    end_date = pd.to_datetime(row["end_date"]).date()
             except (ValueError, TypeError):
                 validation_errors.append(f"Row {row_number}: Invalid date format.")
                 continue
 
-            rows_demo.append({
+            rows.append({
                 "employee_id": str(row["employee_id"]).strip(),
                 "gender": str(row["gender"]).strip(),
                 "birthdate": birthdate,
                 "position_id": str(row["position_id"]).strip(),
                 "p_np": str(row["p_np"]).strip(),
                 "company_id": str(row["company_id"]).strip(),
-                "employment_status": str(row["employment_status"]).strip()
-            })
-            rows_tenure.append({
-                "employee_id": str(row["employee_id"]).strip(),
+                "employment_status": str(row["employment_status"]).strip(),
                 "start_date": start_date,
                 "end_date": end_date
             })
@@ -616,13 +602,236 @@ def bulk_upload_employability(file: UploadFile = File(...), db: Session = Depend
             error_message = "Data validation failed:\n" + "\n".join(validation_errors)
             raise HTTPException(status_code=422, detail=error_message)
 
-        if not rows_demo:
+        if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        #count = insert_employability_bulk(db, rows)
-        #return {"message": f"{count} records successfully inserted."}
-        
-        return rows_demo, rows_tenure
+        count = insert_employability_bulk(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_safety_workdata")
+def bulk_upload_safety_workdata(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info("Add bulk safety workdata")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        required_columns = {'company_id', 'contractor', 'date', 'manpower', 'manhours'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {required_columns - set(df.columns)}"
+            )
+            
+        rows = []
+        validation_errors = []
+
+        for i, row in df.iterrows():
+            row_number = i + 2  # Excel row number
+
+            # INSERT VALIDATION FOR COMPANY_ID, MANPOWER, AND MANHOURS
+            
+            # Validate and parse date
+            try:
+                date = pd.to_datetime(row["date"]).date()
+            except (ValueError, TypeError):
+                validation_errors.append(f"Row {row_number}: Invalid date format.")
+                continue
+
+            rows.append({
+                "company_id": str(row["company_id"]).strip(),
+                "contractor": str(row["contractor"]),
+                "date": date,
+                "manpower": int(row["manpower"]),
+                "manhours": int(row["manhours"])
+            })
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
+
+        count = insert_safety_workdata_bulk(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_parental_leave")
+def bulk_upload_parental_leave(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info("Add bulk parental leave")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        required_columns = {'employee_id', 'type_of_leave', 'date', 'days'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {required_columns - set(df.columns)}"
+            )
+            
+        rows = []
+        validation_errors = []
+
+        for i, row in df.iterrows():
+            row_number = i + 2  # Excel row number
+
+            # INSERT VALIDATION FOR COMPANY_ID, MANPOWER, AND MANHOURS
+            
+            # Validate and parse date
+            try:
+                date = pd.to_datetime(row["date"]).date()
+            except (ValueError, TypeError):
+                validation_errors.append(f"Row {row_number}: Invalid date format.")
+                continue
+
+            rows.append({
+                "employee_id": str(row["employee_id"]).strip(),
+                "type_of_leave": str(row["type_of_leave"]).strip(),
+                "date": date,
+                "days": int(row["days"]),
+            })
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
+
+        count = insert_parental_leave_bulk(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_upload_training")
+def bulk_upload_training(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info("Add bulk training")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        required_columns = {'company_id', 'date', 'training_title', 'training_hours', 'number_of_participants'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {required_columns - set(df.columns)}"
+            )
+            
+        rows = []
+        validation_errors = []
+
+        for i, row in df.iterrows():
+            row_number = i + 2  # Excel row number
+
+            # INSERT VALIDATION FOR COMPANY_ID, TRAINING HOURS, AND NUMBER OF PARTICIPANTS
+            
+            # Validate and parse date
+            try:
+                date = pd.to_datetime(row["date"]).date()
+            except (ValueError, TypeError):
+                validation_errors.append(f"Row {row_number}: Invalid date format.")
+                continue
+
+            rows.append({
+                "company_id": str(row["company_id"]).strip(),
+                "date": date,
+                "training_title": str(row["training_title"]),
+                "training_hours": int(row["training_hours"]),
+                "number_of_participants": int(row["number_of_participants"])
+            })
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
+
+        count = insert_training_bulk(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/bulk_occupational_safety_health")
+def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info("Add bulk occupational safety health")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        required_columns = {'company_id', 'workforce_type', 'lost_time', 'date', 'incident_type', 'incident_title', 'incident_count'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {required_columns - set(df.columns)}"
+            )
+            
+        rows = []
+        validation_errors = []
+
+        for i, row in df.iterrows():
+            row_number = i + 2  # Excel row number
+
+            # INSERT VALIDATION FOR COMPANY_ID, WORKFORCE_TYPE, LOST_TIME, INCIDENT_TYPE, AND INCIDENT_COUNT
+            
+            # Validate and parse date
+            try:
+                date = pd.to_datetime(row["date"]).date()
+            except (ValueError, TypeError):
+                validation_errors.append(f"Row {row_number}: Invalid date format.")
+                continue
+
+            rows.append({
+                "company_id": str(row["company_id"]).strip(),
+                "workforce_type": str(row["workforce_type"]),
+                "lost_time": str(row["lost_time"]).strip(),
+                "date": date,
+                "incidet_type": str(row["incident_type"]),
+                "incident_title": str(row["incident_title"]),
+                "incident_count": int(row["incident_count"])
+            })
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
+
+        count = insert_occupational_safety_health_bulk(db, rows)
+        return {"message": f"{count} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -908,35 +1117,3 @@ async def download_economic_generated_template():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
-    
-# ============== DEBUG ===============
-@router.post("/training_debug")
-def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
-    try:
-        logging.info("Add single training record")
-
-        required_fields = ['company_id', 'date', 'training_title', 'training_hours', 'number_of_participants']
-        missing = [field for field in required_fields if field not in data]
-        if missing:
-            raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
-
-        if not isinstance(data["company_id"], str) or not data["company_id"].strip():
-            raise HTTPException(status_code=422, detail="Invalid company_id")
-
-        record = {
-            "company_id": data["company_id"],
-            "date": data["date"],
-            "training_title": data["training_title"],
-            "training_hours": int(data["training_hours"]),
-            "number_of_participants": int(data["number_of_participants"]),
-        }
-
-        hr_debug(db, record)
-
-        return hr_debug(db, record)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
