@@ -12,6 +12,48 @@ from io import BytesIO
 from datetime import datetime
 from typing import Optional, List
 from app.dependencies import get_db
+from collections import defaultdict
+
+import hashlib
+import random
+
+def generate_unique_color_map(property_names, palette=None):
+    property_names = sorted(set(property_names))  # remove duplicates and sort
+
+    if palette is None:
+        palette = [
+            "#6a3d9a",  # deep purple
+            "#b15928",  # brown
+            "#2ca02c",  # green
+            "#d62728",  # red
+            "#67a5bd",  # muted violet
+            "#8c564b",  # saddle brown
+            "#e377c2",  # pink
+            "#7f7f7f",  # gray
+            "#bcbd22",  # olive yellow
+            "#c5b0d5",  # lavender
+            "#c49c94",  # beige
+            "#f7b6d2",  # light pink
+            "#c7c7c7",  # light gray
+            "#dbdb8d",  # yellow green
+            "#17a768",  # teal green
+            "#993366",  # plum
+            "#6d904f",  # moss green
+            "#8c6d31",  # ochre
+            "#9e0142",  # dark rose
+            "#bf812d"   # golden brown
+        ]
+
+    if len(property_names) > len(palette):
+        # Generate more colors if not enough
+        def random_color():
+            return "#{:06x}".format(random.randint(0, 0xFFFFFF))
+        while len(palette) < len(property_names):
+            color = random_color()
+            if color not in palette:
+                palette.append(color)
+
+    return {name: palette[i] for i, name in enumerate(property_names)}
 
 router = APIRouter()
     
@@ -1205,13 +1247,7 @@ def get_diesel_consumption_by_cp_name_chart(
     month: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None)
 ):
-    """
-    Get summarized diesel consumption for pie chart by company property
-    """
     try:
-        print(f"Received parameters - company_id: {company_id}, property_name: {company_property_name}, property_type: {company_property_type}, quarter: {quarter}, month: {month}, year: {year}")
-
-        # Normalize input
         company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
         property_names = company_property_name if isinstance(company_property_name, list) else [company_property_name] if company_property_name else None
         property_types = company_property_type if isinstance(company_property_type, list) else [company_property_type] if company_property_type else None
@@ -1219,18 +1255,177 @@ def get_diesel_consumption_by_cp_name_chart(
         months = month if isinstance(month, list) else [month] if month else None
         years = year if isinstance(year, list) else [year] if year else None
 
-        print(f"Processed parameters - company_ids: {company_ids}, property_names: {property_names}, property_types: {property_types}, quarters: {quarters}, months: {months}, years: {years}")
-
         if not company_ids or not years:
+            return {"data": [], "unit": "L", "message": "Missing required parameters"}
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_diesel_consumption_by_cp_name(
+                ARRAY[:company_ids]::text[],
+                ARRAY[:property_names]::text[],
+                ARRAY[:property_types]::text[],
+                ARRAY[:months]::text[],
+                ARRAY[:years]::smallint[],
+                ARRAY[:quarters]::text[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "property_names": property_names,
+            "property_types": property_types,
+            "months": months,
+            "years": years,
+            "quarters": quarters
+        })
+
+        rows = result.fetchall()
+        if not rows:
+            return {"data": [], "unit": "L", "message": "No data found"}
+
+        property_totals = {}
+        unit = "L"
+
+        for row in rows:
+            name = row.company_property_name
+            value = float(row.total_consumption or 0)
+            unit = row.unit_of_measurement or unit
+            property_totals[name] = property_totals.get(name, 0) + value
+
+        if not property_totals:
+            return {"data": [], "unit": unit, "message": "All values are zero"}
+
+        total_consumption = sum(property_totals.values())
+        if total_consumption == 0:
+            return {"data": [], "unit": unit, "message": "All values are zero"}
+
+        # Generate consistent color mapping
+        color_map = generate_unique_color_map(property_totals.keys())
+
+        data = []
+        for prop, value in sorted(property_totals.items(), key=lambda x: x[1], reverse=True):
+            percentage = (value / total_consumption) * 100
+            data.append({
+                "label": f"{prop}\n{value:,.2f} {unit} ({percentage:.2f}%)",
+                "value": round(value, 2),
+                "percentage": round(percentage, 2),
+                "color": color_map[prop]
+            })
+
+        return {
+            "data": data,
+            "unit": unit,
+            "total_records": len(property_totals),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in diesel consumption pie chart by company property:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/diesel-line-chart", response_model=Dict)
+def get_diesel_consumption_line_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    property_name: Optional[Union[str, List[str]]] = Query(None),
+    property_type: Optional[Union[str, List[str]]] = Query(None),
+    month: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None)
+):
+    try:
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        property_names = property_name if isinstance(property_name, list) else [property_name] if property_name else None
+        property_types = property_type if isinstance(property_type, list) else [property_type] if property_type else None
+        months = month if isinstance(month, list) else [month] if month else None
+        years = year if isinstance(year, list) else [year] if year else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_diesel_consumption_by_year(
+                ARRAY[:company_ids]::text[],
+                ARRAY[:property_names]::text[],
+                ARRAY[:property_types]::text[],
+                ARRAY[:months]::text[],
+                ARRAY[:years]::smallint[],
+                ARRAY[:quarters]::text[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "property_names": property_names,
+            "property_types": property_types,
+            "months": months,
+            "years": years,
+            "quarters": quarters
+        })
+
+        rows = result.fetchall()
+        if not rows:
+            return {"data": [], "unit": "L", "message": "No data found"}
+
+        grouped = defaultdict(lambda: defaultdict(float))
+        unit = rows[0].unit_of_measurement
+
+        for row in rows:
+            grouped[row.company_property_name][row.year] += float(row.total_consumption or 0)
+
+        # Generate consistent color mapping
+        color_map = generate_unique_color_map(grouped.keys())
+
+        chart_data = []
+        for property_name, yearly_data in grouped.items():
+            sorted_years = sorted(yearly_data.items())
+            chart_data.append({
+                "property_name": property_name,
+                "color": color_map[property_name],
+                "data": [{"year": y, "total_consumption": round(v, 2)} for y, v in sorted_years]
+            })
+
+        return {
+            "data": chart_data,
+            "unit": unit,
+            "total_records": len(rows),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in diesel line chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/diesel-cp-type-chart", response_model=Dict)
+def get_diesel_consumption_by_cp_type_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    property_name: Optional[Union[str, List[str]]] = Query(None),
+    property_type: Optional[Union[str, List[str]]] = Query(None),
+    month: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None)
+):
+    """
+    Get diesel consumption summary by company_property_type (used for bar chart)
+    """
+    try:
+        print(f"Received parameters - company_id: {company_id}, property_name: {property_name}, property_type: {property_type}, month: {month}, year: {year}, quarter: {quarter}")
+
+        # Convert to list if not already
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        property_names = property_name if isinstance(property_name, list) else [property_name] if property_name else None
+        property_types = property_type if isinstance(property_type, list) else [property_type] if property_type else None
+        months = month if isinstance(month, list) else [month] if month else None
+        years = year if isinstance(year, list) else [year] if year else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+
+        if not company_ids or not years or not quarters:
             return {
                 "data": [],
                 "unit": "L",
                 "message": "Missing required parameters"
             }
 
-        # Execute the stored function
         result = db.execute(text("""
-            SELECT * FROM gold.func_environment_diesel_consumption_by_cp_name(
+            SELECT * FROM gold.func_environment_diesel_consumption_by_cp_type(
                 ARRAY[:company_ids]::text[],
                 ARRAY[:property_names]::text[],
                 ARRAY[:property_types]::text[],
@@ -1257,55 +1452,247 @@ def get_diesel_consumption_by_cp_name_chart(
                 "message": "No data found"
             }
 
-        # Group by property name and sum total consumption
-        property_totals = {}
-        unit = "L"
+        from collections import defaultdict
+        grouped = defaultdict(float)
+        unit = rows[0].unit_of_measurement
 
         for row in rows:
-            name = row.company_property_name
-            value = float(row.total_consumption or 0)
-            unit = row.unit_of_measurement or unit
-            property_totals[name] = property_totals.get(name, 0) + value
+            if row.company_property_type:
+                grouped[row.company_property_type] += float(row.total_consumption or 0)
 
-        if not property_totals:
+        if not grouped:
             return {
                 "data": [],
                 "unit": unit,
                 "message": "All values are zero"
             }
 
-        total_consumption = sum(property_totals.values())
-        print(f"Total diesel consumption: {total_consumption}")
+        sorted_data = sorted(grouped.items(), key=lambda x: x[1])
 
-        if total_consumption == 0:
-            return {
-                "data": [],
-                "unit": unit,
-                "message": "All values are zero"
-            }
+        # Custom color palettes (NOT using the previous one) 27ae60
+        palette_1 = ["#16a085", "#2c3e50", "#2980b9", "#8e44ad", "#27ae60"]
+        palette_2 = ["#f39c12", "#e67e22", "#e74c3c", "#c0392b", "#d35400"]
+        full_palette = palette_1 + palette_2
 
-        # Prepare pie chart-ready data
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
-        data = []
-
-        for idx, (prop, value) in enumerate(sorted(property_totals.items(), key=lambda x: x[1], reverse=True)):
-            percentage = (value / total_consumption) * 100
-            data.append({
-                "label": f"{prop}\n{value:,.2f} {unit} ({percentage:.2f}%)",
+        chart_data = []
+        for idx, (label, value) in enumerate(sorted_data):
+            chart_data.append({
+                "label": label,
                 "value": round(value, 2),
-                "percentage": round(percentage, 2),
-                "color": color_palette[idx % len(color_palette)]
+                "color": full_palette[idx % len(full_palette)]
             })
 
         return {
-            "data": data,
+            "data": chart_data,
             "unit": unit,
-            "total_records": len(property_totals),
+            "total_records": len(chart_data),
             "message": "Success"
         }
 
     except Exception as e:
-        print("Error in diesel consumption pie chart by company property:", str(e))
+        print("Error in diesel cp-type chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/diesel-cp-line-chart", response_model=Dict)
+def get_diesel_consumption_line_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    company_property_name: Optional[Union[str, List[str]]] = Query(None),
+    company_property_type: Optional[Union[str, List[str]]] = Query(None),
+    month: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None)
+):
+    """
+    Get diesel consumption line chart by company property per month
+    """
+    try:
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        property_names = company_property_name if isinstance(company_property_name, list) else [company_property_name] if company_property_name else None
+        property_types = company_property_type if isinstance(company_property_type, list) else [company_property_type] if company_property_type else None
+        months = month if isinstance(month, list) else [month] if month else None
+        years = year if isinstance(year, list) else [year] if year else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+
+        if not company_ids or not years:
+            return {
+                "data": [],
+                "unit": "L",
+                "message": "Missing required parameters"
+            }
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_diesel_consumption_by_month(
+                ARRAY[:company_ids]::text[],
+                ARRAY[:property_names]::text[],
+                ARRAY[:property_types]::text[],
+                ARRAY[:months]::text[],
+                ARRAY[:years]::smallint[],
+                ARRAY[:quarters]::text[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "property_names": property_names,
+            "property_types": property_types,
+            "months": months,
+            "years": years,
+            "quarters": quarters
+        })
+
+        rows = result.fetchall()
+        print(f"Fetched {len(rows)} diesel rows")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "L",
+                "message": "No data found"
+            }
+
+        grouped_data = {}
+        unit = rows[0].unit_of_measurement if rows else "L"
+
+        for row in rows:
+            year = row.year
+            month = row.month
+            property_name = row.company_property_name
+            consumption = float(row.total_consumption or 0)
+
+            if year not in grouped_data:
+                grouped_data[year] = {}
+
+            if property_name not in grouped_data[year]:
+                grouped_data[year][property_name] = {}
+
+            grouped_data[year][property_name][month] = consumption
+
+        all_properties = sorted({row.company_property_name for row in rows})
+
+        # ✅ Use generate_unique_color_map here
+        color_map = generate_unique_color_map(all_properties)
+
+        return {
+            "data": grouped_data,
+            "properties": all_properties,
+            "color_map": color_map,
+            "unit": unit,
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in diesel cp line chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/diesel-quarter-bar-chart", response_model=Dict)
+def get_diesel_quarter_bar_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    company_property_name: Optional[Union[str, List[str]]] = Query(None),
+    company_property_type: Optional[Union[str, List[str]]] = Query(None),
+    month: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None)
+):
+    """
+    Get summarized diesel consumption for bar chart by quarter
+    """
+    try:
+        print(f"Received params - company_id: {company_id}, property_name: {company_property_name}, "
+              f"property_type: {company_property_type}, month: {month}, year: {year}, quarter: {quarter}")
+
+        # Normalize parameters
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        property_names = company_property_name if isinstance(company_property_name, list) else [company_property_name] if company_property_name else None
+        property_types = company_property_type if isinstance(company_property_type, list) else [company_property_type] if company_property_type else None
+        months = month if isinstance(month, list) else [month] if month else None
+        years = year if isinstance(year, list) else [year] if year else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+
+        print(f"Processed params - company_ids: {company_ids}, property_names: {property_names}, "
+              f"property_types: {property_types}, months: {months}, years: {years}, quarters: {quarters}")
+
+        if not company_ids or not years or not quarters:
+            return {
+                "data": [],
+                "unit": "L",
+                "message": "Missing required parameters"
+            }
+
+        # Execute the database function
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_diesel_consumption_by_quarter(
+                ARRAY[:company_ids]::text[],
+                ARRAY[:property_names]::text[],
+                ARRAY[:property_types]::text[],
+                ARRAY[:months]::text[],
+                ARRAY[:years]::smallint[],
+                ARRAY[:quarters]::text[]
+            )
+        """), {
+            "company_ids": company_ids,
+            "property_names": property_names,
+            "property_types": property_types,
+            "months": months,
+            "years": years,
+            "quarters": quarters
+        })
+
+        rows = result.fetchall()
+        print(f"Fetched {len(rows)} rows from function")
+
+        if not rows:
+            return {
+                "data": [],
+                "unit": "L",
+                "message": "No data found"
+            }
+
+        # Group and sum total_consumption by quarter and property_name
+        consumption_data = {}
+        all_properties = set()
+        unit = rows[0].unit_of_measurement if rows else "L"
+
+        for row in rows:
+            qtr = row.quarter
+            prop = row.company_property_name
+            val = float(row.total_consumption or 0)
+
+            all_properties.add(prop)
+
+            if qtr not in consumption_data:
+                consumption_data[qtr] = {}
+
+            if prop not in consumption_data[qtr]:
+                consumption_data[qtr][prop] = 0
+
+            consumption_data[qtr][prop] += val
+
+        # Create color map
+        color_map = generate_unique_color_map(sorted(all_properties))
+
+        # Prepare data for frontend
+        data = []
+        for quarter_label, properties in sorted(consumption_data.items()):
+            for property_name, total in properties.items():
+                data.append({
+                    "quarter": quarter_label,
+                    "property_name": property_name,
+                    "total_consumption": round(total, 2)
+                })
+
+        return {
+            "data": data,
+            "color_map": color_map,
+            "unit": unit,
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in diesel quarter bar chart:", str(e))
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
