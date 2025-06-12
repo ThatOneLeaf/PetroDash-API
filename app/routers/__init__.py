@@ -7,6 +7,7 @@ from .environment import router as environment_router  # ✅ Must be named 'rout
 from .hr import router as hr_router
 from .csr import router as csr_router
 from .usable_apis import router as usable_apis_router
+from .environment_dash import router as environment_dash_router
 
 
 api_router = APIRouter()
@@ -17,3 +18,4 @@ api_router.include_router(environment_router, prefix="/environment", tags=["envi
 api_router.include_router(hr_router, prefix="/hr", tags=["hr"])
 api_router.include_router(csr_router, prefix="/help", tags=["help"])
 api_router.include_router(usable_apis_router, prefix="/usable_apis", tags=["usable_apis"])
+api_router.include_router(environment_dash_router, prefix="/environment_dash", tags=["environment_dash"])

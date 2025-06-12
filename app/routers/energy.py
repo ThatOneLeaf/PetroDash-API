@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Form, UploadFile, File
+from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text, update, select
 from app.bronze.crud import EnergyRecords
 from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
-from app.public.models import CheckerStatus
+from app.public.models import RecordStatus
 from app.dependencies import get_db
 from app.crud.base import get_one, get_all, get_many, get_many_filtered, get_one_filtered
 from datetime import datetime
@@ -15,6 +16,80 @@ import traceback
 
 
 router = APIRouter()
+
+def process_status_change(
+    db: Session,
+    energy_id: str,
+    checker_id: str,
+    remarks: str,
+    action: str
+):
+    # Step 1: Validate action
+    action = action.lower()
+    if action not in {"approve", "revise"}:
+        raise HTTPException(status_code=400, detail="Invalid action. Must be 'approve' or 'revise'.")
+
+    # Step 2: Verify record exists
+    record = db.query(EnergyRecords).filter(EnergyRecords.energy_id == energy_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Energy record not found.")
+
+    # Step 3: Get latest status
+    latest_status = (
+        db.query(RecordStatus)
+        .filter(RecordStatus.record_id == energy_id)
+        .order_by(RecordStatus.status_timestamp.desc())
+        .first()
+    )
+    if not latest_status:
+        raise HTTPException(status_code=404, detail="Checker status not found.")
+    
+    current_status = latest_status.status_id
+
+    # Step 4: Define transitions
+    approve_transitions = {
+        None: "URS",
+        "FRS": "URS",
+        "URS": "URH",
+        "FRH": "URH",
+        "URH": "APP",
+    }
+
+    reject_transitions = {
+        "URS": "FRS",
+        "URH": "FRH",
+    }
+
+    # Step 5: Determine next status
+    if action == "approve":
+        next_status = approve_transitions.get(current_status)
+    else:  # revise
+        next_status = reject_transitions.get(current_status)
+
+    if not next_status:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot perform '{action}' from status '{current_status}'."
+        )
+
+    latest_status.status_id = next_status
+    latest_status.status_timestamp = datetime.now()
+    latest_status.remarks = remarks
+
+    db.commit()
+    db.refresh(latest_status)
+
+    return {
+        "message": f"Status updated to '{next_status}' via '{action}'.",
+        "data": {
+            "cs_id": latest_status.cs_id,
+            "record_id": latest_status.record_id,
+            "status_id": latest_status.status_id,
+            "timestamp": latest_status.status_timestamp,
+            "remarks": latest_status.remarks
+        }
+    }
+
 
 @router.get("/energy_record", response_model=EnergyRecordOut)
 def get_energy_record(
@@ -47,27 +122,18 @@ def get_energy_records_by_status(
         logging.info(f"Fetching energy records. Filter status_id: {status_id}")
 
         query = text("""
-                WITH latest_status AS (
-                    SELECT csl.*
-                    FROM (
-                        SELECT *,
-                            ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY status_timestamp DESC) AS rn
-                        FROM public.checker_status_log
-                    ) csl
-                    WHERE csl.rn = 1
-                )
                 SELECT     
                     er.energy_id,
                     er.power_plant_id,
                     er.date_generated::date AS date_generated,
                     er.energy_generated_kwh,
                     er.co2_avoidance_kg, 
-                    pp.*, ls.status_id
+                    pp.*, rs.status_id, st.status_name, rs.remarks
                 FROM silver.csv_energy_records er
                 JOIN gold.dim_powerplant_profile pp 
                     ON pp.power_plant_id = er.power_plant_id
-                JOIN latest_status ls
-                    ON er.energy_id = ls.record_id
+                JOIN record_status rs on rs.record_id = er.energy_id
+                JOIN public.status st on st.status_id = rs.status_id
                 ORDER BY er.create_at DESC, er.date_generated DESC, er.updated_at DESC;
         """)
 
@@ -129,7 +195,97 @@ def get_fact_energy(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# ====================== dashboard ====================== #
+@router.get("/energy_dashboard", response_model=List[dict])
+def get_energy_dashboard(
+    power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
+    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
+    generation_sources: Optional[List[str]] = Query(None, alias="p_generation_source"),
+    provinces: Optional[List[str]] = Query(None, alias="p_province"),
+    months: Optional[List[int]] = Query(None, alias="p_month"),
+    quarters: Optional[List[int]] = Query(None, alias="p_quarter"),
+    years: Optional[List[int]] = Query(None, alias="p_year"),
+    x: str = Query("company_id"),
+    y: str = Query("month"),
+    v: str = Query("total_energy_generated"),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Fetching energy records.")
+        
+        query = text("""
+            SELECT * 
+            FROM gold.func_fact_energy(
+                :power_plant_ids,
+                :company_ids,
+                :generation_sources,
+                :provinces,
+                :months,
+                :quarters,
+                :years
+            );
+        """)
 
+        result = db.execute(query, {
+            "power_plant_ids": power_plant_ids,
+            "company_ids": company_ids,
+            "generation_sources": generation_sources,
+            "provinces": provinces,
+            "months": months,
+            "quarters": quarters,
+            "years": years
+        })
+
+        # Convert result to DataFrame
+        df = pd.DataFrame(result.fetchall(), columns=list(result.keys()))
+        if df.empty:
+            return []
+        df["month_name"] = df["month_name"].str.strip()
+
+
+        # Check if requested columns exist
+        for col in [x, y, v]:
+            if col not in df.columns:
+                raise HTTPException(status_code=400, detail=f"'{col}' not found in data columns.")
+
+        # Create pivot table
+        pivot = pd.pivot_table(
+            df,
+            index=["year", "month_name", y],
+            columns=x,
+            values=v,
+            aggfunc="sum",
+            fill_value=0
+        ).reset_index()
+
+        # Convert pivot to list of dicts
+        result_data = pivot.to_dict(orient="records")
+
+        logging.info(f"Pivot table generated with {len(result_data)} rows.")
+        return result_data
+
+    except Exception as e:
+        logging.error(f"Error retrieving energy records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# ====================== template ====================== #
+@router.get("/download_template")
+def download_template():
+    columns = ["date", "energy_generated", "powerPlant", "metric"]
+    df = pd.DataFrame(columns=columns)
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Template")
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=energy_template.xlsx"}
+    )
 
 # ====================== energy records by id ====================== #
 @router.get("/{energy_id}", response_model=EnergyRecordOut)
@@ -161,8 +317,8 @@ def generate_cs_id(db: Session) -> str:
 
     # Count how many records already exist for today
     count_today = (
-        db.query(CheckerStatus)
-        .filter(CheckerStatus.cs_id.like(like_pattern))
+        db.query(RecordStatus)
+        .filter(RecordStatus.cs_id.like(like_pattern))
         .count()
     )
 
@@ -170,67 +326,111 @@ def generate_cs_id(db: Session) -> str:
     return f"CS{today}{seq}"
 
 # ====================== single add energy record ====================== #
-@router.post("/add_energy_record")
+
+@router.post("/add")
 def add_energy_record(
     powerPlant: str = Form(...),
     date: str = Form(...),
     energyGenerated: float = Form(...),
     checker: str = Form(...),
     metric: str = Form(...),
+    remarks: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    # Parse date string to datetime
+    
     try:
-        parsed_date = datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+        # Parse date
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=f"Date parsing error: {str(ve)}")
 
-    # Check if record already exists for this powerPlant and date
-    existing = db.query(EnergyRecords).filter(
-        EnergyRecords.power_plant_id == powerPlant,
-        EnergyRecords.datetime == parsed_date
-    ).first()
+        # Check for existing record
+        try:
+            existing = db.query(EnergyRecords).filter(
+                EnergyRecords.power_plant_id == powerPlant,
+                EnergyRecords.datetime == parsed_date
+            ).first()
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "type": "duplicate_error",
+                        "message": f"Duplicate record: energy data for {powerPlant} on {parsed_date.strftime('%Y-%m-%d')} already exists."
+                    }
+                )
+        except Exception as db_err:
+            raise HTTPException(status_code=500, detail=f"Database query failed: {str(db_err)}")
 
-    if existing:
-        raise HTTPException(status_code=400, detail="A record for this date already exists.")
+        # Generate ID
+        try:
+            new_id = generate_energy_id(db)
+        except Exception as id_err:
+            raise HTTPException(status_code=500, detail=f"ID generation failed: {str(id_err)}")
 
-    new_id = generate_energy_id(db)
-    new_record = EnergyRecords(
-        energy_id=new_id,
-        power_plant_id=powerPlant,
-        datetime=parsed_date,
-        energy_generated=energyGenerated,
-        unit_of_measurement=metric,
-    )
-    
-    new_log_id = generate_cs_id(db)
-    new_log = CheckerStatus(
-        cs_id = new_log_id,
-        checker_id = checker,
-        record_id = new_id,
-        status_id = "PND",
-        status_timestamp = datetime.now(),
-        remarks = "Newly Added"
-    )
+        # Create record and log
+        try:
+            new_record = EnergyRecords(
+                energy_id=new_id,
+                power_plant_id=powerPlant,
+                datetime=parsed_date,
+                energy_generated=energyGenerated,
+                unit_of_measurement=metric,
+            )
+            new_log = RecordStatus(
+                cs_id="CS-" + new_id,
+                record_id=new_id,
+                status_id="URS",
+                status_timestamp=datetime.now(),
+                remarks=remarks
+            )
 
-    db.add(new_record)
-    db.add(new_log)
-    db.commit()
-    db.refresh(new_record)
-    
-    # update silver
-    db.execute(text("CALL silver.load_csv_silver();"))
-    db.commit()
+            db.add(new_record)
+            db.add(new_log)
+            db.commit()
+            db.refresh(new_record)
+        except Exception as record_err:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to insert record or log: {str(record_err)}")
 
-    return new_record
+        # Call stored procedure
+        try:
+            db.execute(text("CALL silver.load_csv_silver();"))
+            db.commit()
+        except Exception as proc_err:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Stored procedure error: {str(proc_err)}")
+
+        return {
+            "message": "Energy record successfully added.",
+            "data": {
+                "energy_id": new_record.energy_id,
+                "power_plant_id": new_record.power_plant_id,
+                "datetime": new_record.datetime,
+                "energy_generated": new_record.energy_generated,
+                "unit_of_measurement": new_record.unit_of_measurement
+            }
+        }
+
+    except HTTPException as http_err:
+        raise http_err
+
+    except Exception as e:
+        db.rollback()
+        tb = traceback.format_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error: {str(e)}\nTraceback:\n{tb}"
+        )
+
 
 
 # ====================== bulk add energy record ====================== #
-@router.post("/bulk_add_energy_record")
+@router.post("/bulk_add")
 def bulk_add_energy_record(
-    powerPlant: str = Form(...),
-    checker: str = Form(...),
-    metric: str = Form(...),
+    # powerPlant: str = Form(...),
+    # checker: str = Form(...),
+    # metric: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -246,8 +446,8 @@ def bulk_add_energy_record(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {e}")
 
-    if 'date' not in df.columns or 'energy_generated' not in df.columns:
-        raise HTTPException(status_code=400, detail="Excel must contain 'date' and 'energy_generated' columns.")
+    if 'date' not in df.columns or 'energy_generated' not in df.columns or 'powerPlant' not in df.columns or 'metric' not in df.columns:
+        raise HTTPException(status_code=400, detail="Excel must contain 'date', 'energy_generated', 'powerPlant', and 'metric' columns.")
 
     # Generate base energy_id prefix for bronze.energy records
     first_id = generate_energy_id(db)
@@ -267,6 +467,8 @@ def bulk_add_energy_record(
         try:
             date_val = pd.to_datetime(row["date"], format="%Y-%m-%d").date()
             energy_val = float(row["energy_generated"])
+            powerPlant = str(row["powerPlant"])
+            metric = str(row["metric"])
         except Exception:
             raise HTTPException(status_code=400, detail=f"Invalid format at row {i+2}.")
 
@@ -307,11 +509,11 @@ def bulk_add_energy_record(
             new_log_id = f"{cs_prefix}{str(cs_counter).zfill(3)}"
             cs_counter += 1
             
-            new_log = CheckerStatus(
+            new_log = RecordStatus(
                 cs_id=new_log_id,
-                checker_id=checker,
+                #checker_id=checker,
                 record_id=new_id,
-                status_id="PND",
+                status_id="URS",
                 status_timestamp=datetime.now(),
                 remarks="Newly Added"
             )
@@ -333,33 +535,30 @@ def bulk_add_energy_record(
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 # ====================== update status ====================== #
-@router.post("/update_status_energy")
-def update_status(
-    cs_id: str = Form(...),
-    new_status: str = Form(...),
+@router.post("/update_status")
+def change_status(
+    energy_id: str = Form(...),
+    checker_id: str = Form(...),
+    remarks: str = Form(...),
+    action: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    # update
-    update_stmt = (
-        update(CheckerStatus)
-        .where(CheckerStatus.cs_id == cs_id)
-        .values(
-            cs_id = cs_id,
-            status_id = new_status,
-            status_timestamp = datetime.now()
-        )
-    )
-
     try:
-        db.execute(update_stmt)
-        db.commit()
-        return {"message": "Status updated successfully."}
+        return process_status_change(
+            db=db,
+            energy_id=energy_id,
+            checker_id=checker_id,
+            remarks=remarks,
+            action=action
+        )
+    except HTTPException as http_err:
+        raise http_err
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # ====================== edit energy record ====================== #
-@router.post("/edit_energy_record")
+@router.post("/edit")
 def edit_energy_record(
     energy_id: str = Form(...),
     powerPlant: str = Form(...),
@@ -367,12 +566,25 @@ def edit_energy_record(
     energyGenerated: float = Form(...),
     checker: str = Form(...),
     metric: str = Form(...),
+    remarks:str=Form(...),
     db: Session = Depends(get_db),
 ):
     try:
         parsed_date = datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+    
+    
+    # Step 3: Get latest status
+    latest_status = (
+        db.query(RecordStatus)
+        .filter(RecordStatus.record_id == energy_id)
+        .order_by(RecordStatus.status_timestamp.desc())
+        .first()
+    )
+    current_status = latest_status.status_id if latest_status else None
+    new_status = "URH" if current_status in ['FRH', 'URH'] else "URS"
+
 
     # update
     update_stmt = (
@@ -388,21 +600,16 @@ def edit_energy_record(
 
     try:
         db.execute(update_stmt)
-        
-        # Add checker log
-        new_cs_id = generate_cs_id(db)
-        new_log = CheckerStatus(
-            cs_id=new_cs_id,
-            checker_id=checker,
-            record_id=energy_id,
-            status_id="PND",
-            status_timestamp=datetime.now(),
-            remarks="Edited",
-        )
-        db.add(new_log)
+
+        # Step 4: Update the existing RecordStatus
+        latest_status.status_id = new_status
+        latest_status.status_timestamp = datetime.now()
+        latest_status.remarks = remarks
 
         db.commit()
         return {"message": "Energy record updated successfully."}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+

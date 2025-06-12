@@ -52,15 +52,29 @@ def validate_company_id(company_id, db: Session):
         return False, "Company ID is required"
     
     try:
-        # Convert to string since company_id is VARCHAR in database
-        company_id_str = str(int(company_id))  # Ensure it's a valid number first, then convert to string
-        result = db.execute(text("SELECT company_id FROM ref.company_main WHERE company_id = :company_id"), 
-                          {"company_id": company_id_str})
-        if result.fetchone() is None:
-            return False, f"Company ID {company_id} does not exist"
-        return True, None
-    except (ValueError, TypeError):
-        return False, f"Company ID must be a number, got {company_id}"
+        # First try as numeric ID
+        try:
+            company_id_str = str(int(company_id))
+            result = db.execute(text("SELECT company_id FROM ref.company_main WHERE company_id = :company_id"), 
+                              {"company_id": company_id_str})
+            if result.fetchone() is not None:
+                return True, None
+        except (ValueError, TypeError):
+            pass  # Not a number, try as text
+        
+        # Try as company name or code (case insensitive)
+        company_str = str(company_id).strip()
+        result = db.execute(text("""
+            SELECT company_id FROM ref.company_main 
+            WHERE UPPER(company_name) = UPPER(:company_id) 
+            OR UPPER(company_id) = UPPER(:company_id)
+        """), {"company_id": company_str})
+        
+        if result.fetchone() is not None:
+            return True, None
+            
+        return False, f"Company ID '{company_id}' does not exist"
+        
     except Exception as e:
         return False, f"Database error checking Company ID: {str(e)}"
 
@@ -70,15 +84,29 @@ def validate_type_id(type_id, db: Session):
         return False, "Type ID is required"
     
     try:
-        # Convert to string since type_id might be VARCHAR in database
-        type_id_str = str(int(type_id))  # Ensure it's a valid number first, then convert to string
-        result = db.execute(text("SELECT type_id FROM ref.expenditure_type WHERE type_id = :type_id"), 
-                          {"type_id": type_id_str})
-        if result.fetchone() is None:
-            return False, f"Type ID {type_id} does not exist"
-        return True, None
-    except (ValueError, TypeError):
-        return False, f"Type ID must be a number, got {type_id}"
+        # First try as numeric ID
+        try:
+            type_id_str = str(int(type_id))
+            result = db.execute(text("SELECT type_id FROM ref.expenditure_type WHERE type_id = :type_id"), 
+                              {"type_id": type_id_str})
+            if result.fetchone() is not None:
+                return True, None
+        except (ValueError, TypeError):
+            pass  # Not a number, try as text
+        
+        # Try as type description or code (case insensitive)
+        type_str = str(type_id).strip()
+        result = db.execute(text("""
+            SELECT type_id FROM ref.expenditure_type 
+            WHERE UPPER(type_description) = UPPER(:type_id) 
+            OR UPPER(type_id) = UPPER(:type_id)
+        """), {"type_id": type_str})
+        
+        if result.fetchone() is not None:
+            return True, None
+            
+        return False, f"Type ID '{type_id}' does not exist"
+        
     except Exception as e:
         return False, f"Database error checking Type ID: {str(e)}"
 
@@ -151,14 +179,24 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
                     if not valid:
                         row_errors.append(error_msg)
                         continue
-                    record_data[field] = int(value)
+                    # Convert to actual company ID for database storage
+                    actual_id = get_company_id(value, db)
+                    if actual_id is None:
+                        row_errors.append(f"Could not resolve company ID for '{value}'")
+                        continue
+                    record_data[field] = actual_id
                     
                 elif field == 'type_id' and import_config.get('validate_expenditures', False):
                     valid, error_msg = validate_type_id(value, db)
                     if not valid:
                         row_errors.append(error_msg)
                         continue
-                    record_data[field] = int(value)
+                    # Convert to actual type ID for database storage
+                    actual_id = get_type_id(value, db)
+                    if actual_id is None:
+                        row_errors.append(f"Could not resolve type ID for '{value}'")
+                        continue
+                    record_data[field] = actual_id
                     
                 elif field.endswith('_id'):
                     if value is None or value == '':
@@ -226,6 +264,77 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
         db.rollback()
         logging.error(f"Error in process_excel_import: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
+
+# Helper functions to convert text identifiers to actual IDs
+def get_company_id(company_identifier, db: Session):
+    """Convert company name/code to actual company_id"""
+    if company_identifier is None:
+        return None
+    
+    try:
+        # First try as numeric ID
+        try:
+            company_id_str = str(int(company_identifier))
+            result = db.execute(text("SELECT company_id FROM ref.company_main WHERE company_id = :company_id"), 
+                              {"company_id": company_id_str})
+            row = result.fetchone()
+            if row is not None:
+                return row.company_id
+        except (ValueError, TypeError):
+            pass  # Not a number, try as text
+        
+        # Try as company name or code (case insensitive)
+        company_str = str(company_identifier).strip()
+        result = db.execute(text("""
+            SELECT company_id FROM ref.company_main 
+            WHERE UPPER(company_name) = UPPER(:company_id) 
+            OR UPPER(company_id) = UPPER(:company_id)
+        """), {"company_id": company_str})
+        
+        row = result.fetchone()
+        if row is not None:
+            return row.company_id
+            
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error getting company ID: {str(e)}")
+        return None
+
+def get_type_id(type_identifier, db: Session):
+    """Convert type description/code to actual type_id"""
+    if type_identifier is None:
+        return None
+    
+    try:
+        # First try as numeric ID
+        try:
+            type_id_str = str(int(type_identifier))
+            result = db.execute(text("SELECT type_id FROM ref.expenditure_type WHERE type_id = :type_id"), 
+                              {"type_id": type_id_str})
+            row = result.fetchone()
+            if row is not None:
+                return row.type_id
+        except (ValueError, TypeError):
+            pass  # Not a number, try as text
+        
+        # Try as type description or code (case insensitive)
+        type_str = str(type_identifier).strip()
+        result = db.execute(text("""
+            SELECT type_id FROM ref.expenditure_type 
+            WHERE UPPER(type_description) = UPPER(:type_id) 
+            OR UPPER(type_id) = UPPER(:type_id)
+        """), {"type_id": type_str})
+        
+        row = result.fetchone()
+        if row is not None:
+            return row.type_id
+            
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error getting type ID: {str(e)}")
+        return None
 
 @router.get("/retention", response_model=List[Dict])
 def get_economic_retention(db: Session = Depends(get_db)):
@@ -985,7 +1094,7 @@ async def download_economic_generated_template():
 async def download_economic_expenditures_template():
     """Generate Excel template for economic expenditures data"""
     try:
-        headers = ['Year', 'Company ID', 'Type ID', 'Government Payments', 'Local Supplier Spending', 'Foreign Supplier Spending', 'Employee Wages & Benefits', 'Community Investments', 'Depreciation', 'Depletion', 'Others']
+        headers = ['Company ID', 'Year', 'Type ID', 'Government Payments', 'Local Supplier Spending', 'Foreign Supplier Spending', 'Employee Wages & Benefits', 'Community Investments', 'Depreciation', 'Depletion', 'Others']
         filename = 'economic_expenditures_template.xlsx'
         output = create_excel_template(headers, filename)
         
@@ -1001,7 +1110,7 @@ async def download_economic_expenditures_template():
 async def download_economic_capital_provider_template():
     """Generate Excel template for economic capital provider payments data"""
     try:
-        headers = ['Year', 'Interest Payments', 'Dividends to NCI', 'Dividends to Parent']
+        headers = ['Year', 'Interest', 'Dividends to NCI', 'Dividends to Parent']
         filename = 'economic_capital_provider_template.xlsx'
         output = create_excel_template(headers, filename)
         
@@ -1054,8 +1163,8 @@ async def import_economic_expenditures_data(file: UploadFile = File(...), db: Se
     """Import economic expenditures data from Excel file"""
     config = {
         'expected_columns': {
-            'year': ['Year'],
             'company_id': ['Company ID'],
+            'year': ['Year'],
             'type_id': ['Type ID'],
             'government_payments': ['Government Payments'],
             'supplier_spending_local': ['Local Supplier Spending'],
@@ -1066,7 +1175,7 @@ async def import_economic_expenditures_data(file: UploadFile = File(...), db: Se
             'depletion': ['Depletion'],
             'others': ['Others']
         },
-        'required_fields': ['year', 'company_id', 'type_id'],
+        'required_fields': ['company_id', 'year', 'type_id'],
         'validate_expenditures': True,
         'insert_query': """
             INSERT INTO bronze.econ_expenditures (
@@ -1099,7 +1208,7 @@ async def import_economic_capital_provider_data(file: UploadFile = File(...), db
     config = {
         'expected_columns': {
             'year': ['Year'],
-            'interest': ['Interest Payments'],
+            'interest': ['Interest'],
             'dividends_to_nci': ['Dividends to NCI'],
             'dividends_to_parent': ['Dividends to Parent']
         },
@@ -1164,4 +1273,304 @@ def get_reference_data(db: Session = Depends(get_db)):
         
     except Exception as e:
         logging.error(f"Error fetching reference data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/summary", response_model=List[Dict])
+def get_economic_summary(
+    years: str = None,
+    order_by: str = "year", 
+    order_direction: str = "ASC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get economic value summary using gold.func_economic_value_by_year
+    """
+    try:
+        # Parse years parameter
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_value_by_year(
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'totalGenerated': float(row.total_economic_value_generated) if row.total_economic_value_generated else 0,
+                'totalDistributed': float(row.total_economic_value_distributed) if row.total_economic_value_distributed else 0,
+                'valueRetained': float(row.economic_value_retained) if row.economic_value_retained else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching economic summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/generated-details", response_model=List[Dict])
+def get_generated_details(
+    years: str = None,
+    order_by: str = "year",
+    order_direction: str = "ASC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get economic value generated details using gold.func_economic_value_generated_details
+    """
+    try:
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_value_generated_details(
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'electricitySales': float(row.electricity_sales) if row.electricity_sales else 0,
+                'oilRevenues': float(row.oil_revenues) if row.oil_revenues else 0,
+                'otherRevenues': float(row.other_revenues) if row.other_revenues else 0,
+                'interestIncome': float(row.interest_income) if row.interest_income else 0,
+                'shareInNetIncomeOfAssociate': float(row.share_in_net_income_of_associate) if row.share_in_net_income_of_associate else 0,
+                'miscellaneousIncome': float(row.miscellaneous_income) if row.miscellaneous_income else 0,
+                'totalGenerated': float(row.total_economic_value_generated) if row.total_economic_value_generated else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching generated details: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/distributed-details", response_model=List[Dict])
+def get_distributed_details(
+    years: str = None,
+    order_by: str = "year",
+    order_direction: str = "ASC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get economic value distributed details using gold.func_economic_value_distributed_details
+    """
+    try:
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_value_distributed_details(
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'governmentPayments': float(row.total_government_payments) if row.total_government_payments else 0,
+                'localSupplierSpending': float(row.total_local_supplier_spending) if row.total_local_supplier_spending else 0,
+                'foreignSupplierSpending': float(row.total_foreign_supplier_spending) if row.total_foreign_supplier_spending else 0,
+                'employeeWagesBenefits': float(row.total_employee_wages_benefits) if row.total_employee_wages_benefits else 0,
+                'communityInvestments': float(row.total_community_investments) if row.total_community_investments else 0,
+                'depreciation': float(row.total_depreciation) if row.total_depreciation else 0,
+                'depletion': float(row.total_depletion) if row.total_depletion else 0,
+                'otherExpenditures': float(row.total_other_expenditures) if row.total_other_expenditures else 0,
+                'capitalProviderPayments': float(row.total_capital_provider_payments) if row.total_capital_provider_payments else 0,
+                'totalDistributed': float(row.total_economic_value_distributed) if row.total_economic_value_distributed else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching distributed details: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/company-distribution", response_model=List[Dict])
+def get_company_distribution(
+    companies: str = None,
+    years: str = None,
+    order_by: str = "percentage_of_total_distribution",
+    order_direction: str = "DESC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get economic value distribution by company using gold.func_economic_value_distribution_percentage
+    """
+    try:
+        company_array = None
+        if companies:
+            company_list = [c.strip() for c in companies.split(',') if c.strip()]
+            if company_list:
+                company_array = f"ARRAY{company_list}::VARCHAR(10)[]"
+        
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_value_distribution_percentage(
+                {company_array if company_array else 'NULL'},
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'companyName': row.company_name,
+                'totalDistributed': float(row.total_economic_value_distributed_by_company) if row.total_economic_value_distributed_by_company else 0,
+                'percentage': float(row.percentage_of_total_distribution) if row.percentage_of_total_distribution else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching company distribution: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/expenditure-by-company", response_model=List[Dict])
+def get_expenditure_by_company(
+    companies: str = None,
+    types: str = None,
+    years: str = None,
+    order_by: str = "year",
+    order_direction: str = "ASC",
+    db: Session = Depends(get_db)
+):
+    """
+    Get expenditure details by company using gold.func_economic_expenditure_by_company
+    """
+    try:
+        company_array = None
+        if companies:
+            company_list = [c.strip() for c in companies.split(',') if c.strip()]
+            if company_list:
+                company_array = f"ARRAY{company_list}::VARCHAR(10)[]"
+        
+        type_array = None
+        if types:
+            type_list = [t.strip() for t in types.split(',') if t.strip()]
+            if type_list:
+                type_array = f"ARRAY{type_list}::VARCHAR(10)[]"
+        
+        year_array = None
+        if years:
+            year_list = [int(y.strip()) for y in years.split(',') if y.strip()]
+            if year_list:
+                year_array = f"ARRAY{year_list}::SMALLINT[]"
+        
+        query = f"""
+            SELECT * FROM gold.func_economic_expenditure_by_company(
+                {company_array if company_array else 'NULL'},
+                {type_array if type_array else 'NULL'},
+                {year_array if year_array else 'NULL'},
+                '{order_by}',
+                '{order_direction}'
+            )
+        """
+        
+        result = db.execute(text(query))
+        
+        data = [
+            {
+                'year': row.year,
+                'companyName': row.company_name,
+                'typeId': row.type_id,
+                'governmentPayments': float(row.government_payments) if row.government_payments else 0,
+                'localSupplierSpending': float(row.local_supplier_spending) if row.local_supplier_spending else 0,
+                'foreignSupplierSpending': float(row.foreign_supplier_spending) if row.foreign_supplier_spending else 0,
+                'employeeWagesBenefits': float(row.employee_wages_benefits) if row.employee_wages_benefits else 0,
+                'communityInvestments': float(row.community_investments) if row.community_investments else 0,
+                'depreciation': float(row.depreciation) if row.depreciation else 0,
+                'depletion': float(row.depletion) if row.depletion else 0,
+                'otherExpenditures': float(row.other_expenditures) if row.other_expenditures else 0,
+                'totalDistributed': float(row.total_distributed_value_by_company) if row.total_distributed_value_by_company else 0
+            }
+            for row in result
+        ]
+        
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching expenditure by company: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dashboard/filter-options", response_model=Dict)
+def get_dashboard_filter_options(db: Session = Depends(get_db)):
+    """
+    Get available filter options for the dashboard
+    """
+    try:
+        # Get available years
+        years_result = db.execute(text("""
+            SELECT DISTINCT year 
+            FROM gold.vw_economic_value_summary 
+            ORDER BY year DESC
+        """))
+        years = [row.year for row in years_result]
+        
+        # Get available companies
+        companies_result = db.execute(text("""
+            SELECT DISTINCT company_id, company_name 
+            FROM ref.company_main 
+            ORDER BY company_name
+        """))
+        companies = [
+            {'id': row.company_id, 'name': row.company_name}
+            for row in companies_result
+        ]
+        
+        # Get available expenditure types
+        types_result = db.execute(text("""
+            SELECT DISTINCT type_id, type_description 
+            FROM ref.expenditure_type 
+            ORDER BY type_description
+        """))
+        types = [
+            {'id': row.type_id, 'description': row.type_description}
+            for row in types_result
+        ]
+        
+        return {
+            'years': years,
+            'companies': companies,
+            'expenditureTypes': types
+        }
+        
+    except Exception as e:
+        logging.error(f"Error fetching filter options: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 

@@ -184,6 +184,7 @@ class HRTraining(Base_silver):
     training_title = Column(TEXT, primary_key=True, index=True)
     training_hours = Column(TIMESTAMP)
     number_of_participants = Column(Numeric)
+    total_training_hours = Column(Numeric)
     
 class HRSafetyWorkdata(Base_silver):
     __tablename__ = "hr_safety_workdata"
@@ -203,6 +204,8 @@ class HRParentalLeave(Base_silver):
     type_of_leave = Column(String(50))
     date = Column(TIMESTAMP)
     days = Column(Integer)
+    end_date = Column(TIMESTAMP)
+    months_availed = Column(Integer)
     
 class HROsh(Base_silver):
     __tablename__ = "hr_occupational_safety_health"

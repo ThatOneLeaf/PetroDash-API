@@ -4,11 +4,49 @@ from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRPa
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_single_pkey_id, generate_bulk_pkey_ids
 from app.utils.gen_help_id import generate_pkey_id
-from sqlalchemy import text
+from sqlalchemy import text, desc
 from sqlalchemy.sql import text
+from sqlalchemy import func
 from datetime import datetime, timedelta
-from app.public.models import CheckerStatus
+from app.public.models import RecordStatus
+from pandas import isna
 
+# ==================== ID Generation ====================
+def id_generation(db: Session, prefix: str, table_id_column):
+    """
+    Generates unique ID with the given prefix and today's date (YYYYMMDD),
+    based on the latest existing ID in the specified table column.
+
+    Arguments:
+        prefix: The prefix for the ID (e.g., "CS", "SWD", "TR").
+        table_id_column: Table Name and Column (e.g. CheckerStatus.record_id)
+
+    Sample Call:
+        cs_id = id_generation(db, "CS", CheckerStatus.record_id)
+
+    Returns:
+        str: A new unique ID (e.g., "CS202506040001").
+    """
+    
+    # Generate CSID
+    today_str = datetime.today().strftime("%Y%m%d")
+    like_pattern = f"{prefix}{today_str}%"
+    
+    latest_id = (
+        db.query(table_id_column)
+        .filter(table_id_column.like(like_pattern))
+        .order_by(desc(table_id_column))
+        .first()
+    )
+
+    if latest_id:
+        latest_sequence = int(latest_id[0][-4:])  # last 4 characters
+    else:
+        latest_sequence = 0
+
+    new_sequence = str(latest_sequence + 1).zfill(4)
+    generated_id = f"{prefix}{today_str}{new_sequence}"
+    return generated_id
 
 # =================== POWER PLANT ENERGY DATA =================
 def get_energy_record_by_id(db: Session, energy_id: str):
@@ -110,9 +148,8 @@ def insert_csr_activity(db: Session, data: dict):
         db.rollback()
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{csr_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=csr_id,
             status_id="PND",
             status_timestamp=datetime.now(),
@@ -172,9 +209,8 @@ def update_csr_activity(db: Session, data: dict):
         db.rollback()
     
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{csr_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=csr_id,
             status_id="PND",
             status_timestamp=datetime.now(),
@@ -299,13 +335,12 @@ def insert_create_water_abstraction(db: Session, data: dict):
     db.commit()
     db.refresh(record)
 
-    # Add corresponding checker status log (FRS)
+    # Add corresponding checker status log (URS)
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wa_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=wa_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -361,11 +396,10 @@ def insert_create_water_discharge(db: Session, data: dict):
     db.refresh(record)
 
     try:
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wd_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=wd_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -418,11 +452,10 @@ def insert_create_water_consumption(db: Session, data: dict):
     db.refresh(record)
 
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{wc_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=wc_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -475,11 +508,10 @@ def insert_create_electric_consumption(db: Session, data: dict):
     db.refresh(record)
 
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{ec_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=ec_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -550,11 +582,10 @@ def insert_create_diesel_consumption(db: Session, data: dict):
     db.refresh(record)
 
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{dc_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=dc_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -608,11 +639,10 @@ def insert_create_non_hazard_waste(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{nhw_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=nhw_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -665,11 +695,10 @@ def insert_create_hazard_waste_generated(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{hwg_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=hwg_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -721,11 +750,10 @@ def insert_create_hazard_waste_disposed(db: Session, data: dict):
     db.refresh(record)
     
     try:
-        db.add(CheckerStatus(
+        db.add(RecordStatus(
             cs_id=f"CS-{hwd_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=hwd_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         ))
@@ -802,11 +830,10 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
 
         # Create checker_status_log model instance
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wa_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # Replace dynamically if needed
             record_id=wa_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -901,11 +928,10 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wd_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=wd_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1002,11 +1028,10 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{wc_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=wc_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1104,11 +1129,10 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{ec_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=ec_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1207,11 +1231,10 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{nhw_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=nhw_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1309,11 +1332,10 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{hwg_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=hwg_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1410,11 +1432,10 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{hwd_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=hwd_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1511,11 +1532,10 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         
         # Create CheckerStatus record
         status_time = base_timestamp + timedelta(hours=i + 1)
-        checker_log = CheckerStatus(
+        checker_log = RecordStatus(
             cs_id=f"CS-{dc_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",  # to be changed by the exact checker_id
             record_id=dc_id,
-            status_id="FRS",
+            status_id="URS",
             status_timestamp=status_time,
             remarks="real-data inserted"
         )
@@ -1849,6 +1869,7 @@ def get_osh_by_id(db: Session, osh_id: str):
 # =========== INSERT SINGLE DATA ===========
 # --- Employability ---
 def insert_employability(db: Session, data: dict):
+    
     record_demo = HRDemographics(
         employee_id=data["employee_id"],
         gender=data["gender"],
@@ -1861,6 +1882,21 @@ def insert_employability(db: Session, data: dict):
     db.add(record_demo)
     db.commit()
     db.refresh(record_demo)
+    
+    try:
+        checker_log = RecordStatus(
+            cs_id=f"CS-{data["employee_id"]}",
+            record_id=data["employee_id"],
+            status_id="URS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -1869,12 +1905,13 @@ def insert_employability(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
     except Exception as e:
-        print(f"Error executing stored procedure: {e}")
+        print(f"Demographics: Error executing stored procedure: {e}")
         db.rollback()
     
     record_tenure = HRTenure(
@@ -1887,7 +1924,7 @@ def insert_employability(db: Session, data: dict):
     db.refresh(record_tenure)
     try:
         db.execute(text("""
-            CALL silver.load_envi_silver(
+            CALL silver.load_hr_silver(
                 load_demographics := FALSE,
                 load_tenure := TRUE,
                 load_parental_leave := FALSE,
@@ -1898,23 +1935,42 @@ def insert_employability(db: Session, data: dict):
         """))
         db.commit()
     except Exception as e:
-        print(f"Error executing stored procedure: {e}")
+        print(f"Tenure: Error executing stored procedure: {e}")
         db.rollback()
         
     return record_demo, record_tenure
 
 # --- Safety Workdata ---
 def insert_safety_workdata(db: Session, data: dict):
+    safety_workdata_id = id_generation(db, "SWD", HRSafetyWorkdata.safety_workdata_id)
+    
     record = HRSafetyWorkdata(
+        safety_workdata_id=safety_workdata_id,
         company_id=data["company_id"],
         contractor=data["contractor"],
         date=data["date"],
         manpower=data["manpower"],
         manhours=data["manhours"]
     )
+    
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        checker_log = RecordStatus(
+            cs_id=f"CS-{safety_workdata_id}",
+            record_id=safety_workdata_id,
+            status_id="URS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -1923,7 +1979,8 @@ def insert_safety_workdata(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := TRUE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -1935,15 +1992,41 @@ def insert_safety_workdata(db: Session, data: dict):
 
 # --- Parental Leave ---
 def insert_parental_leave(db: Session, data: dict):
+    parental_leave_id = id_generation(db, "PL", HRParentalLeave.parental_leave_id)
+    
+    start_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+    num_days = int(data["days"])
+
+    end_date = start_date + timedelta(days=num_days)
+    months_availed = num_days // 30
+    
     record = HRParentalLeave(
+        parental_leave_id=parental_leave_id,
         employee_id=data["employee_id"],
         type_of_leave=data["type_of_leave"],
         date=data["date"],
-        days=data["days"]
+        days=data["days"],
+        end_date=end_date,
+        months_availed=months_availed
     )
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        checker_log = RecordStatus(
+            cs_id=f"CS-{parental_leave_id}",
+            record_id=parental_leave_id,
+            status_id="URS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -1952,7 +2035,8 @@ def insert_parental_leave(db: Session, data: dict):
                 load_parental_leave := TRUE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -1964,16 +2048,37 @@ def insert_parental_leave(db: Session, data: dict):
 
 # --- Training ---
 def insert_training(db: Session, data: dict):
+    training_id = id_generation(db, "TR", HRTraining.training_id)
+    
+    total_training_hours = int(data["training_hours"]) * int(data["number_of_participants"])
+    
     record = HRTraining(
+        training_id=training_id,
         company_id=data["company_id"],
         date=data["date"],
         training_title=data["training_title"],
         training_hours=data["training_hours"],
-        number_of_participants=data["number_of_participants"]
+        number_of_participants=data["number_of_participants"],
+        total_training_hours=total_training_hours
     )
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        checker_log = RecordStatus(
+            cs_id=f"CS-{training_id}",
+            record_id=training_id,
+            status_id="URS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -1982,7 +2087,8 @@ def insert_training(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := TRUE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -1994,7 +2100,10 @@ def insert_training(db: Session, data: dict):
 
 # --- Occupational Safety Health ---
 def insert_occupational_safety_health(db: Session, data: dict):
+    osh_id = id_generation(db, "OSH", HROsh.osh_id)
+    
     record = HROsh(
+        osh_id=osh_id,
         company_id=data["company_id"],
         workforce_type=data["workforce_type"],
         lost_time=data["lost_time"],
@@ -2006,6 +2115,21 @@ def insert_occupational_safety_health(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    try:
+        checker_log = RecordStatus(
+            cs_id=f"CS-{osh_id}",
+            record_id=osh_id,
+            status_id="URS",
+            status_timestamp=datetime.now(),
+            remarks="real-data inserted"
+        )
+        db.add(checker_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error inserting checker status log: {e}")
+        db.rollback()
+    
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -2014,7 +2138,8 @@ def insert_occupational_safety_health(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := TRUE
+                load_occupational_safety_health := TRUE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2050,7 +2175,8 @@ def update_employability(db: Session, employee_id: str, data_demo: dict, data_te
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2107,7 +2233,8 @@ def update_safety_workdata(db: Session, safety_workdata_id: str, data):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := TRUE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2136,7 +2263,8 @@ def update_parental_leave(db: Session, parental_leave_id: str, data):
                 load_parental_leave := TRUE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2165,7 +2293,8 @@ def update_occupational_safety_health(db: Session, osh_id: str, data):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := TRUE
+                load_occupational_safety_health := TRUE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2174,7 +2303,7 @@ def update_occupational_safety_health(db: Session, osh_id: str, data):
         db.rollback()
     return record
 
-# --- Occupational Safety Health ---
+# --- Training ---
 def update_training(db: Session, training_id: str, data):
     record = get_one(db, HRTraining, "training_id", training_id)
     if not record:
@@ -2194,7 +2323,8 @@ def update_training(db: Session, training_id: str, data):
                 load_parental_leave := FALSE,
                 load_training := TRUE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2205,64 +2335,77 @@ def update_training(db: Session, training_id: str, data):
 
 # ====================================== BULK INSERT HR DATA ======================================
 # --- Demographics ---
-
-def bulk_demographics(db: Session, rows: list[dict]) -> int:
+def insert_employability_bulk(db: Session, rows) -> int:
     if not rows:
         return 0
-
-    records = []
-    checker_logs = []
-
-    from collections import defaultdict
-    grouped_rows = defaultdict(list)
-
-    for i, row in enumerate(rows):
-        key = (row["employee_id"])
-        grouped_rows[key].append((i, row))
-
-    id_mapping = {}
-    for (employee_id, employee_id), row_list in grouped_rows.items():
-        ids = generate_bulk_pkey_ids(
-            db=db,
-            employee_id=employee_id,
-            model_class=HRDemographics,
-            count=len(row_list)
-        )
-
-        for (original_index, _), generated_id in zip(row_list, ids):
-            id_mapping[original_index] = generated_id
-
-    # Build abstraction records and collect logs
-    base_timestamp = datetime.now().date() - timedelta(days=1)
-
-        # Create abstraction record
-    record = HRDemographics(
-        employee_id=row["employee_id"],
-        gender=row["gender"],
-        birthdate=row["birthdate"],
-        position_id=row["position_id"],
-        p_np=row["p_np"],
-        company_id=row["company_id"],
-        employment_status=row["employment_status"]
-    )
-    records.append(record)
         
-    # Create checker_status_log insert params
-    status_time = base_timestamp + timedelta(hours=i + 1)
-    checker_logs.append({
-        "cs_id": f"CS{today_str}",
-        "checker_id": "01JW5F4N9M7E9RG9MW3VX49ES5", # to be changed by the exact checker_id
-        "record_id": employee_id,
-        "status_id": "FRS",
-        "status_timestamp": status_time,
-        "remarks": "real-data inserted"
-    })
-
-    # Insert records
-    db.bulk_save_objects(records)
+    record_demo = []
+    record_tenure = []
+    record_logs_demo = []
+    
+    base_timestamp = datetime.now()
+    for i, row in enumerate(rows):
+        # Create demographics record
+        record = HRDemographics(
+            employee_id=row["employee_id"],
+            gender=row["gender"],
+            birthdate=row["birthdate"],
+            position_id=row["position_id"],
+            p_np=row["p_np"],
+            company_id=row["company_id"],
+            employment_status=row["employment_status"]
+        )
+        record_demo.append(record)
+            
+        # Create tenure record    
+        record = HRTenure(
+            employee_id=row["employee_id"],
+            start_date=row["start_date"],
+            end_date=row["end_date"]
+        )
+        record_tenure.append(record)
+        
+        # Create RecordLog record
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        record_log = RecordStatus(
+            cs_id=f"CS-{row["employee_id"]}",
+            record_id=row["employee_id"],
+            status_id="URS",
+            status_timestamp=status_time.date(),
+            remarks="real-data inserted"
+        )
+        record_logs_demo.append(record_log)
+    
+    # Insert tenure records
+    db.bulk_save_objects(record_tenure)
+    db.commit()
+    
+    
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := TRUE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
+            )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    db.bulk_save_objects(record_demo)
     db.commit()
 
-    # Call stored procedure
+    # Call the stored procedure after inserting data
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -2271,40 +2414,319 @@ def bulk_demographics(db: Session, rows: list[dict]) -> int:
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
+        
         db.commit()
         print("Stored procedure executed successfully")
+        
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-
-    # Insert checker_status_log entries
+    
+    # Insert record_status_log entries using RecordStatus model
     try:
-        insert_sql = text("""
-            INSERT INTO checker_status_log (
-                cs_id,
-                checker_id,
-                record_id,
-                status_id,
-                status_timestamp,
-                remarks
-            ) VALUES (
-                :cs_id,
-                :checker_id,
-                :record_id,
-                :status_id,
-                :status_timestamp,
-                :remarks
-            )
-        """)
-
-        db.execute(insert_sql, checker_logs)  # this is the correct executemany usage
+        db.bulk_save_objects(record_logs_demo)
         db.commit()
         print("Checker status logs inserted.")
     except Exception as e:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
+    
+    return len(record_demo)
 
+# --- Safety Workdata ---
+def insert_safety_workdata_bulk (db:Session, rows) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    record_logs = []
+    
+    base_timestamp = datetime.now()
+    for i, row in enumerate(rows):
+        safety_workdata_id = id_generation(db, "SWD", HRSafetyWorkdata.safety_workdata_id)
+        # Create demographics record
+        record = HRSafetyWorkdata(
+            safety_workdata_id=safety_workdata_id,
+            company_id=row["company_id"],
+            contractor=row["contractor"],
+            date = row["date"],
+            manpower = row["manpower"],
+            manhours = row["manhours"],
+        )
+        records.append(record)
+        
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        record_log = RecordStatus(
+            cs_id=f"CS-{safety_workdata_id}",
+            record_id=safety_workdata_id,
+            status_id="URS",
+            status_timestamp=status_time.date(),
+            remarks="real-data inserted"
+        )
+        record_logs.append(record_log)
+        
+    # Insert safety workdata records
+    db.bulk_save_objects(records)
+    db.commit()
+    
+    
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := TRUE,
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
+            )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    
+    # Insert record_status_log entries using RecordStatus model
+    try:
+        db.bulk_save_objects(record_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+    
+    return len(records)
+
+# --- Parental Leave ---
+def insert_parental_leave_bulk (db:Session, rows) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    record_logs = []
+    
+    base_timestamp = datetime.now()
+    for i, row in enumerate(rows):
+        parental_leave_id = id_generation(db, "PL", HRParentalLeave.parental_leave_id)
+        
+        start_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
+        num_days = int(row["days"])
+
+        end_date = start_date + timedelta(days=num_days)
+        months_availed = num_days // 30
+        
+        # Create demographics record
+        record = HRParentalLeave(
+            parental_leave_id=parental_leave_id,
+            employee_id=row["employee_id"],
+            type_of_leave=row["type_of_leave"],
+            date=row["date"],
+            days=row["days"],
+            end_date=end_date,
+            months_availed=months_availed
+        )
+        records.append(record)
+        
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        record_log = RecordStatus(
+            cs_id=f"CS-{parental_leave_id}",
+            record_id=parental_leave_id,
+            status_id="URS",
+            status_timestamp=status_time.date(),
+            remarks="real-data inserted"
+        )
+        record_logs.append(record_log)
+        
+    # Insert parental leave records
+    db.bulk_save_objects(records)
+    db.commit()
+    
+    
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := TRUE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
+            )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    
+    # Insert record_status_log entries using RecordStatus model
+    try:
+        db.bulk_save_objects(record_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+    
+    return len(records)
+
+# --- Occupational Safety Health ---
+def insert_occupational_safety_health_bulk (db:Session, rows) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    record_logs = []
+    
+    base_timestamp = datetime.now()
+    for i, row in enumerate(rows):
+        osh_id = id_generation(db, "OSH", HROsh.osh_id)
+        
+        # Create occupational safety health record
+        record = HROsh(
+            osh_id=osh_id,
+            company_id=row["company_id"],
+            workforce_type=row["workforce_type"],
+            lost_time=row["lost_time"],
+            date=row["date"],
+            incident_type=row["incident_type"],
+            incident_title=row["incident_title"],
+            incident_count=row["incident_count"]
+        )
+        records.append(record)
+        
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        record_log = RecordStatus(
+            cs_id=f"CS-{osh_id}",
+            record_id=osh_id,
+            status_id="URS",
+            status_timestamp=status_time.date(),
+            remarks="real-data inserted"
+        )
+        record_logs.append(record_log)
+        
+    # Insert occupational safety health records
+    db.bulk_save_objects(records)
+    db.commit()
+    
+    
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := TRUE,
+                load_from_sql := FALSE
+            )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    
+    # Insert record_status_log entries using RecordStatus model
+    try:
+        db.bulk_save_objects(record_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+    
+    return len(records)
+
+# --- Training ---
+def insert_training_bulk (db:Session, rows) -> int:
+    if not rows:
+        return 0
+        
+    records = []
+    record_logs = []
+    
+    base_timestamp = datetime.now()
+    for i, row in enumerate(rows):
+        training_id = id_generation(db, "TR", HRTraining.training_id)
+        total_training_hours = int(row["training_hours"]) * int(row["number_of_participants"])
+        
+        # Create training record
+        record = HROsh(
+            training_id=training_id,
+            company_id=row["company_id"],
+            date=row["date"],
+            training_title=row["training_title"],
+            training_hours=row["training_hours"],
+            number_of_participants=row["number_of_participants"],
+            total_training_hours=total_training_hours
+        )
+        records.append(record)
+        
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        record_log = RecordStatus(
+            cs_id=f"CS-{training_id}",
+            record_id=training_id,
+            status_id="URS",
+            status_timestamp=status_time.date(),
+            remarks="real-data inserted"
+        )
+        record_logs.append(record_log)
+        
+    # Insert occupational safety health records
+    db.bulk_save_objects(records)
+    db.commit()
+    
+    
+    # Call the stored procedure after inserting data
+    try:
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := FALSE,
+                load_parental_leave := FALSE,
+                load_training := TRUE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
+            )
+        """))
+        
+        db.commit()
+        print("Stored procedure executed successfully")
+        
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+        
+    
+    # Insert record_status_log entries using RecordStatus model
+    try:
+        db.bulk_save_objects(record_logs)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+    
     return len(records)

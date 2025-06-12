@@ -8,11 +8,11 @@ metadata = MetaData(schema="public")
 Base = declarative_base(metadata=metadata)
 
 #============================ Checker Status ============================
-class CheckerStatus(Base):
-    __tablename__ = "checker_status_log"
+class RecordStatus(Base):
+    __tablename__ = "record_status"
     
     cs_id = Column(String(20), primary_key=True, index=True)
-    checker_id = Column(String(26), index=True)
+    #checker_id = Column(String(26), index=True)
     record_id = Column(String(20))  # TEXT in SQL, so String here
     status_id = Column(String(3))
     status_timestamp = Column(TIMESTAMP, server_default=func.current_timestamp())
