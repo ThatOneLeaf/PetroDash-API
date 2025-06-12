@@ -211,16 +211,23 @@ def get_csr_activities(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/activities-specific", response_model=Dict)
-def get_csr_activity_specific(
-    project_id: str = Query(..., alias="projectId"),
+@router.get("/activities-specific", response_model=List[Dict])
+def get_csr_activities(
+    year: Optional[int] = None,
+    company_id: Optional[str] = None,
+    program_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
-    Get a single CSR activity by project_id
+    Get CSR activities with optional filters
+    Returns list of activities with company, project, and program information
     """
     try:
-        result = db.execute(text("""
+        logging.info(f"Executing CSR activities query with filters - year: {year}, company_id: {company_id}, program_id: {program_id}")
+
+        where_clause = "WHERE csr_id = '" + {csr_id} + "'"
+
+        result = db.execute(text(f"""
             SELECT 
                 ca.csr_id,
                 ca.company_id,
@@ -244,79 +251,32 @@ def get_csr_activity_specific(
             JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
             JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
             JOIN public.checker_status_log as csl ON csl.record_id = ca.csr_id
-            WHERE ca.project_id = :project_id
-            LIMIT 1
-        """), {"project_id": project_id})
+            {where_clause}
+        """), params)
 
-        row = result.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="CSR activity not found")
-
-        data = {
-            'csrId': row.csr_id,
-            'companyId': row.company_id,
-            'companyName': row.company_name,
-            'programId': row.program_id,
-            'programName': row.program_name,
-            'projectId': row.project_id,
-            'projectName': row.project_name,
-            'projectYear': row.project_year,
-            'csrReport': float(row.csr_report) if row.csr_report else 0,
-            'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
-            'statusId': row.status_id
-        }
+        data = [
+            {
+                'csrId': row.csr_id,
+                'companyId': row.company_id,
+                'companyName': row.company_name,
+                'programId': row.program_id,
+                'programName': row.program_name,
+                'projectId': row.project_id,
+                'projectName': row.project_name,
+                'projectYear': row.project_year,
+                'csrReport': float(row.csr_report) if row.csr_report else 0,
+                'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
+                'statusId': row.status_id
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} CSR activities")
         return data
-
+        
     except Exception as e:
-        logging.error(f"Error fetching CSR activity: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/activities-update")
-def update_csr_activity(data: dict, db: Session = Depends(get_db)):
-    try:
-        logging.info("Update single csr activity record")
-        CURRENT_YEAR = datetime.now().year
-
-        # Accept both camelCase and snake_case
-        def get_field(d, *names):
-            for n in names:
-                if n in d:
-                    return d[n]
-            return None
-
-        company_id = get_field(data, "company_id", "companyId")
-        project_id = get_field(data, "project_id", "projectId")
-        project_year = get_field(data, "project_year", "projectYear")
-        csr_report = get_field(data, "csr_report", "csrReport")
-        project_expenses = get_field(data, "project_expenses", "projectExpenses")
-
-        required_fields = [company_id, project_id, project_year, csr_report, project_expenses]
-        if any(x is None for x in required_fields):
-            raise HTTPException(status_code=400, detail="Missing required fields.")
-
-        # Validate fields as before...
-
-        record = {
-            "company_id": company_id,
-            "project_id": project_id,
-            "project_year": int(project_year),
-            "csr_report": int(csr_report),
-            "project_expenses": float(project_expenses)
-        }
-
-        # Call your update logic here (e.g., update_csr_activity(db, record))
-        # For now, just log and return success
-        logging.info(f"Updating CSR activity: {record}")
-
-        # TODO: Implement actual update logic
-
-        return {"message": "Record successfully updated."}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        logging.error(f"Error updating CSR activity: {str(e)}")
+        logging.error(f"Error fetching CSR activities: {str(e)}")
+        logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/activities-single")
