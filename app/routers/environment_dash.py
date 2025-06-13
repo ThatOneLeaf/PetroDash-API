@@ -71,13 +71,36 @@ def get_water_abstraction(
     Get total water abstraction volume by year
     """
     try:
-        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
-        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
-        years = year if isinstance(year, list) else [year] if year else None
+        # Convert parameters to proper format
+        company_ids = None
+        if company_id:
+            if isinstance(company_id, list):
+                company_ids = [str(cid) for cid in company_id if cid is not None]
+            else:
+                company_ids = [str(company_id)]
+        
+        quarters = None
+        if quarter:
+            if isinstance(quarter, list):
+                quarters = [str(q) for q in quarter if q is not None]
+            else:
+                quarters = [str(quarter)]
+        
+        years = None  
+        if year:
+            if isinstance(year, list):
+                years = [int(y) for y in year if y is not None]
+            else:
+                years = [int(year)]
 
+        print(f"Abstraction request - Companies: {company_ids}, Quarters: {quarters}, Years: {years}")
+
+        # Call the unified function
         result = db.execute(text("""
-            SELECT * FROM gold.func_environment_water_abstraction_by_year(
-                :company_ids, :quarters, :years
+            SELECT * FROM gold.func_environment_water_summary(
+                CAST(:company_ids AS VARCHAR(10)[]),
+                CAST(:quarters AS VARCHAR(2)[]),
+                CAST(:years AS SMALLINT[])
             )
         """), {
             'company_ids': company_ids,
@@ -85,25 +108,27 @@ def get_water_abstraction(
             'years': years
         })
 
-        data = [
-            {
-                key: float(value) if isinstance(value, Decimal) else value
-                for key, value in row._mapping.items()
-            }
-            for row in result
-        ]
+        data = result.fetchall()
+        
+        # Sum up all abstraction volumes
+        total_volume = 0
+        for row in data:
+            abstraction_vol = row.total_abstracted_volume or 0
+            total_volume += float(abstraction_vol)
 
-        total_volume = sum(row['total_volume'] for row in data)
-        unit = data[0]['unit'] if data else 'cubic meters'
+        print(f"Total abstraction volume: {total_volume}")
 
         return {
             'total_volume': round(total_volume, 2),
-            'unit': unit
+            'unit': 'cubic meters'
         }
 
     except Exception as e:
-        print("Error in water abstraction:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error in water abstraction: {str(e)}")
+        return {
+            'total_volume': 0.0,
+            'unit': 'cubic meters'
+        }
 
 @router.get("/discharge", response_model=Dict)
 def get_water_discharge(
@@ -116,13 +141,36 @@ def get_water_discharge(
     Get total water discharge volume by year
     """
     try:
-        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
-        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
-        years = year if isinstance(year, list) else [year] if year else None
+        # Convert parameters to proper format
+        company_ids = None
+        if company_id:
+            if isinstance(company_id, list):
+                company_ids = [str(cid) for cid in company_id if cid is not None]
+            else:
+                company_ids = [str(company_id)]
+        
+        quarters = None
+        if quarter:
+            if isinstance(quarter, list):
+                quarters = [str(q) for q in quarter if q is not None]
+            else:
+                quarters = [str(quarter)]
+        
+        years = None  
+        if year:
+            if isinstance(year, list):
+                years = [int(y) for y in year if y is not None]
+            else:
+                years = [int(year)]
 
+        print(f"Discharge request - Companies: {company_ids}, Quarters: {quarters}, Years: {years}")
+
+        # Call the unified function
         result = db.execute(text("""
-            SELECT * FROM gold.func_environment_water_discharge_by_year(
-                :company_ids, :quarters, :years
+            SELECT * FROM gold.func_environment_water_summary(
+                CAST(:company_ids AS VARCHAR(10)[]),
+                CAST(:quarters AS VARCHAR(2)[]),
+                CAST(:years AS SMALLINT[])
             )
         """), {
             'company_ids': company_ids,
@@ -130,25 +178,27 @@ def get_water_discharge(
             'years': years
         })
 
-        data = [
-            {
-                key: float(value) if isinstance(value, Decimal) else value
-                for key, value in row._mapping.items()
-            }
-            for row in result
-        ]
+        data = result.fetchall()
+        
+        # Sum up all discharge volumes
+        total_volume = 0
+        for row in data:
+            discharge_vol = row.total_discharged_volume or 0
+            total_volume += float(discharge_vol)
 
-        total_volume = sum(row['total_volume'] for row in data)
-        unit = data[0]['unit'] if data else 'cubic meters'
+        print(f"Total discharge volume: {total_volume}")
 
         return {
             'total_volume': round(total_volume, 2),
-            'unit': unit
+            'unit': 'cubic meters'
         }
 
     except Exception as e:
-        print("Error in water discharge:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error in water discharge: {str(e)}")
+        return {
+            'total_volume': 0.0,
+            'unit': 'cubic meters'
+        }
 
 @router.get("/consumption", response_model=Dict)
 def get_water_consumption(
@@ -161,13 +211,36 @@ def get_water_consumption(
     Get total water consumption volume by year
     """
     try:
-        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
-        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
-        years = year if isinstance(year, list) else [year] if year else None
+        # Convert parameters to proper format
+        company_ids = None
+        if company_id:
+            if isinstance(company_id, list):
+                company_ids = [str(cid) for cid in company_id if cid is not None]
+            else:
+                company_ids = [str(company_id)]
+        
+        quarters = None
+        if quarter:
+            if isinstance(quarter, list):
+                quarters = [str(q) for q in quarter if q is not None]
+            else:
+                quarters = [str(quarter)]
+        
+        years = None  
+        if year:
+            if isinstance(year, list):
+                years = [int(y) for y in year if y is not None]
+            else:
+                years = [int(year)]
 
+        print(f"Consumption request - Companies: {company_ids}, Quarters: {quarters}, Years: {years}")
+
+        # Call the unified function
         result = db.execute(text("""
-            SELECT * FROM gold.func_environment_water_consumption_by_year(
-                :company_ids, :quarters, :years
+            SELECT * FROM gold.func_environment_water_summary(
+                CAST(:company_ids AS VARCHAR(10)[]),
+                CAST(:quarters AS VARCHAR(2)[]),
+                CAST(:years AS SMALLINT[])
             )
         """), {
             'company_ids': company_ids,
@@ -175,25 +248,27 @@ def get_water_consumption(
             'years': years
         })
 
-        data = [
-            {
-                key: float(value) if isinstance(value, Decimal) else value
-                for key, value in row._mapping.items()
-            }
-            for row in result
-        ]
+        data = result.fetchall()
+        
+        # Sum up all consumption volumes
+        total_volume = 0
+        for row in data:
+            consumption_vol = row.total_consumption_volume or 0
+            total_volume += float(consumption_vol)
 
-        total_volume = sum(row['total_volume'] for row in data)
-        unit = data[0]['unit'] if data else 'cubic meters'
+        print(f"Total consumption volume: {total_volume}")
 
         return {
             'total_volume': round(total_volume, 2),
-            'unit': unit
+            'unit': 'cubic meters'
         }
 
     except Exception as e:
-        print("Error in water consumption:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error in water consumption: {str(e)}")
+        return {
+            'total_volume': 0.0,
+            'unit': 'cubic meters'
+        }
 
 # pie chart
 @router.get("/pie-chart", response_model=Dict)
