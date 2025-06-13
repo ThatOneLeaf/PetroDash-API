@@ -2395,7 +2395,7 @@ def get_hazard_waste_percentage_pie_chart(
             "years": years,
             "quarters": quarters,
             "waste_types": waste_types,
-            "units": unit
+            "unit": unit
         })
 
         rows = result.fetchall()
