@@ -149,7 +149,6 @@ def insert_csr_activity(db: Session, data: dict):
     try:
         checker_log = RecordStatus(
             cs_id=f"CS-{csr_id}",
-            checker_id="01JW5F4N9M7E9RG9MW3VX49ES5",
             record_id=csr_id,
             status_id="PND",
             status_timestamp=datetime.now(),
