@@ -87,3 +87,22 @@ def get_fact_energy(
         logging.error(f"Error calling powerplant: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+
+@router.get("/co2_equivalence", response_model=List[dict])
+def get_equivalence(
+    db: Session = Depends(get_db)
+    ):
+    try:
+        sql = text("""
+            select * from ref.ref_co2_equivalence;
+        """)
+
+        result = db.execute(sql)
+        data = [dict(row._mapping) for row in result]
+        return data
+
+    except Exception as e:
+        logging.error(f"Error calling co2_equivalence: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
