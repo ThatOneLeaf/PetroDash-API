@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Form, UploadFile, File
 from fastapi.responses import StreamingResponse
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import text, update, select
 from app.bronze.crud import EnergyRecords
@@ -196,8 +196,9 @@ def get_fact_energy(
 
 
 # ====================== dashboard ====================== #
-@router.get("/energy_dashboard", response_model=List[dict])
-def get_energy_dashboard(
+
+@router.get("/energy_dashboard_raw", response_model=List[dict])
+def get_energy_dashboard_raw(
     power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
     company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
     generation_sources: Optional[List[str]] = Query(None, alias="p_generation_source"),
@@ -205,17 +206,17 @@ def get_energy_dashboard(
     months: Optional[List[int]] = Query(None, alias="p_month"),
     quarters: Optional[List[int]] = Query(None, alias="p_quarter"),
     years: Optional[List[int]] = Query(None, alias="p_year"),
-    x: str = Query("company_id"),
-    y: str = Query("month"),
-    v: str = Query("total_energy_generated"),
+    x: Optional[str] = Query(None, alias="p_x"),  # grouping by e.g., power_plant_id
+    y: Optional[str] = Query(None, alias="p_y"),  # time granularity: monthly, quarterly, yearly
+    v: Optional[str] = Query("energy_generated_mwh", alias="p_v"),  # aggregated metric
     db: Session = Depends(get_db)
 ):
     try:
-        logging.info("Fetching energy records.")
-        
+        logging.info("Fetching raw energy records.")
+
         query = text("""
             SELECT * 
-            FROM gold.func_fact_energy(
+            FROM gold.func_fact_energy(                
                 :power_plant_ids,
                 :company_ids,
                 :generation_sources,
@@ -236,41 +237,185 @@ def get_energy_dashboard(
             "years": years
         })
 
-        # Convert result to DataFrame
-        df = pd.DataFrame(result.fetchall(), columns=list(result.keys()))
-        if df.empty:
-            return []
-        df["month_name"] = df["month_name"].str.strip()
+        rows = result.fetchall()
+        columns = result.keys()
+        data = [dict(zip(columns, row)) for row in rows]
 
+        if not x or not y or not v:
+            # Return raw data if no pivot requested
+            return data
 
-        # Check if requested columns exist
-        for col in [x, y, v]:
-            if col not in df.columns:
-                raise HTTPException(status_code=400, detail=f"'{col}' not found in data columns.")
+        df = pd.DataFrame(data)
 
-        # Create pivot table
-        pivot = pd.pivot_table(
-            df,
-            index=["year", "month_name", y],
-            columns=x,
+        # Define time group column based on y
+        if y == "monthly":
+            df["time_group"] = df["year"].astype(str) + "-" + df["month"].astype(str).str.zfill(2)
+        elif y == "quarterly":
+            df["time_group"] = df["year"].astype(str) + "-Q" + df["quarter"].astype(str)
+        elif y == "yearly":
+            df["time_group"] = df["year"].astype(str)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid y parameter. Use monthly, quarterly, or yearly.")
+
+        if x not in df.columns or v not in df.columns:
+            raise HTTPException(status_code=400, detail="Invalid x or v parameter.")
+
+        # Perform pivot: rows = x, columns = time_group, values = v
+        pivot = df.pivot_table(
+            index=x,
+            columns="time_group",
             values=v,
             aggfunc="sum",
             fill_value=0
         ).reset_index()
 
-        # Convert pivot to list of dicts
-        result_data = pivot.to_dict(orient="records")
+        # Convert pivot result to records
+        pivot_result = pivot.to_dict(orient="records")
 
-        logging.info(f"Pivot table generated with {len(result_data)} rows.")
-        return result_data
+        logging.info(f"Pivot result: {len(pivot_result)} rows.")
+        return pivot_result
 
     except Exception as e:
-        logging.error(f"Error retrieving energy records: {str(e)}")
+        logging.error(f"Error retrieving or processing records: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+def process_query_data(
+    db: Session,
+    query_str: str,  # ✅ Query is now passed as a string
+    x: str,
+    y: str,
+    v: List[str],
+    power_plant_ids: Optional[List[str]] = None,
+    company_ids: Optional[List[str]] = None,
+    generation_sources: Optional[List[str]] = None,
+    provinces: Optional[List[str]] = None,
+    months: Optional[List[int]] = None,
+    quarters: Optional[List[int]] = None,
+    years: Optional[List[int]] = None
+) -> Dict[str, Any]:
+    # Execute query
+    query = text(query_str)
+    result = db.execute(query, {
+        "power_plant_ids": power_plant_ids,
+        "company_ids": company_ids,
+        "generation_sources": generation_sources,
+        "provinces": provinces,
+        "months": months,
+        "quarters": quarters,
+        "years": years
+    })
+
+    df = pd.DataFrame(result.fetchall(), columns=result.keys())
+    if df.empty:
+        return {}
+
+    if "month_name" in df.columns and pd.api.types.is_string_dtype(df["month_name"]):
+        df["month_name"] = df["month_name"].str.strip()
+
+    # Build period column
+    if y == "monthly":
+        df["period"] = df["year"].astype(str) + "-" + df["month"].astype(str).str.zfill(2)
+    elif y == "quarterly":
+        df["period"] = df["year"].astype(str) + "-Q" + df["quarter"].astype(str)
+    elif y == "yearly":
+        df["period"] = df["year"].astype(str)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid y value. Use 'monthly', 'quarterly', or 'yearly'.")
+
+    if x not in df.columns:
+        raise HTTPException(status_code=400, detail=f"'{x}' not found in data columns.")
+    for metric in v:
+        if metric not in df.columns:
+            raise HTTPException(status_code=400, detail=f"'{metric}' not found in data columns.")
+
+    fixed_cols = {x, "period", *v}
+    other_cols = [col for col in df.columns if col not in fixed_cols]
+
+    agg_dict = {metric: 'sum' for metric in v}
+    for col in other_cols:
+        agg_dict[col] = 'first'
+
+    grouped_df = df.groupby([x, "period"], dropna=False).agg(agg_dict).reset_index()
+
+    # Line chart
+    line_graph = {
+        metric: [
+            {
+                "name": key,
+                "data": [{"x": row["period"], "y": float(row[metric])} for _, row in group.iterrows()]
+            }
+            for key, group in grouped_df.groupby(x)
+        ]
+        for metric in v
+    }
+
+    # Pie chart
+    pie_chart = {
+        metric: [
+            {"name": row[x], "value": float(row[metric])}
+            for _, row in grouped_df.groupby(x, dropna=False)[metric].sum().reset_index().iterrows()
+        ]
+        for metric in v
+    }
+
+    # Bar chart
+    bar_chart = {
+        metric: [
+            {"name": row[x], "value": float(row[metric])}
+            for _, row in grouped_df.groupby(x, dropna=False)[metric].sum()
+            .reset_index().sort_values(metric, ascending=False).iterrows()
+        ]
+        for metric in v
+    }
+
+    # Totals
+    totals = {metric: float(df[metric].sum()) for metric in v}
+
+    return {
+        "line_graph": line_graph,
+        "bar_chart": bar_chart,
+        "pie_chart": pie_chart,
+        "totals": totals
+    }
+
+def process_raw_data(
+    db: Session,
+    query_str: str,
+    power_plant_ids: Optional[List[str]] = None,
+    company_ids: Optional[List[str]] = None,
+    generation_sources: Optional[List[str]] = None,
+    provinces: Optional[List[str]] = None,
+    months: Optional[List[int]] = None,
+    quarters: Optional[List[int]] = None,
+    years: Optional[List[int]] = None
+) -> List[Dict[str, Any]]:
+    query = text(query_str)
+    result = db.execute(query, {
+        "power_plant_ids": power_plant_ids,
+        "company_ids": company_ids,
+        "generation_sources": generation_sources,
+        "provinces": provinces,
+        "months": months,
+        "quarters": quarters,
+        "years": years
+    })
+
+    df = pd.DataFrame(result.fetchall(), columns=result.keys())
+    if df.empty:
+        return []
+
+    for col in df.columns:
+        if pd.api.types.is_object_dtype(df[col]):
+            df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+
+
+    return df.to_dict(orient="records")
+
     
 # ====================== dashboard ====================== #
-@router.get("/energy_dashboard", response_model=List[dict])
+@router.get("/energy_dashboard", response_model=Dict[str, Any])
 def get_energy_dashboard(
     power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
     company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
@@ -280,14 +425,14 @@ def get_energy_dashboard(
     quarters: Optional[List[int]] = Query(None, alias="p_quarter"),
     years: Optional[List[int]] = Query(None, alias="p_year"),
     x: str = Query("company_id"),
-    y: str = Query("month"),
-    v: str = Query("total_energy_generated"),
+    y: str = Query("monthly"),
+    v: List[str] = Query(["total_energy_generated", "total_co2_avoidance"]),
     db: Session = Depends(get_db)
 ):
     try:
         logging.info("Fetching energy records.")
-        
-        query = text("""
+
+        energy = """
             SELECT * 
             FROM gold.func_fact_energy(
                 :power_plant_ids,
@@ -298,50 +443,32 @@ def get_energy_dashboard(
                 :quarters,
                 :years
             );
-        """)
+        """
+        print(company_ids)
 
-        result = db.execute(query, {
-            "power_plant_ids": power_plant_ids,
-            "company_ids": company_ids,
-            "generation_sources": generation_sources,
-            "provinces": provinces,
-            "months": months,
-            "quarters": quarters,
-            "years": years
-        })
+        result = process_query_data(
+            db=db,
+            query_str=energy,
+            x=x,
+            y=y,
+            v=v,
+            power_plant_ids=power_plant_ids,
+            company_ids=company_ids,
+            generation_sources=generation_sources,
+            provinces=provinces,
+            months=months,
+            quarters=quarters,
+            years=years
+        )
 
-        # Convert result to DataFrame
-        df = pd.DataFrame(result.fetchall(), columns=list(result.keys()))
-        if df.empty:
-            return []
-        df["month_name"] = df["month_name"].str.strip()
-
-
-        # Check if requested columns exist
-        for col in [x, y, v]:
-            if col not in df.columns:
-                raise HTTPException(status_code=400, detail=f"'{col}' not found in data columns.")
-
-        # Create pivot table
-        pivot = pd.pivot_table(
-            df,
-            index=["year", "month_name", y],
-            columns=x,
-            values=v,
-            aggfunc="sum",
-            fill_value=0
-        ).reset_index()
-
-        # Convert pivot to list of dicts
-        result_data = pivot.to_dict(orient="records")
-
-        logging.info(f"Pivot table generated with {len(result_data)} rows.")
-        return result_data
+        return result
 
     except Exception as e:
         logging.error(f"Error retrieving energy records: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
     
 # ========= fund alloc -===============
 @router.get("/fund_allocation", response_model=List[dict])
