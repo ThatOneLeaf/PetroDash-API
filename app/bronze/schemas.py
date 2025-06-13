@@ -27,6 +27,7 @@ class CSRActivity(BaseModel):
     project_year: Optional[int]
     csr_report: Optional[int]
     project_expenses: Optional[float]
+    project_remarks: Optional[str]
     created_at: Optional[dt]
     updated_at: Optional[dt]
 
