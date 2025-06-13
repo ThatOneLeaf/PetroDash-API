@@ -2640,7 +2640,7 @@ def edit_non_hazard_waste(
 ):
     try:
         logging.info("Edit non-hazard waste record")
-        required_fields = ['company', 'year', 'month', 'quarter', 'metrics', 'unit', 'waste']
+        required_fields = ['company', 'year', 'quarter', 'metrics', 'unit', 'waste']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
@@ -2663,12 +2663,6 @@ def edit_non_hazard_waste(
         if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= datetime.now().year + 1):
             raise HTTPException(status_code=422, detail="Invalid year")
 
-        if data["month"] not in [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ]:
-            raise HTTPException(status_code=422, detail=f"Invalid month '{data['month']}'")
-
         if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
             raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
 
@@ -2685,11 +2679,10 @@ def edit_non_hazard_waste(
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
-            "month": data["month"],
             "quarter": data["quarter"],
             "metrics": data["metrics"].strip(),
             "unit_of_measurement": data["unit"].strip(),
-            "waste": float(data["waste"]),
+            "waste": float(data["waste"]),  # Map 'waste' to 'waste_generated'
         }
 
         update_non_hazard_waste(db, nhw_id, record_data)
