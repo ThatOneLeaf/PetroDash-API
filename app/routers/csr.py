@@ -195,8 +195,9 @@ def get_csr_activities(
                 'csrReport': float(row.csr_report) if row.csr_report else 0,
                 'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
                 'statusId': (
-                    "Pending" if row.status_id == "PND"
-                    else "Head Approved" if row.status_id == "HAP"
+                    "Approved" if row.status_id == "APP"
+                    else "Under Review Site" if row.status_id == "URS"
+                    else "For Revision Site" if row.status_id == "FRS"
                     else row.status_id
                 ),
             }
