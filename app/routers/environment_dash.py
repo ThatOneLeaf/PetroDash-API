@@ -3491,6 +3491,7 @@ def get_non_hazard_waste_metrics_line_chart(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal server error")
 
+# non hazardous waste metrics heatmap (use this for Non-Hazardous Waste by Year and Metric Heatmap)
 @router.get("/non-hazard-waste-metrics-heatmap", response_model=Dict)
 def get_non_hazard_waste_metrics_heatmap(
     db: Session = Depends(get_db),
@@ -3651,6 +3652,177 @@ def get_non_hazard_waste_metrics_heatmap(
 
     except Exception as e:
         print("Error in /non-hazard-waste-metrics-heatmap:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+# non hazardous waste quarter bar chart (use this for Non-Hazardous Waste by Quarter Stacked Bar Chart)
+@router.get("/non-hazard-waste-quarter-bar-chart", response_model=Dict)
+def get_non_hazard_waste_quarter_bar_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    metrics: Optional[Union[str, List[str]]] = Query(None),
+    unit_of_measurement: Optional[Union[str, List[str]]] = Query(None),
+):
+    try:
+        # Convert parameters to lists if they're single values
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        years = year if isinstance(year, list) else [year] if year else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        metrics_list = metrics if isinstance(metrics, list) else [metrics] if metrics else None
+        units = unit_of_measurement if isinstance(unit_of_measurement, list) else [unit_of_measurement] if unit_of_measurement else None
+
+        # Execute the PostgreSQL function
+        query = text("""
+            SELECT * FROM gold.func_environment_non_hazard_waste_by_quarter(
+                ARRAY[:company_ids]::varchar(10)[], 
+                ARRAY[:metrics]::varchar(20)[],
+                ARRAY[:quarters]::varchar(2)[],
+                ARRAY[:years]::smallint[],
+                ARRAY[:units]::varchar(15)[]
+            )
+        """)
+        
+        result = db.execute(query, {
+            "company_ids": company_ids,
+            "metrics": metrics_list,
+            "quarters": quarters,
+            "years": years,
+            "units": units
+        })
+
+        rows = result.fetchall()
+        if not rows:
+            return {"data": [], "companies": [], "metrics": [], "quarters": [], "years": [], "units": [], "message": "No data found"}
+
+        # Transform raw data
+        raw_data = [{
+            "company_id": r.company_id,
+            "year": int(r.year),
+            "quarter": r.quarter,
+            "metrics": r.metrics,
+            "unit_of_measurement": r.unit_of_measurement,
+            "total_waste": float(r.total_waste or 0)
+        } for r in rows]
+
+        # Get unique values for chart structure
+        unique_companies = sorted(set(d["company_id"] for d in raw_data))
+        unique_metrics = sorted(set(d["metrics"] for d in raw_data))
+        unique_quarters = sorted(set(d["quarter"] for d in raw_data), key=lambda x: ["Q1", "Q2", "Q3", "Q4"].index(x))
+        unique_years = sorted(set(d["year"] for d in raw_data))
+        unique_units = sorted(set(d["unit_of_measurement"] for d in raw_data))
+
+        # Generate color mapping for metrics (stacked bar segments)
+        metrics_color_map = generate_unique_color_map(unique_metrics)
+
+        # Create quarter-year combinations for x-axis labels
+        quarter_year_combinations = []
+        for year in unique_years:
+            for quarter in unique_quarters:
+                # Check if this combination exists in the data
+                if any(d["year"] == year and d["quarter"] == quarter for d in raw_data):
+                    quarter_year_combinations.append(f"{quarter} {year}")
+
+        # Prepare data structure for stacked bar chart
+        # X-axis: Quarter-Year combinations, Y-axis: Total waste, Stacks: Metrics
+        chart_data = []
+        
+        for year in unique_years:
+            for quarter in unique_quarters:
+                # Check if this quarter-year combination has data
+                quarter_data = [d for d in raw_data if d["year"] == year and d["quarter"] == quarter]
+                if not quarter_data:
+                    continue
+                
+                bar_data = {
+                    "quarter": quarter,
+                    "year": year,
+                    "quarter_year_label": f"{quarter} {year}",
+                    "metrics_data": [],
+                    "total_waste": 0
+                }
+                
+                # Aggregate data by metrics for this quarter-year across all companies
+                for metric in unique_metrics:
+                    # Sum all companies' waste for this quarter-year-metric combination
+                    metric_total = sum(
+                        d["total_waste"] for d in quarter_data 
+                        if d["metrics"] == metric
+                    )
+                    
+                    # Get unit from any record with this metric (they should be consistent)
+                    metric_unit = ""
+                    metric_record = next((d for d in quarter_data if d["metrics"] == metric), None)
+                    if metric_record:
+                        metric_unit = metric_record["unit_of_measurement"]
+                    
+                    if metric_total > 0:  # Only include metrics with data
+                        bar_data["metrics_data"].append({
+                            "metrics": metric,
+                            "total_waste": round(metric_total, 2),
+                            "color": metrics_color_map[metric],
+                            "unit_of_measurement": metric_unit
+                        })
+                        
+                        bar_data["total_waste"] += metric_total
+                
+                # Round total waste and add to chart data if there's any data
+                if bar_data["total_waste"] > 0:
+                    bar_data["total_waste"] = round(bar_data["total_waste"], 2)
+                    chart_data.append(bar_data)
+
+        # Create metrics legend with colors
+        metrics_legend = [
+            {
+                "metrics": metric,
+                "color": metrics_color_map[metric]
+            }
+            for metric in unique_metrics
+        ]
+
+        # Calculate summary statistics
+        company_summary = []
+        for company in unique_companies:
+            company_total = sum(
+                d["total_waste"] for d in raw_data 
+                if d["company_id"] == company
+            )
+            company_summary.append({
+                "company_id": company,
+                "total_waste": round(company_total, 2)
+            })
+
+        quarter_summary = []
+        for bar in chart_data:
+            quarter_summary.append({
+                "quarter": bar["quarter"],
+                "year": bar["year"],
+                "quarter_year_label": bar["quarter_year_label"],
+                "total_waste": bar["total_waste"]
+            })
+
+        # Calculate overall total
+        grand_total = sum(bar["total_waste"] for bar in chart_data)
+
+        return {
+            "data": chart_data,
+            "companies": unique_companies,
+            "metrics": unique_metrics,
+            "quarters": unique_quarters,
+            "years": unique_years,
+            "units": unique_units,
+            "metrics_legend": metrics_legend,
+            "company_summary": company_summary,
+            "quarter_summary": quarter_summary,
+            "quarter_year_labels": [bar["quarter_year_label"] for bar in chart_data],
+            "grand_total": round(grand_total, 2),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in /non-hazard-waste-quarter-bar-chart:", str(e))
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal server error")
