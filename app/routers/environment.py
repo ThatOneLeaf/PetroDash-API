@@ -2356,6 +2356,7 @@ def get_distinct_electric_consumption_unit(db: Session = Depends(get_db)):
 async def export_excel(request: Request):
     data = await request.json()
     
+    # Validate that data is a list of dictionaries naming convention for non-technical users
     column_mapping = {
     
     'cp_id': 'Company Property ID',
