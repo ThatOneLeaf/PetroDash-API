@@ -2356,8 +2356,36 @@ def get_distinct_electric_consumption_unit(db: Session = Depends(get_db)):
 async def export_excel(request: Request):
     data = await request.json()
     
+    # Validate that data is a list of dictionaries naming convention for non-technical users
+    column_mapping = {
+    
+    'cp_id': 'Company Property ID',
+    'wa_id': 'Water Abstraction ID',
+    'wd_id': 'Water Discharge ID',
+    'wc_id': 'Water Consumption ID',
+    'dc_id': 'Diesel Consumption ID',
+    'ec_id': 'Electric Consumption ID',
+    'nhw_id': 'Non-Hazardous Waste ID',
+    'hwg_id': 'Hazardous Waste Generated ID',
+    'hwd_id': 'Hazardous Waste Disposed ID',
+    'company': 'Company',
+    'source': 'Source',
+    'property': 'Property',
+    'type': 'Type',
+    'unit': 'Unit',
+    'consumption': 'Consumption',
+    'month': 'Month',
+    'quarter': 'Quarter',
+    'year': 'Year',
+    'volume': 'Volume',
+    'date': 'Date',
+    'status': 'Status',
+    'metrics': 'Metrics',
+    'waste': 'Waste',
+}
     # Convert list of dicts to DataFrame
     df = pd.DataFrame(data)
+    df = df.rename(columns=column_mapping)
 
     # Write to Excel in memory
     output = BytesIO()

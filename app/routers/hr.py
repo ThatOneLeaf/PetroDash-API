@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Request, UploadFile, File
 import pandas as pd
 from fastapi.responses import StreamingResponse
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.dependencies import get_db
@@ -47,6 +47,7 @@ from app.bronze.schemas import (
     EmployabilityCombinedOut
 )
 
+from datetime import datetime
 
 router = APIRouter()
 
@@ -66,22 +67,31 @@ def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
     output.seek(0)
     return output
 
-@router.get("/gender_dist_by_position", response_model=List[dict])
-def get_gender_dist_by_position(
-    # year: Optional[List[int]] = Query(None, alias="p_year"),
+# ====================== EMPLOYABILITY DASHBOARD ======================
+@router.get("/total_active_employees", response_model=List[dict])
+def get_total_active_employees(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    Get the Active count of employees per Gender
+    Get the Total active employees count
     """
     try:
         logging.info("Executing Active count of employees per Gender query")
         
+        if year == None:
+            year = datetime.now().year
         result = db.execute(text("""
             SELECT
-                COUNT(DISTINCT employee_id) AS total_active_employees
-            FROM gold.func_employee_summary_yearly(NULL, NULL, NULL, NULL, ARRAY[EXTRACT(YEAR FROM CURRENT_DATE)::INT]) AS f;
-        """))
+                COUNT(employee_id) AS total_active_employees
+            FROM gold.func_employee_summary_yearly(NULL, NULL, :position_id, :company_id, :year) AS f;
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
 
         data = [
             {
@@ -102,7 +112,113 @@ def get_gender_dist_by_position(
         logging.error(f"Error fetching data: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+@router.get("/employee_count_per_company", response_model=List[dict])
+def get_employee_count_per_company(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the Total active employees count
+    """
+    try:
+        logging.info("Executing Active count of employees per Gender query")
+        
+        if year == None:
+            year = datetime.now().year
+            
+        result = db.execute(text("""
+            SELECT
+            year,
+            company_id,
+            company_name,
+            COUNT(DISTINCT employee_id) AS employee_count
+            FROM gold.func_employee_summary_yearly(NULL, NULL, :position_id, :company_id, :year)
+            GROUP BY year, company_id, company_name
+            ORDER BY year DESC, employee_count DESC;
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
+
+        data = [
+            {
+                "company_id": row.company_id,
+                "employee_count": row.employee_count
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/gender_distribution_per_position", response_model=List[dict])
+def get_gender_distribution_per_position(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the Total active employees count
+    """
+    try:
+        logging.info("Executing Active count of employees per Gender query")
+        
+        if year == None:
+            year = datetime.now().year
+            
+        result = db.execute(text("""
+            SELECT
+                position_id,
+                position_name,
+                gender,
+                COUNT(*) AS employee_count
+            FROM gold.func_employee_summary_yearly(NULL, NULL, :position_id, :company_id, :year)
+            WHERE CURRENT_DATE BETWEEN start_date AND COALESCE(end_date, CURRENT_DATE)
+            GROUP BY position_id, position_name, gender
+            ORDER BY position_id, gender;
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
+
+        data = [
+            {
+                "position_id": row.position_id,
+                "gender": row.gender,
+                "employee_count": row.employee_count
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/attrition_rate", response_model=List[dict])
 def get_gender_dist_by_position(
     # year: Optional[List[int]] = Query(None, alias="p_year"),
