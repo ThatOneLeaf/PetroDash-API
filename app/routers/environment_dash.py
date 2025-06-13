@@ -2342,3 +2342,211 @@ def get_hazard_waste_percentage_pie_chart(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# hazardous waste (disposed) section
+# get disposed hazardous waste type
+@router.get("/hazardous-waste-dis-type", response_model=Dict)
+def get_distinct_hazardous_waste_dis_type(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT waste_type
+            FROM gold.func_environment_hazard_waste_disposed_by_year(NULL, NULL, NULL, NULL)
+            ORDER BY waste_type ASC
+        """))
+        
+        rows = result.fetchall()
+        waste_type = [row.waste_type for row in rows]
+
+        return {
+            "data": waste_type,
+            "message": "Success",
+            "count": len(waste_type)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct waste_type:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# get years for hazardous waste disposed
+@router.get("/hazardous-waste-dis-years", response_model=Dict)
+def get_distinct_hazardous_waste_dis_years(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT year 
+            FROM gold.func_environment_hazard_waste_disposed_by_year(NULL, NULL, NULL, NULL)
+            ORDER BY year ASC
+        """))
+        
+        rows = result.fetchall()
+        year = [row.year for row in rows]
+
+        return {
+            "data": year,
+            "message": "Success",
+            "count": len(year)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct year:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# get units for hazardous waste disposed
+@router.get("/hazardous-waste-dis-units", response_model=Dict)
+def get_distinct_hazardous_waste_dis_units(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT unit 
+            FROM gold.func_environment_hazard_waste_disposed_by_year(NULL, NULL, NULL, NULL)
+            ORDER BY unit ASC
+        """))
+        
+        rows = result.fetchall()
+        unit = [row.unit for row in rows]
+
+        return {
+            "data": unit,
+            "message": "Success",
+            "count": len(unit)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct unit:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# hazardous waste key metrics
+@router.get("/hazard-waste-dis-key-metrics", response_model=Dict)
+def get_hazard_waste_dis_key_metrics(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    waste_type: Optional[Union[str, List[str]]] = Query(None),
+    unit: Optional[Union[str, List[str]]] = Query(None)
+):
+    """
+    Get hazard waste key metrics (total, average, breakdown by unit and type)
+    """
+    try:
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        years = year if isinstance(year, list) else [year] if year else None
+        waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
+        unit = unit if isinstance(unit, list) else [unit] if unit else None
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_hazard_waste_disposed_by_year(
+                CAST(:company_ids AS VARCHAR(10)[]),
+                CAST(:years AS SMALLINT[]),
+                CAST(:waste_types AS VARCHAR(15)[]),
+                CAST(:unit AS VARCHAR(15)[])
+            )
+        """), {
+            'company_ids': company_ids,
+            'years': years,
+            'waste_types': waste_types,
+            'unit': unit
+        })
+
+        rows = [
+            {
+                key: float(value) if isinstance(value, Decimal) else value
+                for key, value in row._mapping.items()
+            }
+            for row in result
+        ]
+
+        if not rows:
+            return {
+                "kilograms": {
+                    "total_disposed": 0,
+                    "average_per_year": 0,
+                    "yearly_breakdown": [],
+                    "waste_type_average": []
+                },
+                "liters": {
+                    "total_disposed": 0,
+                    "average_per_year": 0,
+                    "yearly_breakdown": [],
+                    "waste_type_average": []
+                },
+                "combined": {
+                    "total_disposed": 0,
+                    "average_per_year": 0,
+                    "most_disposed_waste_type": None
+                }
+            }
+
+        # Separate by unit
+        kg_data = [row for row in rows if row['unit'] == 'Kilogram']
+        liter_data = [row for row in rows if row['unit'] == 'Liter']
+
+        # Compute KG metrics
+        total_kg = sum(row['total_disposed'] for row in kg_data)
+        kg_yearly = {}
+        kg_by_type = {}
+
+        for row in kg_data:
+            kg_yearly[row['year']] = kg_yearly.get(row['year'], 0) + row['total_disposed']
+            kg_by_type[row['waste_type']] = kg_by_type.get(row['waste_type'], []) + [row['total_disposed']]
+
+        avg_kg_per_year = sum(kg_yearly.values()) / len(kg_yearly) if kg_yearly else 0
+        kg_by_type_avg = [
+            {"waste_type": k, "average_disposed": round(sum(v)/len(v), 2)} for k, v in kg_by_type.items()
+        ]
+
+        # Compute Liter metrics
+        total_liters = sum(row['total_disposed'] for row in liter_data)
+        liter_yearly = {}
+        liter_by_type = {}
+
+        for row in liter_data:
+            liter_yearly[row['year']] = liter_yearly.get(row['year'], 0) + row['total_disposed']
+            liter_by_type[row['waste_type']] = liter_by_type.get(row['waste_type'], []) + [row['total_disposed']]
+
+        avg_liters_per_year = sum(liter_yearly.values()) / len(liter_yearly) if liter_yearly else 0
+        liter_by_type_avg = [
+            {"waste_type": k, "average_disposed": round(sum(v)/len(v), 2)} for k, v in liter_by_type.items()
+        ]
+
+        # Combined Summary
+        total_combined = total_kg + total_liters
+        avg_combined = avg_kg_per_year + avg_liters_per_year
+
+        # Most Disposed Waste Type
+        all_by_type = {}
+        for row in rows:
+            all_by_type[row['waste_type']] = all_by_type.get(row['waste_type'], 0) + row['total_disposed']
+
+        top_type = max(all_by_type.items(), key=lambda x: x[1]) if all_by_type else (None, 0)
+
+        return {
+            "kilograms": {
+                "total_disposed": round(total_kg, 2),
+                "average_per_year": round(avg_kg_per_year, 2),
+                "yearly_breakdown": [{"year": y, "total_disposed": round(v, 2)} for y, v in sorted(kg_yearly.items())],
+                "waste_type_average": kg_by_type_avg
+            },
+            "liters": {
+                "total_disposed": round(total_liters, 2),
+                "average_per_year": round(avg_liters_per_year, 2),
+                "yearly_breakdown": [{"year": y, "total_disposed": round(v, 2)} for y, v in sorted(liter_yearly.items())],
+                "waste_type_average": liter_by_type_avg
+            },
+            "combined": {
+                "total_disposed": round(total_combined, 2),
+                "average_per_year": round(avg_combined, 2),
+                "most_generated_waste_type": {
+                    "waste_type": top_type[0],
+                    "total_disposed": round(top_type[1], 2)
+                }
+            }
+        }
+
+    except Exception as e:
+        print("Error in hazard waste disposed key metrics:", str(e))
+        raise HTTPException(status_code=500, detail="Internal Server Error")
