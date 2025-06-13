@@ -2048,3 +2048,63 @@ def get_hazard_waste_key_metrics(
     except Exception as e:
         print("Error in hazard waste key metrics:", str(e))
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+# hazardous waste generated line chart
+@router.get("/hazard-waste-generated-line-chart", response_model=Dict)
+def get_hazard_waste_generated_line_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    quarter: Optional[Union[str, List[str]]] = Query(None),
+    waste_type: Optional[Union[str, List[str]]] = Query(None)
+):
+    try:
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        years = year if isinstance(year, list) else [year] if year else None
+        quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
+        waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_hazard_waste_generated_by_year(
+                :company_ids, :years, :quarters, :waste_types
+            )
+        """), {
+            "company_ids": company_ids,
+            "years": years,
+            "quarters": quarters,
+            "waste_types": waste_types
+        })
+
+        rows = result.fetchall()
+        if not rows:
+            return {"data": [], "unit": "", "message": "No data found"}
+
+        # Grouping by waste_type and year
+        grouped = defaultdict(lambda: defaultdict(float))
+        for row in rows:
+            grouped[row.waste_type][row.year] += float(row.total_generate or 0)
+
+        unit = rows[0].unit if rows else "kg or L"
+        color_map = generate_unique_color_map(grouped.keys())
+
+        chart_data = []
+        for waste_type, yearly_data in grouped.items():
+            sorted_years = sorted(yearly_data.items())
+            chart_data.append({
+                "waste_type": waste_type,
+                "color": color_map[waste_type],
+                "data": [{"year": int(y), "total_generate": round(v, 2)} for y, v in sorted_years]
+            })
+
+        return {
+            "data": chart_data,
+            "unit": unit,
+            "total_records": len(rows),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in hazard waste line chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
