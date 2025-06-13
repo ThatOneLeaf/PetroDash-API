@@ -268,6 +268,166 @@ def get_energy_dashboard(
         logging.error(f"Error retrieving energy records: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+# ====================== dashboard ====================== #
+@router.get("/energy_dashboard", response_model=List[dict])
+def get_energy_dashboard(
+    power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
+    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
+    generation_sources: Optional[List[str]] = Query(None, alias="p_generation_source"),
+    provinces: Optional[List[str]] = Query(None, alias="p_province"),
+    months: Optional[List[int]] = Query(None, alias="p_month"),
+    quarters: Optional[List[int]] = Query(None, alias="p_quarter"),
+    years: Optional[List[int]] = Query(None, alias="p_year"),
+    x: str = Query("company_id"),
+    y: str = Query("month"),
+    v: str = Query("total_energy_generated"),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Fetching energy records.")
+        
+        query = text("""
+            SELECT * 
+            FROM gold.func_fact_energy(
+                :power_plant_ids,
+                :company_ids,
+                :generation_sources,
+                :provinces,
+                :months,
+                :quarters,
+                :years
+            );
+        """)
+
+        result = db.execute(query, {
+            "power_plant_ids": power_plant_ids,
+            "company_ids": company_ids,
+            "generation_sources": generation_sources,
+            "provinces": provinces,
+            "months": months,
+            "quarters": quarters,
+            "years": years
+        })
+
+        # Convert result to DataFrame
+        df = pd.DataFrame(result.fetchall(), columns=list(result.keys()))
+        if df.empty:
+            return []
+        df["month_name"] = df["month_name"].str.strip()
+
+
+        # Check if requested columns exist
+        for col in [x, y, v]:
+            if col not in df.columns:
+                raise HTTPException(status_code=400, detail=f"'{col}' not found in data columns.")
+
+        # Create pivot table
+        pivot = pd.pivot_table(
+            df,
+            index=["year", "month_name", y],
+            columns=x,
+            values=v,
+            aggfunc="sum",
+            fill_value=0
+        ).reset_index()
+
+        # Convert pivot to list of dicts
+        result_data = pivot.to_dict(orient="records")
+
+        logging.info(f"Pivot table generated with {len(result_data)} rows.")
+        return result_data
+
+    except Exception as e:
+        logging.error(f"Error retrieving energy records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+# ========= fund alloc -===============
+@router.get("/fund_allocation", response_model=List[dict])
+def get_fund_allocation(
+    power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
+    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
+    ff_ids: Optional[List[str]] = Query(None, alias="p_ff_id"),
+    months: Optional[List[int]] = Query(None, alias="p_month"), # numeric
+    years: Optional[List[int]] = Query(None, alias="p_year"), 
+    ff_category: Optional[str] = Query(None, alias="p_ff_category"), # allocation, beneficiaries
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Fetching fund allocation data.")
+
+        query = text("""
+            SELECT * FROM gold.func_fund_alloc(
+                :power_plant_ids,
+                :company_ids,
+                :ff_ids,
+                :months,
+                :years,
+                :ff_category
+            );
+        """)
+
+        result = db.execute(query, {
+            "power_plant_ids": power_plant_ids,
+            "company_ids": company_ids,
+            "ff_ids": ff_ids,
+            "months": months,
+            "years": years,
+            "ff_category": ff_category
+        })
+
+        df = pd.DataFrame(result.fetchall(), columns=list(result.keys()))
+        if df.empty:
+            return []
+
+        df["month_name"] = df["month_name"].str.strip()
+        return df.to_dict(orient="records")
+
+    except Exception as e:
+        logging.error(f"Error retrieving fund allocation data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+# ====================== year fund alloc ====================== #
+@router.get("/fund_allocation_yearly", response_model=List[dict])
+def get_fund_allocation_yearly(
+    power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
+    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
+    ff_ids: Optional[List[str]] = Query(None, alias="p_ff_id"),
+    years: Optional[List[int]] = Query(None, alias="p_year"), 
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Fetching yearly fund allocation data.")
+
+        query = text("""
+            SELECT * FROM gold.func_fund_alloc_year(
+                :power_plant_ids,
+                :company_ids,
+                :ff_ids,
+                :years
+            );
+        """)
+
+        result = db.execute(query, {
+            "power_plant_ids": power_plant_ids,
+            "company_ids": company_ids,
+            "ff_ids": ff_ids,
+            "years": years
+        })
+
+        df = pd.DataFrame(result.fetchall(), columns=list(result.keys()))
+        if df.empty:
+            return []
+
+        return df.to_dict(orient="records")
+
+    except Exception as e:
+        logging.error(f"Error retrieving yearly fund allocation data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 # ====================== template ====================== #
 @router.get("/download_template")
