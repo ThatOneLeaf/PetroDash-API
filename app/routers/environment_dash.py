@@ -3336,45 +3336,6 @@ def get_non_hazard_waste_metrics_bar_chart(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal server error")
 
-
-def generate_unique_color_map(property_names, palette=None):
-    property_names = sorted(set(property_names))  # remove duplicates and sort
-
-    if palette is None:
-        palette = [
-            "#6a3d9a",  # deep purple
-            "#b15928",  # brown
-            "#2ca02c",  # green
-            "#d62728",  # red
-            "#67a5bd",  # muted violet
-            "#8c564b",  # saddle brown
-            "#e377c2",  # pink
-            "#7f7f7f",  # gray
-            "#bcbd22",  # olive yellow
-            "#c5b0d5",  # lavender
-            "#c49c94",  # beige
-            "#f7b6d2",  # light pink
-            "#c7c7c7",  # light gray
-            "#dbdb8d",  # yellow green
-            "#17a768",  # teal green
-            "#993366",  # plum
-            "#6d904f",  # moss green
-            "#8c6d31",  # ochre
-            "#9e0142",  # dark rose
-            "#bf812d"   # golden brown
-        ]
-
-    if len(property_names) > len(palette):
-        # Generate more colors if not enough
-        def random_color():
-            return "#{:06x}".format(random.randint(0, 0xFFFFFF))
-        while len(palette) < len(property_names):
-            color = random_color()
-            if color not in palette:
-                palette.append(color)
-
-    return {name: palette[i] for i, name in enumerate(property_names)}
-
 # non hazardous waste metrics line chart (use this for Non-Hazardous Waste by Metrics Over Time Line Chart)
 @router.get("/non-hazard-waste-metrics-line-chart", response_model=Dict)
 def get_non_hazard_waste_metrics_line_chart(
@@ -3529,44 +3490,6 @@ def get_non_hazard_waste_metrics_line_chart(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal server error")
-
-def generate_unique_color_map(property_names, palette=None):
-    property_names = sorted(set(property_names))  # remove duplicates and sort
-    
-    if palette is None:
-        palette = [
-            "#6a3d9a",  # deep purple
-            "#b15928",  # brown
-            "#2ca02c",  # green
-            "#d62728",  # red
-            "#67a5bd",  # muted violet
-            "#8c564b",  # saddle brown
-            "#e377c2",  # pink
-            "#7f7f7f",  # gray
-            "#bcbd22",  # olive yellow
-            "#c5b0d5",  # lavender
-            "#c49c94",  # beige
-            "#f7b6d2",  # light pink
-            "#c7c7c7",  # light gray
-            "#dbdb8d",  # yellow green
-            "#17a768",  # teal green
-            "#993366",  # plum
-            "#6d904f",  # moss green
-            "#8c6d31",  # ochre
-            "#9e0142",  # dark rose
-            "#bf812d"   # golden brown
-        ]
-    
-    if len(property_names) > len(palette):
-        # Generate more colors if not enough
-        def random_color():
-            return "#{:06x}".format(random.randint(0, 0xFFFFFF))
-        while len(palette) < len(property_names):
-            color = random_color()
-            if color not in palette:
-                palette.append(color)
-    
-    return {name: palette[i] for i, name in enumerate(property_names)}
 
 @router.get("/non-hazard-waste-metrics-heatmap", response_model=Dict)
 def get_non_hazard_waste_metrics_heatmap(
