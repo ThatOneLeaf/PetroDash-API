@@ -172,7 +172,7 @@ def get_csr_activities(
             JOIN ref.company_main cm ON ca.company_id = cm.company_id
             JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
             JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
-            JOIN public.checker_status_log csl ON ca.csr_id = csl.record_id
+            JOIN public.record_status csl ON ca.csr_id = csl.record_id
             {where_clause} AND
                 (
                     ca.project_id LIKE 'HE%' 
