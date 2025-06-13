@@ -2550,3 +2550,263 @@ def get_hazard_waste_dis_key_metrics(
     except Exception as e:
         print("Error in hazard waste disposed key metrics:", str(e))
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+# hazardous waste disposed line chart (use this for Hazardous Waste Disposed by Company)
+@router.get("/hazard-waste-dis-perc-pie-chart", response_model=Dict)
+def get_hazard_waste_disposed_percentage_pie_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    waste_type: Optional[Union[str, List[str]]] = Query(None),
+    unit: Optional[Union[str, List[str]]] = Query(None),
+):
+    try:
+        # Color palette placed directly in the function
+        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+
+        def generate_color_map(keys, palette):
+            keys = sorted(set(keys))
+            while len(palette) < len(keys):
+                new_color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+                if new_color not in palette:
+                    palette.append(new_color)
+            return {key: palette[i] for i, key in enumerate(keys)}
+
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        years = year if isinstance(year, list) else [year] if year else None
+        waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
+        units = unit if isinstance(unit, list) else [unit] if unit else None
+
+        query = text("""
+            SELECT * FROM gold.func_environment_hazard_waste_disposed_by_perc_lvl(
+                :company_ids, :years, :waste_types, :units
+            )
+        """)
+        result = db.execute(query, {
+            "company_ids": company_ids,
+            "years": years,
+            "waste_types": waste_types,
+            "units": units
+        })
+
+        rows = result.fetchall()
+        if not rows:
+            return {"data": [], "unit": "", "message": "No data found"}
+
+        data = [{
+            "company_id": r.company_id,
+            "unit": r.unit,
+            "total_disposed": float(r.total_disposed or 0)
+        } for r in rows]
+
+        total_all = sum(d["total_disposed"] for d in data)
+        if total_all == 0:
+            return {"data": [], "unit": "", "message": "No waste disposed"}
+
+        company_ids = [d["company_id"] for d in data]
+        color_map = generate_color_map(company_ids, color_palette)
+
+        for d in data:
+            d["percentage"] = round((d["total_disposed"] / total_all) * 100, 2)
+            d["color"] = color_map[d["company_id"]]
+
+        unique_units = list(sorted(set(d["unit"] for d in data)))
+
+        return {
+            "data": data,
+            "unit": unique_units,
+            "total_disposed": round(total_all, 2),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in /hazard-waste-dis-perc-pie-chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# hazardous waste disposed by type chart (use this for Hazardous Waste Disposed by Waste Type Pie Chart and for Total Hazardous Waste Disposed by Waste Type Bar Chart)
+@router.get("/hazard-waste-dis-type-chart", response_model=Dict)
+def get_hazard_waste_disposed_by_type_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    waste_type: Optional[Union[str, List[str]]] = Query(None),
+    unit: Optional[Union[str, List[str]]] = Query(None),
+):
+    try:
+        # Normalize input parameters
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        years = year if isinstance(year, list) else [year] if year else None
+        waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
+        units = unit if isinstance(unit, list) else [unit] if unit else None
+
+        query = text("""
+            SELECT * FROM gold.func_environment_hazard_waste_disposed_by_waste_type(
+                :company_ids, :years, :waste_types, :units
+            )
+        """)
+        result = db.execute(query, {
+            "company_ids": company_ids,
+            "years": years,
+            "waste_types": waste_types,
+            "units": units
+        })
+
+        rows = result.fetchall()
+        if not rows:
+            return {"data": [], "unit": [], "message": "No data found"}
+
+        data = [{
+            "company_id": r.company_id,
+            "waste_type": r.waste_type,
+            "unit": r.unit,
+            "total_disposed": float(r.total_disposed or 0)
+        } for r in rows]
+
+        total_all = sum(d["total_disposed"] for d in data)
+        if total_all == 0:
+            return {"data": [], "unit": [], "message": "No waste disposed"}
+
+        waste_type_names = [d["waste_type"] for d in data]
+        color_map = generate_unique_color_map(waste_type_names)
+
+        for d in data:
+            d["percentage"] = round((d["total_disposed"] / total_all) * 100, 2)
+            d["color"] = color_map[d["waste_type"]]
+
+        return {
+            "data": data,
+            "unit": sorted(set(d["unit"] for d in data)),
+            "total_disposed": round(total_all, 2),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in /hazard-waste-dis-type-chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# hazardous waste disposed line chart (use this for Hazardous Waste Disposed in Year)
+@router.get("/hazard-waste-dis-line-chart", response_model=Dict)
+def get_hazard_waste_dis_line_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    waste_type: Optional[Union[str, List[str]]] = Query(None),
+    unit: Optional[Union[str, List[str]]] = Query(None)
+):
+    try:
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        years = year if isinstance(year, list) else [year] if year else None
+        waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
+        units = unit if isinstance(unit, list) else [unit] if unit else None
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_hazard_waste_disposed_by_year(
+                :company_ids, :years, :waste_types, :units
+            )
+        """), {
+            "company_ids": company_ids,
+            "years": years,
+            "waste_types": waste_types,
+            "units": units
+        })
+
+        rows = result.fetchall()
+        if not rows:
+            return {"data": [], "unit": "", "message": "No data found"}
+
+        grouped = defaultdict(lambda: defaultdict(float))
+        for row in rows:
+            grouped[row.waste_type][row.year] += float(row.total_disposed or 0)
+
+        unit_value = rows[0].unit if rows else "kg or L"
+        color_map = generate_unique_color_map(grouped.keys())
+
+        chart_data = []
+        for waste_type, yearly_data in grouped.items():
+            sorted_years = sorted(yearly_data.items())
+            chart_data.append({
+                "waste_type": waste_type,
+                "color": color_map[waste_type],
+                "data": [{"year": int(y), "total_disposed": round(v, 2)} for y, v in sorted_years]
+            })
+
+        return {
+            "data": chart_data,
+            "unit": unit_value,
+            "total_records": len(rows),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in hazard waste disposed line chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# hazardous waste disposed percentage bar chart (use this for Hazardous Disposed Yearly Comparison Bar Chart)
+@router.get("/hazard-waste-dis-perc-bar-chart", response_model=Dict)
+def get_hazard_waste_dis_perc_bar_chart(
+    db: Session = Depends(get_db),
+    company_id: Optional[Union[str, List[str]]] = Query(None),
+    year: Optional[Union[int, List[int]]] = Query(None),
+    waste_type: Optional[Union[str, List[str]]] = Query(None),
+    unit: Optional[Union[str, List[str]]] = Query(None)
+):
+    try:
+        company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
+        years = year if isinstance(year, list) else [year] if year else None
+        waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
+        units = unit if isinstance(unit, list) else [unit] if unit else None
+
+        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+
+        result = db.execute(text("""
+            SELECT * FROM gold.func_environment_hazard_waste_disposed_by_year(
+                :company_ids, :years, :waste_types, :units
+            )
+        """), {
+            "company_ids": company_ids,
+            "years": years,
+            "waste_types": waste_types,
+            "units": units
+        })
+
+        rows = result.fetchall()
+        if not rows:
+            return {"data": [], "unit": "", "message": "No data found"}
+
+        # Group by company_id, each having per-year records
+        company_year_data = defaultdict(lambda: defaultdict(float))
+        for row in rows:
+            company_year_data[row.company_id][row.year] += float(row.total_disposed or 0)
+
+        # Assign fixed color to each company
+        company_ids_sorted = sorted(company_year_data.keys())
+        color_map = {cid: color_palette[i % len(color_palette)] for i, cid in enumerate(company_ids_sorted)}
+        unit_value = rows[0].unit if rows else "kg or L"
+
+        chart_data = []
+        for company_id, yearly_data in company_year_data.items():
+            year_data = [{"year": int(y), "total_disposed": round(v, 2)} for y, v in sorted(yearly_data.items())]
+            chart_data.append({
+                "company_id": company_id,
+                "color": color_map[company_id],
+                "data": year_data
+            })
+
+        return {
+            "data": chart_data,
+            "unit": unit_value,
+            "total_records": len(rows),
+            "message": "Success"
+        }
+
+    except Exception as e:
+        print("Error in hazard waste disposed perc bar chart:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error")
