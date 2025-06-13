@@ -1873,8 +1873,8 @@ def get_diesel_key_metrics(
 def get_distinct_hazardous_waste_type(db: Session = Depends(get_db)):
     try:
         result = db.execute(text("""
-            SELECT DISTINCT waste_type 
-            FROM gold.func_environment_hazard_waste_generated_by_year(NULL, NULL, NULL, NULL)
+            SELECT DISTINCT waste_type
+            FROM gold.func_environment_hazard_waste_generated_by_year(NULL, NULL, NULL, NULL, NULL)
             ORDER BY waste_type ASC
         """))
         
@@ -1899,7 +1899,7 @@ def get_distinct_hazardous_waste_years(db: Session = Depends(get_db)):
     try:
         result = db.execute(text("""
             SELECT DISTINCT year 
-            FROM gold.func_environment_hazard_waste_generated_by_year(NULL, NULL, NULL, NULL)
+            FROM gold.func_environment_hazard_waste_generated_by_year(NULL, NULL, NULL, NULL, NULL)
             ORDER BY year ASC
         """))
         
@@ -1917,6 +1917,31 @@ def get_distinct_hazardous_waste_years(db: Session = Depends(get_db)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
+# get units
+@router.get("/hazardous-waste-units", response_model=Dict)
+def get_distinct_hazardous_waste_units(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("""
+            SELECT DISTINCT unit 
+            FROM gold.func_environment_hazard_waste_generated_by_year(NULL, NULL, NULL, NULL, NULL)
+            ORDER BY unit ASC
+        """))
+        
+        rows = result.fetchall()
+        unit = [row.unit for row in rows]
+
+        return {
+            "data": unit,
+            "message": "Success",
+            "count": len(unit)
+        }
+
+    except Exception as e:
+        print("Error fetching distinct unit:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # hazardous waste key metrics
 @router.get("/hazard-waste-key-metrics", response_model=Dict)
@@ -1925,7 +1950,8 @@ def get_hazard_waste_key_metrics(
     company_id: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
-    waste_type: Optional[Union[str, List[str]]] = Query(None)
+    waste_type: Optional[Union[str, List[str]]] = Query(None),
+    unit: Optional[Union[str, List[str]]] = Query(None)
 ):
     """
     Get hazard waste key metrics (total, average, breakdown by unit and type)
@@ -1935,19 +1961,22 @@ def get_hazard_waste_key_metrics(
         years = year if isinstance(year, list) else [year] if year else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
+        unit = unit if isinstance(unit, list) else [unit] if unit else None
 
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_hazard_waste_generated_by_year(
                 CAST(:company_ids AS VARCHAR(10)[]),
                 CAST(:years AS SMALLINT[]),
                 CAST(:quarters AS VARCHAR(2)[]),
-                CAST(:waste_types AS VARCHAR(15)[])
+                CAST(:waste_types AS VARCHAR(15)[]),
+                CAST(:unit AS VARCHAR(15)[])
             )
         """), {
             'company_ids': company_ids,
             'years': years,
             'quarters': quarters,
-            'waste_types': waste_types
+            'waste_types': waste_types,
+            'unit': unit
         })
 
         rows = [
@@ -2056,13 +2085,15 @@ def get_hazard_waste_generated_line_chart(
     company_id: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
-    waste_type: Optional[Union[str, List[str]]] = Query(None)
+    waste_type: Optional[Union[str, List[str]]] = Query(None),
+    unit: Optional[Union[str, List[str]]] = Query(None)
 ):
     try:
         company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
         years = year if isinstance(year, list) else [year] if year else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
+        unit = unit if isinstance(unit, list) else [unit] if unit else None
 
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_hazard_waste_generated_by_year(
@@ -2072,7 +2103,8 @@ def get_hazard_waste_generated_line_chart(
             "company_ids": company_ids,
             "years": years,
             "quarters": quarters,
-            "waste_types": waste_types
+            "waste_types": waste_types,
+            "unit": unit
         })
 
         rows = result.fetchall()
