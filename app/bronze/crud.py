@@ -1872,7 +1872,7 @@ def insert_employability(db: Session, data: dict):
     
     try:
         checker_log = RecordStatus(
-            cs_id=f"CS-{data["employee_id"]}",
+            cs_id=f"CS-{data['employee_id']}",
             record_id=data["employee_id"],
             status_id="URS",
             status_timestamp=datetime.now(),
@@ -2355,7 +2355,7 @@ def insert_employability_bulk(db: Session, rows) -> int:
         # Create RecordLog record
         status_time = base_timestamp + timedelta(hours=i + 1)
         record_log = RecordStatus(
-            cs_id=f"CS-{row["employee_id"]}",
+            cs_id=f"CS-{row['employee_id']}",
             record_id=row["employee_id"],
             status_id="URS",
             status_timestamp=status_time.date(),

@@ -2316,7 +2316,7 @@ def get_hazard_waste_quarter_bar_chart_by_quarter(
             "years": years,
             "quarters": quarters,
             "waste_types": waste_types,
-            "units": unit
+            "unit": unit
         })
 
         rows = result.fetchall()
