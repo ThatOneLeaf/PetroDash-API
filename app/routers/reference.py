@@ -74,14 +74,20 @@ def get_fact_energy(
 ):
     try:
         sql = text("""
-            SELECT power_plant_id, site_name 
+            SELECT power_plant_id as id, site_name as name
             FROM ref.ref_power_plants 
             WHERE (:company_ids IS NULL OR company_id = ANY(:company_ids));
         """)
 
         result = db.execute(sql, {"company_ids": company_ids})
-        data = [dict(row._mapping) for row in result]
-        return data
+        types = [
+            {
+                'id': row.id,
+                'name': row.name
+            }
+            for row in result
+        ]
+        return types
 
     except Exception as e:
         logging.error(f"Error calling powerplant: {str(e)}")
@@ -104,5 +110,102 @@ def get_equivalence(
 
     except Exception as e:
         logging.error(f"Error calling co2_equivalence: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/prov", response_model=List[dict])
+def get_equivalence(
+    db: Session = Depends(get_db)
+    ):
+    try:
+        sql = text("""
+            SELECT DISTINCT 
+            province AS id, 
+            province AS name 
+            FROM ref.ref_power_plants;
+
+        """)
+
+        result = db.execute(sql)
+        data = [dict(row._mapping) for row in result]
+        return data
+
+    except Exception as e:
+        logging.error(f"Error calling co2_equivalence: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/source", response_model=List[dict])
+def get_sources(
+    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
+    db: Session = Depends(get_db)
+):
+    try:
+        sql = text("""
+            select 
+                generation_source as id, 
+                INITCAP(generation_source) AS name 
+            from ref.ref_emission_factors;
+        """)
+
+        result = db.execute(sql, {"company_ids": company_ids})
+        data = [dict(row._mapping) for row in result]
+        return data
+
+    except Exception as e:
+        logging.error(f"Error calling powerplant: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.get("/pp_company", response_model=List[dict])
+def get_sources(
+    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
+    db: Session = Depends(get_db)
+):
+    try:
+        sql = text("""
+            select distinct
+                pp.company_id as id, 
+                cm.company_name as name 
+            from ref.ref_power_plants pp 
+            left join ref.company_main cm on cm.company_id=pp.company_id;
+        """)
+
+        result = db.execute(sql, {"company_ids": company_ids})
+        data = [dict(row._mapping) for row in result]
+        return data
+
+    except Exception as e:
+        logging.error(f"Error calling powerplant: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+
+@router.get("/pp_info", response_model=List[dict])
+def get_sources(
+    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
+    db: Session = Depends(get_db)
+):
+    try:
+        sql = text("""
+            select 
+                pp.power_plant_id,
+                pp.site_name, 
+                cm.company_id,
+                cm.company_name, 
+                cm.color,
+                pp.province,
+                ef.generation_source
+            from ref.ref_power_plants pp 
+            left join ref.company_main cm on cm.company_id = pp.company_id 
+            left join ref.ref_emission_factors ef on pp.ef_id = ef.ef_id;
+        """)
+
+        result = db.execute(sql, {"company_ids": company_ids})
+        data = [dict(row._mapping) for row in result]
+        return data
+
+    except Exception as e:
+        logging.error(f"Error calling powerplant: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")

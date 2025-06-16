@@ -68,6 +68,7 @@ def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
     return output
 
 # ====================== EMPLOYABILITY DASHBOARD ======================
+# ===== KPIs =====
 @router.get("/total_active_employees", response_model=List[dict])
 def get_total_active_employees(
     year: Optional[int] = Query(None),
@@ -79,7 +80,7 @@ def get_total_active_employees(
     Get the Total active employees count
     """
     try:
-        logging.info("Executing Active count of employees per Gender query")
+        logging.info("Executing Active count of employees query")
         
         if year == None:
             year = datetime.now().year
@@ -113,6 +114,114 @@ def get_total_active_employees(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/average_tenure_rate", response_model=List[dict])
+def get_average_tenure_rate(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the Average tenure rate
+    """
+    try:
+        logging.info("Executing Average tenure rate query")
+        
+        if year == None:
+            year = datetime.now().year
+        result = db.execute(text("""
+            SELECT
+	            ROUND(AVG(avg_tenure), 2) AS avg_tenure_rate
+            FROM gold.func_hr_rate_summary_yearly(NULL, :position_id, :company_id, :year) AS f;
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
+
+        data = [
+            {
+                "avg_tenure_rate": row.avg_tenure_rate
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/attrition_rate_kpi", response_model=List[dict])
+def get_attrition_rate_kpi(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the Attrition rate KPI
+    """
+    try:
+        logging.info("Executing Attrition rate KPI query")
+        
+        if year == None:
+            year = datetime.now().year
+        result = db.execute(text("""
+            SELECT
+                year,
+                SUM(total_employees) AS total_employees,
+                SUM(resigned_count) AS resigned_count,
+                CASE
+                    WHEN SUM(total_employees) > 0 THEN ROUND((SUM(resigned_count)::NUMERIC / SUM(total_employees)) * 100, 2)
+                    ELSE NULL
+                END AS attrition_rate_percent,
+                CASE
+                    WHEN SUM(total_employees) > 0 THEN
+                        CASE
+                            WHEN (SUM(resigned_count)::NUMERIC / SUM(total_employees)) * 100 <= 2 THEN 'Low'
+                            WHEN (SUM(resigned_count)::NUMERIC / SUM(total_employees)) * 100 >= 10 THEN 'High'
+                            ELSE 'Mid'
+                        END
+                    ELSE NULL
+                END AS attrition_rate_status
+            FROM gold.func_hr_rate_summary_yearly(NULL, :position_id, :company_id, :year) AS f
+            GROUP BY year;
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
+
+        data = [
+            {
+                "attrition_rate_percent": row.attrition_rate_percent,
+                "attrition_rate_status": row.attrition_rate_status
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== CHARTS =====
 @router.get("/employee_count_per_company", response_model=List[dict])
 def get_employee_count_per_company(
     year: Optional[int] = Query(None),
@@ -120,9 +229,6 @@ def get_employee_count_per_company(
     position_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """
-    Get the Total active employees count
-    """
     try:
         logging.info("Executing Active count of employees per Gender query")
         
@@ -219,9 +325,12 @@ def get_gender_distribution_per_position(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/attrition_rate", response_model=List[dict])
-def get_gender_dist_by_position(
-    # year: Optional[List[int]] = Query(None, alias="p_year"),
+# CHANGE THIS TO PER MONTH
+@router.get("/attrition_rate_per_month", response_model=List[dict])
+def get_attrition_rate_per_month(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -232,39 +341,36 @@ def get_gender_dist_by_position(
         
         result = db.execute(text("""
             WITH all_years AS (
-            SELECT
-                MIN(EXTRACT(YEAR FROM start_date))::INT AS min_year,
-                -- MAX(EXTRACT(YEAR FROM COALESCE(end_date, CURRENT_DATE)))::INT AS max_year -- TO CURRENT DATE
-                MAX(EXTRACT(YEAR FROM end_date))::INT AS max_year -- ONLY INCLUDE BASED ON DATASET
-            FROM gold.dim_employee_descriptions
+                SELECT
+                    MIN(EXTRACT(YEAR FROM start_date))::INT AS min_year,
+                    MAX(EXTRACT(YEAR FROM end_date))::INT AS max_year
+                FROM gold.dim_employee_descriptions
             ),
             year_array AS (
                 SELECT ARRAY(
                     SELECT generate_series(min_year, max_year)
                     FROM all_years
                 ) AS years
-            ),
-            function_table AS (
-                SELECT * 
-                FROM gold.func_hr_rate_summary_yearly(NULL, NULL, NULL, (SELECT years FROM year_array))
             )
             SELECT
                 year,
                 SUM(total_employees) AS total_employees,
-                --ROUND(AVG(avg_tenure), 2) AS avg_tenure,
                 SUM(resigned_count) AS resigned_count,
                 CASE
                     WHEN SUM(total_employees) > 0 THEN ROUND((SUM(resigned_count)::NUMERIC / SUM(total_employees)) * 100, 2)
                     ELSE NULL
                 END AS attrition_rate_percent
-            FROM function_table
+            FROM gold.func_hr_rate_summary_yearly(NULL, NULL, NULL, (SELECT years FROM year_array))
             GROUP BY year
             ORDER BY year;
-        """))
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
 
         data = [
             {
-                "year": row.year,
                 "total_employees": row.total_employees,
                 "resigned_count": row.resigned_count,
                 "attrition_rate_percent": row.attrition_rate_percent,
@@ -285,6 +391,329 @@ def get_gender_dist_by_position(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/age_distribution", response_model=List[dict])
+def get_age_distribution(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Age distribution query")
+        
+        if year == None:
+            year = datetime.now().year
+            
+        result = db.execute(text("""
+            WITH all_years AS (
+                SELECT
+                    MIN(EXTRACT(YEAR FROM start_date))::INT AS min_year,
+                    MAX(EXTRACT(YEAR FROM end_date))::INT AS max_year
+                FROM gold.dim_employee_descriptions
+            ),
+            year_array AS (
+                SELECT ARRAY(
+                    SELECT generate_series(min_year, max_year)
+                    FROM all_years
+                ) AS years
+            )
+            SELECT 
+                age_category,
+                SUM(employee_count) AS total_employees
+            FROM gold.func_employee_summary_monthly(
+                p_year := (SELECT years FROM year_array)
+            )
+            GROUP BY age_category
+            ORDER BY age_category;
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
+
+        data = [
+            {
+                "age_category": row.age_category,
+                "total_employees": row.total_employees
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/total_leave", response_model=List[dict])
+def get_total_leave(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Age distribution query")
+        
+        if year == None:
+            year = datetime.now().year
+            
+        result = db.execute(text("""
+            SELECT
+                type_of_leave,
+                SUM(leave_count) AS total_leave
+            FROM gold.func_parental_leave_summary_yearly(NULL, NULL, :position_id, :company_id, :year)
+            GROUP BY type_of_leave
+            ORDER BY type_of_leave;
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
+
+        data = [
+            {
+                "type_of_leave": row.type_of_leave,
+                "total_leave": row.total_leave
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+# CHANGE THIS TO PER MONTH
+@router.get("/peak_leave_seasons", response_model=List[dict])
+def get_peak_leave_seasons(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    position_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Age distribution query")
+        
+        if year == None:
+            year = datetime.now().year
+            
+        result = db.execute(text("""
+            SELECT 
+                year,
+                SUM(leave_count) AS total_leave
+            FROM gold.func_parental_leave_summary_monthly()
+            GROUP BY year
+            ORDER BY year;
+
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+                'position_id': [position_id] if position_id else None,
+        })
+
+        data = [
+            {
+                "year": row.year,
+                "total_leave": row.total_leave
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+# ====================== SAFETY AND TRAINING DASHBOARD ======================
+# ===== KPIs =====
+@router.get("/total_safety_manhours", response_model=List[dict])
+def get_total_safety_manhours(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Total Safety Manhours query")
+        
+        if year == None:
+            year = datetime.now().year
+        result = db.execute(text("""
+            SELECT SUM(manhours) as total_safety_manhours
+            FROM gold.func_safety_workdata_summary(:year, NULL, NULL, :company_id, NULL);
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+        })
+
+        data = [
+            {
+                "total_safety_manhours": row.total_safety_manhours
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/total_training_hours", response_model=List[dict])
+def get_total_training_hours(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Total training hours query")
+        
+        if year == None:
+            year = datetime.now().year
+        result = db.execute(text("""
+            SELECT SUM(total_training_hours) as total_training_hours
+            FROM gold.func_training_summary(:year, NULL, NULL, :company_id, NULL);
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None,
+        })
+
+        data = [
+            {
+                "total_training_hours": row.total_training_hours
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+# ===== CHARTS =====
+@router.get("/incident_count_per_month", response_model=List[dict])
+def get_incident_count_per_month(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Incident count per month query")
+        
+        if year == None:
+            year = datetime.now().year
+        result = db.execute(text("""
+            SELECT 
+                incident_type, 
+                month_name,
+                incident_count
+            FROM gold.func_occupational_safety_health_summary(:year, NULL, NULL, :company_id, NULL, NULL, NULL, NULL);
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None
+        })
+
+        data = [
+            {
+                "incident_type": row.incident_type,
+                "month_name": row.month_name,
+                "incident_count": row.incident_count
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/safety_manhours_per_month", response_model=List[dict])
+def get_safety_manhours_per_month(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Incident count per month query")
+        
+        if year == None:
+            year = datetime.now().year
+        result = db.execute(text("""
+            SELECT 
+                SUM(manhours) as total_safety_manhours,
+                month_name
+            FROM gold.func_safety_workdata_summary(:year, NULL, NULL, :company_id, NULL)
+            GROUP BY month_name
+            ORDER BY month_name;
+        """), {
+                'year': [year],
+                'company_id': [company_id] if company_id else None
+        })
+
+        data = [
+            {
+                "total_safety_manhours": row.total_safety_manhours,
+                "month_name": row.month_name
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 # =================EMPLOYABILITY RECORD BY STATUS=================
 @router.get("/employability_records_by_status", response_model=List[dict])
