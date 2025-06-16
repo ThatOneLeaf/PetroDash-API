@@ -757,7 +757,7 @@ def get_parental_leave_records_by_status(
         logging.info(f"Fetching parental leave records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT pl.*, cm.company_name, csl.status_id
+            SELECT pl.*, demo.company_id, cm.company_name, csl.status_id
             FROM silver.hr_parental_leave pl
             JOIN public.record_status csl
                 ON pl.parental_leave_id = csl.record_id
