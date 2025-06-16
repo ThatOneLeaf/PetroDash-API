@@ -432,22 +432,49 @@ def process_raw_data(
     return df.to_dict(orient="records")
 
 
+from typing import Optional, List, Dict, Any
+from fastapi import Query, Depends, HTTPException
+from sqlalchemy.orm import Session
+import logging
+import traceback
+
+def parse_comma_separated(value: Optional[str]) -> Optional[List[str]]:
+    if value:
+        return [v.strip() for v in value.split(",") if v.strip()]
+    return None
+
+def normalize_list(lst):
+    if lst is None or len(lst) == 0:
+        return None
+    return lst
+
 @router.get("/energy_dashboard", response_model=Dict[str, Any])
 def get_energy_dashboard(
-    power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
-    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
-    generation_sources: Optional[List[str]] = Query(None, alias="p_generation_source"),
-    provinces: Optional[List[str]] = Query(None, alias="p_province"),
-    months: Optional[List[int]] = Query(None, alias="p_month"),
-    quarters: Optional[List[int]] = Query(None, alias="p_quarter"),
-    years: Optional[List[int]] = Query(None, alias="p_year"),
+    p_company_id: Optional[str] = Query(None),
+    p_power_plant_id: Optional[str] = Query(None),
+    p_generation_source: Optional[str] = Query(None),
+    p_province: Optional[str] = Query(None),
+    p_month: Optional[str] = Query(None),
+    p_quarter: Optional[str] = Query(None),
+    p_year: Optional[str] = Query(None),
     x: str = Query("company_id"),
     y: str = Query("monthly"),
     db: Session = Depends(get_db)
 ):
-    try:
-        logging.info("Fetching energy records.")
+    # Parse and normalize all filter parameters
+    company_ids = normalize_list(parse_comma_separated(p_company_id))
+    power_plant_ids = normalize_list(parse_comma_separated(p_power_plant_id))
+    generation_sources = normalize_list(parse_comma_separated(p_generation_source))
+    provinces = normalize_list(parse_comma_separated(p_province))
+    months = normalize_list([int(m) for m in parse_comma_separated(p_month) or []])
+    quarters = normalize_list([int(q) for q in parse_comma_separated(p_quarter) or []])
+    years = normalize_list([int(y) for y in parse_comma_separated(p_year) or []])
 
+    logging.info(f"Filters - company_ids: {company_ids}, power_plant_ids: {power_plant_ids}, "
+                 f"generation_sources: {generation_sources}, provinces: {provinces}, "
+                 f"months: {months}, quarters: {quarters}, years: {years}")
+
+    try:
         energy = """
             SELECT * 
             FROM gold.func_fact_energy(
@@ -488,7 +515,8 @@ def get_energy_dashboard(
             );
         """
 
-        eq_result=process_raw_data(db=db,
+        eq_result = process_raw_data(
+            db=db,
             query_str=equivalence,
             power_plant_ids=power_plant_ids,
             company_ids=company_ids,
@@ -496,7 +524,8 @@ def get_energy_dashboard(
             provinces=provinces,
             months=months,
             quarters=quarters,
-            years=years)
+            years=years
+        )
         equivalence_dict = {f"EQ_{i+1}": record for i, record in enumerate(eq_result)}
 
         hp = """
@@ -512,7 +541,8 @@ def get_energy_dashboard(
             );
         """
 
-        hp_result=process_query_data(db=db,
+        hp_result = process_query_data(
+            db=db,
             query_str=hp,
             x=x,
             y=y,
@@ -523,20 +553,19 @@ def get_energy_dashboard(
             provinces=provinces,
             months=months,
             quarters=quarters,
-            years=years)
-
+            years=years
+        )
 
         return {
             "energy_data": energy_result,
             "equivalence_data": equivalence_dict,
-            "house_powered":hp_result
+            "house_powered": hp_result
         }
 
     except Exception as e:
         logging.error(f"Error retrieving energy records: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
     
 # ========= fund alloc -===============
