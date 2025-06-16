@@ -8,8 +8,10 @@ import traceback
 from datetime import datetime
 import pandas as pd
 from io import BytesIO
-from app.bronze.crud import insert_csr_activity, update_csr_activity
+from app.bronze.crud import insert_csr_activity, update_csr_activity, bulk_upload_csr_activity
 from fastapi.responses import StreamingResponse
+import openpyxl
+import io
 
 from ..dependencies import get_db
 
@@ -166,6 +168,7 @@ def get_csr_activities(
                 ROUND(ca.csr_report::numeric, 2) as csr_report,
                 ROUND(ca.project_expenses::numeric, 2) as project_expenses,
                 csl.status_id,
+                ca.project_remarks,
                 ca.date_created,
                 ca.date_updated
             FROM silver.csr_activity ca
@@ -194,6 +197,7 @@ def get_csr_activities(
                 'projectYear': row.project_year,
                 'csrReport': float(row.csr_report) if row.csr_report else 0,
                 'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
+                'projectRemarks': row.project_remarks,
                 'statusId': (
                     "Approved" if row.status_id == "APP"
                     else "Under Review Site" if row.status_id == "URS"
@@ -203,7 +207,7 @@ def get_csr_activities(
             }
             for row in result
         ]
-        
+
         logging.info(f"Query returned {len(data)} CSR activities")
         return data
         
@@ -233,12 +237,15 @@ def get_csr_activity_specific(
                 ca.project_year,
                 ROUND(ca.csr_report::numeric, 2) as csr_report,
                 ROUND(ca.project_expenses::numeric, 2) as project_expenses,
+                csl.status_id,
+                ca.project_remarks,
                 ca.date_created,
                 ca.date_updated
             FROM silver.csr_activity ca
             JOIN ref.company_main cm ON ca.company_id = cm.company_id
             JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
             JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
+            JOIN public.record_status csl ON ca.csr_id = csl.record_id
             WHERE ca.csr_id = :csr_id
             LIMIT 1
         """), {"csr_id": csr_id})
@@ -258,6 +265,8 @@ def get_csr_activity_specific(
             'projectYear': row.project_year,
             'csrReport': float(row.csr_report) if row.csr_report else 0,
             'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
+            'projectRemarks': row.project_remarks,
+            'statusId': row.status_id
         }
         return data
 
@@ -353,22 +362,41 @@ def insert_csr_activity_single(data: dict, db: Session = Depends(get_db)):
 @router.get("/help-activity-template")
 async def download_help_activity_template():
     """Generate Excel template for HELP activities data"""
-    try:
-        headers = ['company_id', 'project_name', 'project_year', 'csr_activity', 'project_expenses', 'project_remarks']
-        filename = 'help_activity_template.xlsx'
-        output = create_excel_template(headers, filename)
-        
-        return StreamingResponse(
-            BytesIO(output.getvalue()),
-            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
-        )
-    except Exception as e:
-        # Do not expose internal error details to client
-        logging.error(f"Error generating template: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error generating template.")
+    headers = [
+        ("company_id", "Registered Company IDs (PERC, PGEC, PSC, MGI, PWEI, ESEC, RGEC, BEP_NL, BEP_NM, BEP_EP, BGEC, SJGEC, DGEC, BKS)"),
+        ("project_id", "Registered Project IDs: HE_AMM - Annual Medical Mission, HE_CHC - Community Health Center, HE_NP - Nutrition Program, HE_SA - Service Ambulance, HE_MC - Mobile Clinics, ED_AS - Adopted School, ED_EMD - Educational Mobile Devices, ED_SP - Scholarship Program, ED_TT - Teacher Training, LI_LT_T - Livelihood Training"),
+        ("project_year", "Year of the project"),
+        ("csr_report", "Number of beneficiaries"),
+        ("project_expenses", "Amount invested for the project"),
+        ("project_remarks", "For project tracking or identity (i.e: project's title, target beneficiary)")
+    ]
 
-@router.post("help_activity-bulk")
+    wb = openpyxl.Workbook()
+    sheet1 = wb.active
+    sheet1.title = "Sheet1"
+    sheet2 = wb.create_sheet(title="project_details")
+
+    for col, (header, _) in enumerate(headers, start=1):
+        sheet1.cell(row=1, column=col, value=header)
+
+    sheet2.cell(row=1, column=1, value="Header")
+    sheet2.cell(row=1, column=2, value="Input Description")
+    for row, (header, desc) in enumerate(headers, start=2):
+        sheet2.cell(row=row, column=1, value=header)
+        sheet2.cell(row=row, column=2, value=desc)
+
+    # Write to in-memory buffer
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=help-activity-template.xlsx"}
+    )
+
+@router.post("/help-activity-bulk")
 def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
@@ -379,77 +407,51 @@ def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_d
         df = pd.read_excel(BytesIO(contents))
 
         # basic validation...
-        required_columns = {'company_id', 'year', 'month', 'quarter', 'volume', 'unit_of_measurement'}
+        required_columns = {'company_id', 'project_id', 'project_year', 'csr_report', 'project_expenses', 'project_remarks'}
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
-
-        # Get valid units of measurement from database
-        valid_units = db.query(EnviWaterAbstraction.unit_of_measurement).all()  # Adjust table/column names as needed
-        valid_units_set = {unit[0] for unit in valid_units}
-        
-        # Define month to quarter mapping
-        month_to_quarter = {
-            "January": "Q1", "February": "Q1", "March": "Q1",
-            "April": "Q2", "May": "Q2", "June": "Q2",
-            "July": "Q3", "August": "Q3", "September": "Q3",
-            "October": "Q4", "November": "Q4", "December": "Q4"
-        }
 
         # data cleaning & row-level validation
         rows = []
         validation_errors = []
         CURRENT_YEAR = datetime.now().year
-        
+
         for i, row in df.iterrows():
-            row_number = i + 2  # Excel row number (accounting for header)
+            row_number = i + 1  # Excel row number (accounting for header)
             
             # Existing validations
-            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
-                validation_errors.append(f"Row {row_number}: Invalid company_id")
-                continue
+            # if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+            #     validation_errors.append(f"Row {row_number}: Invalid company ID")
+            #     continue
+                
+            # if row["project_id"] not in ["HE_AMM, HE_CHC, HE_NP, HE_SA, HE_MC, ED_AS, ED_EMD, ED_SP, ED_TT, LI_LT_T"]:
+            #     validation_errors.append(f"Row {row_number}: Invalid project ID")
 
-            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
-                validation_errors.append(f"Row {row_number}: Invalid year")
-                continue
+            # if not isinstance(row["project_year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+            #     validation_errors.append(f"Row {row_number}: Invalid project year")
+            #     continue
 
-            if row["month"] not in month_to_quarter.keys():
-                validation_errors.append(f"Row {row_number}: Invalid month '{row['month']}'")
-                continue
+            # if not isinstance(row["csr_activity"], (int, float)) or row["csr_activity"] < 0:
+            #     validation_errors.append(f"Row {row_number}: Invalid CSR beneficiary")
+            #     continue
 
-            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
-                validation_errors.append(f"Row {row_number}: Invalid quarter '{row['quarter']}'")
-                continue
+            # if not isinstance(row["project_expenses"], str) or not row["project_expenses"].strip():
+            #     validation_errors.append(f"Row {row_number}: Invalid project investments")
+            #     continue
 
-            if not isinstance(row["volume"], (int, float)) or row["volume"] < 0:
-                validation_errors.append(f"Row {row_number}: Invalid volume")
-                continue
-
-            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
-                validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
-                continue
-
-            # NEW VALIDATION 1: Check if unit_of_measurement exists in database
-            unit_stripped = row["unit_of_measurement"].strip()
-            if unit_stripped not in valid_units_set:
-                validation_errors.append(f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}")
-                continue
-
-            # NEW VALIDATION 2: Check if month and quarter match
-            expected_quarter = month_to_quarter[row["month"]]
-            if row["quarter"] != expected_quarter:
-                validation_errors.append(f"Row {row_number}: Month '{row['month']}' should be in quarter '{expected_quarter}', but '{row['quarter']}' was provided")
-                continue
+            # if not row["project_remarks"].strip():
+            #     validation_errors.append(f"Row {row_number}: Empty project remarks")
+            #     continue
 
             # If all validations pass, add to rows
             rows.append({
                 "company_id": row["company_id"].strip(),
-                "year": int(row["year"]),
-                "month": row["month"],
-                "quarter": row["quarter"],
-                "volume": float(row["volume"]),
-                "unit_of_measurement": unit_stripped,
+                "project_id": row["project_id"],
+                "project_year": int(row["project_year"]),
+                "csr_report": int(row["csr_report"]),
+                "project_expenses": float(row["project_expenses"]),
+                "project_remarks": row["project_remarks"],
             })
-
         # If there are validation errors, return them
         if validation_errors:
             error_message = "Data validation failed:\n" + "\n".join(validation_errors)
@@ -459,7 +461,7 @@ def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_d
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_water_abstractions(db, rows)
+        count = bulk_upload_csr_activity(db, rows)
         return {"message": f"{count} records successfully inserted."}
 
     except HTTPException:

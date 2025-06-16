@@ -28,6 +28,7 @@ class CSRActivity(Base):
     project_year = Column(SmallInteger)
     csr_report = Column(Numeric)
     project_expenses = Column(Numeric)
+    project_remarks = Column(TEXT)
 
 class CSRProject(Base):
     __tablename__ = "csr_project"
@@ -36,16 +37,12 @@ class CSRProject(Base):
     program_id = Column(String(20), index=True)
     project_name = Column(String(20))
     project_metrics = Column(String(50))
-    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 class CSRProgram(Base):
     __tablename__ = "csr_program"
 
     program_id = Column(String(5), primary_key=True, index=True)
     program_name = Column(String(20))
-    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 #============================ENVIRONMENTAL=================================
 class EnviCompanyProperty(Base):

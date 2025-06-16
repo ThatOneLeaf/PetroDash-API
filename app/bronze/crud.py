@@ -3,7 +3,7 @@ from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviComp
 from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_single_pkey_id, generate_bulk_pkey_ids
-from app.utils.gen_help_id import generate_pkey_id
+from app.utils.gen_help_id import generate_pkey_id, generate_bulk_id
 from sqlalchemy import text, desc
 from sqlalchemy.sql import text
 from sqlalchemy import func
@@ -210,6 +210,90 @@ def update_csr_activity(db: Session, data: dict):
     #     db.rollback()
 
     return  {"message": "CSR Activity record updated successfully"}
+
+def bulk_upload_csr_activity(db: Session, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+
+    records = []
+    checker_log_objects = []
+
+    from collections import defaultdict
+    grouped_rows = defaultdict(list)
+
+    for i, row in enumerate(rows):
+        key = (row["company_id"], int(row["project_year"]))
+        grouped_rows[key].append((i, row))
+
+    id_mapping = {}
+    for (company_id, project_year), row_list in grouped_rows.items():
+        ids = generate_bulk_id(
+            db=db,
+            company_id=company_id,
+            year=project_year,
+            model_class=CSRActivity,
+            id_field="csr_id",
+            count=len(row_list)
+        )
+
+        for (original_index, _), generated_id in zip(row_list, ids):
+            id_mapping[original_index] = generated_id
+
+    # Build CSR records and CheckerStatus logs
+    base_timestamp = datetime.now()
+    for i, row in enumerate(rows):
+        csr_id = id_mapping[i]
+
+        # Create CSR record
+        record = CSRActivity(
+            csr_id=csr_id,
+            company_id=row["company_id"],
+            project_id=row["project_id"],
+            project_year=row["project_year"],
+            csr_report=row["csr_report"],
+            project_expenses=row["project_expenses"],
+            project_remarks=row["project_remarks"],
+        )
+        records.append(record)
+
+        # Create checker_status_log model instance
+        status_time = base_timestamp + timedelta(hours=i + 1)
+        checker_log = RecordStatus(
+            cs_id=f"CS-{csr_id}",
+            record_id=csr_id,
+            status_id="URS",
+            status_timestamp=status_time,
+            remarks="real-data inserted"
+        )
+        checker_log_objects.append(checker_log)
+
+    # Insert records into EnviWaterAbstraction
+    db.bulk_save_objects(records)
+    db.commit()
+
+    """
+    INSERT AUDIT LOGIC HERE 
+    """
+
+    # Call stored procedure
+    try:
+        db.execute(text("CALL silver.load_csr_silver()"))
+        db.commit()
+        print("Stored procedure executed successfully")
+    except Exception as e:
+        print(f"Error executing stored procedure: {e}")
+        db.rollback()
+
+    # Insert checker_status_log using ORM model
+    try:
+        db.bulk_save_objects(checker_log_objects)
+        db.commit()
+        print("Checker status logs inserted.")
+    except Exception as e:
+        print(f"Error inserting checker status logs: {e}")
+        db.rollback()
+
+    return len(records)
 
 # ====================================== ENVIRONMENTAL DATA ====================================
 # ====================================== RETRIEVE DATA ====================================

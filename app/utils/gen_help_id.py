@@ -37,7 +37,7 @@ def generate_pkey_id(
     return generated_id
 
 # for bulk insert use
-def generate_bulk_pkey_ids(
+def generate_bulk_id(
     db: Session,
     company_id: str,
     year: int,
