@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Form, UploadFile, 
 from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import text, update, select
+from sqlalchemy import text, update, select, bindparam, ARRAY, String, Integer
 from app.bronze.crud import EnergyRecords
 from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
 from app.public.models import RecordStatus
@@ -280,7 +280,8 @@ def get_energy_dashboard_raw(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
-
+    
+# ====================== dashboard ====================== #
 def process_query_data(
     db: Session,
     query_str: str,  # ✅ Query is now passed as a string
@@ -380,6 +381,9 @@ def process_query_data(
         "totals": totals
     }
 
+def to_nullable_list(param):
+    return param if param else None
+
 def process_raw_data(
     db: Session,
     query_str: str,
@@ -391,15 +395,30 @@ def process_raw_data(
     quarters: Optional[List[int]] = None,
     years: Optional[List[int]] = None
 ) -> List[Dict[str, Any]]:
-    query = text(query_str)
+
+    from sqlalchemy.dialects.postgresql import ARRAY
+
+    def nullable(val):
+        return val if val else None
+
+    query = text(query_str).bindparams(
+        bindparam("power_plant_ids", type_=ARRAY(String)),
+        bindparam("company_ids", type_=ARRAY(String)),
+        bindparam("generation_sources", type_=ARRAY(String)),
+        bindparam("provinces", type_=ARRAY(String)),
+        bindparam("months", type_=ARRAY(Integer)),
+        bindparam("quarters", type_=ARRAY(Integer)),
+        bindparam("years", type_=ARRAY(Integer)),
+    )
+
     result = db.execute(query, {
-        "power_plant_ids": power_plant_ids,
-        "company_ids": company_ids,
-        "generation_sources": generation_sources,
-        "provinces": provinces,
-        "months": months,
-        "quarters": quarters,
-        "years": years
+        "power_plant_ids": nullable(power_plant_ids),
+        "company_ids": nullable(company_ids),
+        "generation_sources": nullable(generation_sources),
+        "provinces": nullable(provinces),
+        "months": nullable(months),
+        "quarters": nullable(quarters),
+        "years": nullable(years),
     })
 
     df = pd.DataFrame(result.fetchall(), columns=result.keys())
@@ -410,11 +429,9 @@ def process_raw_data(
         if pd.api.types.is_object_dtype(df[col]):
             df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
 
-
     return df.to_dict(orient="records")
 
-    
-# ====================== dashboard ====================== #
+
 @router.get("/energy_dashboard", response_model=Dict[str, Any])
 def get_energy_dashboard(
     power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
@@ -426,7 +443,6 @@ def get_energy_dashboard(
     years: Optional[List[int]] = Query(None, alias="p_year"),
     x: str = Query("company_id"),
     y: str = Query("monthly"),
-    v: List[str] = Query(["total_energy_generated", "total_co2_avoidance"]),
     db: Session = Depends(get_db)
 ):
     try:
@@ -444,14 +460,12 @@ def get_energy_dashboard(
                 :years
             );
         """
-        print(company_ids)
-
-        result = process_query_data(
+        energy_result = process_query_data(
             db=db,
             query_str=energy,
             x=x,
             y=y,
-            v=v,
+            v=["total_energy_generated", "total_co2_avoidance"],
             power_plant_ids=power_plant_ids,
             company_ids=company_ids,
             generation_sources=generation_sources,
@@ -461,7 +475,62 @@ def get_energy_dashboard(
             years=years
         )
 
-        return result
+        equivalence = """
+            SELECT * 
+            FROM gold.func_co2_equivalence_per_metric(
+                :power_plant_ids,
+                :company_ids,
+                :generation_sources,
+                :provinces,
+                :months,
+                :quarters,
+                :years
+            );
+        """
+
+        eq_result=process_raw_data(db=db,
+            query_str=equivalence,
+            power_plant_ids=power_plant_ids,
+            company_ids=company_ids,
+            generation_sources=generation_sources,
+            provinces=provinces,
+            months=months,
+            quarters=quarters,
+            years=years)
+        equivalence_dict = {f"EQ_{i+1}": record for i, record in enumerate(eq_result)}
+
+        hp = """
+            SELECT *
+            FROM gold.func_household_powered(
+                (:power_plant_ids)::VARCHAR(10)[],
+                (:company_ids)::VARCHAR(10)[],
+                (:generation_sources)::TEXT[],
+                (:provinces)::VARCHAR(30)[],
+                (:months)::INT[],
+                (:quarters)::INT[],
+                (:years)::INT[]
+            );
+        """
+
+        hp_result=process_query_data(db=db,
+            query_str=hp,
+            x=x,
+            y=y,
+            v=["est_house_powered"],
+            power_plant_ids=power_plant_ids,
+            company_ids=company_ids,
+            generation_sources=generation_sources,
+            provinces=provinces,
+            months=months,
+            quarters=quarters,
+            years=years)
+
+
+        return {
+            "energy_data": energy_result,
+            "equivalence_data": equivalence_dict,
+            "house_powered":hp_result
+        }
 
     except Exception as e:
         logging.error(f"Error retrieving energy records: {str(e)}")
