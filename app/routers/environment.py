@@ -80,6 +80,118 @@ VALID_MONTHS = [
 VALID_QUARTERS = {"Q1", "Q2", "Q3", "Q4"}
 CURRENT_YEAR = datetime.now().year
 
+def get_column_mapping(table_type):
+    """Get column mapping for different table types"""
+    mappings = {
+        'water_abstraction': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'year': 'year',
+            'month': 'month',
+            'quarter': 'quarter',
+            'volume': 'volume',
+            'unit of measurement': 'unit_of_measurement',
+            'unit_of_measurement': 'unit_of_measurement'
+        },
+        'water_discharge': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'year': 'year',
+            'quarter': 'quarter',
+            'volume': 'volume',
+            'unit of measurement': 'unit_of_measurement',
+            'unit_of_measurement': 'unit_of_measurement'
+        },
+        'water_consumption': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'year': 'year',
+            'quarter': 'quarter',
+            'volume': 'volume',
+            'unit of measurement': 'unit_of_measurement',
+            'unit_of_measurement': 'unit_of_measurement'
+        },
+        'diesel_consumption': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'company property': 'cp_name',
+            'cp_name': 'cp_name',
+            'unit of measurement': 'unit_of_measurement',
+            'unit_of_measurement': 'unit_of_measurement',
+            'consumption': 'consumption',
+            'date': 'date'
+        },
+        'electric_consumption': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'source': 'source',
+            'unit of measurement': 'unit_of_measurement',
+            'unit_of_measurement': 'unit_of_measurement',
+            'consumption': 'consumption',
+            'quarter': 'quarter',
+            'year': 'year'
+        },
+        'non_hazard_waste': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'metrics': 'metrics',
+            'unit of measurement': 'unit_of_measurement',
+            'unit_of_measurement': 'unit_of_measurement',
+            'waste': 'waste',
+            'month': 'month',
+            'quarter': 'quarter',
+            'year': 'year'
+        },
+        'hazard_waste_generated': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'metrics': 'metrics',
+            'unit of measurement': 'unit_of_measurement',
+            'unit_of_measurement': 'unit_of_measurement',
+            'waste generated': 'waste_generated',
+            'waste_generated': 'waste_generated',
+            'quarter': 'quarter',
+            'year': 'year'
+        },
+        'hazard_waste_disposed': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'metrics': 'metrics',
+            'unit of measurement': 'unit_of_measurement',
+            'unit_of_measurement': 'unit_of_measurement',
+            'waste disposed': 'waste_disposed',
+            'waste_disposed': 'waste_disposed',
+            'year': 'year'
+        },
+        'company_property': {
+            'company id': 'company_id',
+            'company_id': 'company_id',
+            'company property name': 'cp_name',
+            'cp_name': 'cp_name',
+            'company property type': 'cp_type',
+            'cp_type': 'cp_type'
+        }
+    }
+    return mappings.get(table_type, {})
+
+def normalize_dataframe_columns(df, table_type):
+    """Normalize DataFrame columns based on table type"""
+    column_mapping = get_column_mapping(table_type)
+    
+    # Apply mapping with fallback to standard normalization
+    normalized_columns = []
+    for col in df.columns:
+        # First try exact mapping
+        mapped_col = column_mapping.get(col.lower())
+        if mapped_col:
+            normalized_columns.append(mapped_col)
+        else:
+            # Fallback: convert to lowercase and replace spaces with underscores
+            normalized_columns.append(col.lower().replace(' ', '_'))
+    
+    df.columns = normalized_columns
+    return df
+
 #======================================================RETRIEVING-TYPE APIs======================================================
 #=================RETRIEVE ALL ENVIRONMENTAL DATA (GOLD)=================
 """
@@ -1174,6 +1286,7 @@ def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = De
         logging.info(f"Add bulk data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'water_abstraction')
 
         # basic validation...
         required_columns = {'company_id', 'year', 'month', 'quarter', 'volume', 'unit_of_measurement'}
@@ -1275,6 +1388,7 @@ def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depe
         logging.info(f"Add bulk data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'water_discharge')
 
         # basic validation...
         required_columns = {'company_id', 'year', 'quarter', 'volume', 'unit_of_measurement'}
@@ -1357,6 +1471,7 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
         logging.info(f"Add bulk data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'water_consumption')
 
         # basic validation...
         required_columns = {'company_id', 'year', 'quarter', 'volume', 'unit_of_measurement'}
@@ -1438,6 +1553,7 @@ def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session =
         logging.info(f"Add bulk electric consumption data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'electric_consumption')
 
         # basic validation...
         required_columns = {'company_id', 'year', 'quarter', 'source', 'unit_of_measurement', 'consumption'}
@@ -1539,6 +1655,7 @@ def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Dep
         logging.info("Add bulk non-hazard waste data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'non_hazard_waste')
 
         required_columns = {
             "company_id", "year", "month", "quarter",
@@ -1650,6 +1767,7 @@ def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session
         logging.info(f"Add bulk hazard waste generated data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'hazard_waste_generated')
 
         # basic validation...
         required_columns = {'company_id', 'year', 'quarter', 'metrics', 'unit_of_measurement', 'waste_generated'}
@@ -1739,6 +1857,7 @@ def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session 
         logging.info("Add bulk hazard waste disposed data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'hazard_waste_disposed')
 
         # basic validation...
         required_columns = {'company_id', 'year', 'metrics', 'unit_of_measurement', 'waste_disposed'}
@@ -1826,6 +1945,7 @@ def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = D
         logging.info("Add bulk diesel consumption data")
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'diesel_consumption')
 
         required_columns = {'company_id', 'cp_name', 'unit_of_measurement', 'consumption', 'date'}
         if not required_columns.issubset(df.columns):
