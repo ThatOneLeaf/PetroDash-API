@@ -181,7 +181,7 @@ class HRTraining(Base_silver):
     training_title = Column(TEXT, primary_key=True, index=True)
     training_hours = Column(TIMESTAMP)
     number_of_participants = Column(Numeric)
-    total_training_hours = Column(Numeric)
+    #total_training_hours = Column(Numeric)
     
 class HRSafetyWorkdata(Base_silver):
     __tablename__ = "hr_safety_workdata"
@@ -193,7 +193,7 @@ class HRSafetyWorkdata(Base_silver):
     manpower = Column(Integer)
     manhours = Column(Integer)
     
-class HRParentalLeave(Base_silver):
+class HRParentalLeave(Base):
     __tablename__ = "hr_parental_leave"
     
     parental_leave_id = Column(String(20), primary_key=True, index=True)
@@ -201,10 +201,10 @@ class HRParentalLeave(Base_silver):
     type_of_leave = Column(String(50))
     date = Column(TIMESTAMP)
     days = Column(Integer)
-    end_date = Column(TIMESTAMP)
-    months_availed = Column(Integer)
+    #end_date = Column(TIMESTAMP)
+    #months_availed = Column(Integer)
     
-class HROsh(Base_silver):
+class HROsh(Base):
     __tablename__ = "hr_occupational_safety_health"
     
     osh_id = Column(String(20), primary_key=True, index=True)
@@ -215,13 +215,3 @@ class HROsh(Base_silver):
     incident_type = Column(TEXT, primary_key=True, index=True)
     incident_title = Column(TEXT, primary_key=True, index=True)
     incident_count = Column(Integer)
-
-# HR Excel file template generation
-# class HRTableType(str, Enum):
-#     DEMOGRAPHICS = "demographics"
-#     TENURE = "tenure"
-#     SAFETY_WORKDATA = "safety_workdata"
-#     TRAINING = "training"
-#     PARENTAL_LEAVE = "parental_leave"
-#     OCCUPATIONAL_SAFETY_HEALTH = "occupational_safety_health"
-#     ALL = "all"
