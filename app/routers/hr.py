@@ -868,6 +868,7 @@ def get_training_records_by_status(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 #=================RETRIEVE HR DATA BY ID(BRONZE)=================
 @router.get("/get_employability_combined_by_id/{employee_id}", response_model=EmployabilityCombinedOut)
 def get_employability_combined_by_id(employee_id: str, db: Session = Depends(get_db)):
@@ -1331,6 +1332,17 @@ def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Ses
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
+    TRUE_VALUES = {"TRUE", "True", "true", 1, True}
+    FALSE_VALUES = {"FALSE", "False", "false", 0, False}
+
+    def parse_lost_time(value):
+        if value in TRUE_VALUES:
+            return True
+        elif value in FALSE_VALUES:
+            return False
+        else:
+            raise ValueError(f"Invalid lost_time value: {value}")
+    
     try:
         logging.info("Add bulk occupational safety health")
         contents = file.file.read()
@@ -1349,8 +1361,6 @@ def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Ses
         for i, row in df.iterrows():
             row_number = i + 2  # Excel row number
 
-            # INSERT VALIDATION FOR COMPANY_ID, WORKFORCE_TYPE, LOST_TIME, INCIDENT_TYPE, AND INCIDENT_COUNT
-            
             # Validate and parse date
             try:
                 date = pd.to_datetime(row["date"]).date()
@@ -1358,14 +1368,28 @@ def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Ses
                 validation_errors.append(f"Row {row_number}: Invalid date format.")
                 continue
 
+            # Validate and parse lost_time
+            try:
+                lost_time = parse_lost_time(row["lost_time"])
+            except ValueError as e:
+                validation_errors.append(f"Row {row_number}: {e}")
+                continue
+
+            # Validate incident_count
+            try:
+                incident_count = int(row["incident_count"])
+            except (ValueError, TypeError):
+                validation_errors.append(f"Row {row_number}: Invalid incident_count.")
+                continue
+
             rows.append({
                 "company_id": str(row["company_id"]).strip(),
                 "workforce_type": str(row["workforce_type"]),
-                "lost_time": str(row["lost_time"]).strip(),
+                "lost_time": lost_time,
                 "date": date,
-                "incidet_type": str(row["incident_type"]),
+                "incident_type": str(row["incident_type"]),
                 "incident_title": str(row["incident_title"]),
-                "incident_count": int(row["incident_count"])
+                "incident_count": incident_count
             })
 
         if validation_errors:

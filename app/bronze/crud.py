@@ -1989,7 +1989,8 @@ def insert_employability(db: Session, data: dict):
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2262,7 +2263,8 @@ def update_employability(db: Session, employee_id: str, data_demo: dict, data_te
                 load_parental_leave := FALSE,
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE
+                load_occupational_safety_health := FALSE,
+                load_from_sql := FALSE
             )
         """))
         db.commit()
@@ -2504,9 +2506,18 @@ def insert_safety_workdata_bulk (db:Session, rows) -> int:
     records = []
     record_logs = []
     
+    last_id_row = db.query(HRSafetyWorkdata).order_by(HRSafetyWorkdata.safety_workdata_id.desc()).first()
+    if last_id_row and last_id_row.safety_workdata_id.startswith("SWD"):
+        last_num = int(last_id_row.safety_workdata_id[-4:])
+    else:
+        last_num = 0
+        
+    today_str = datetime.today().strftime("%Y%m%d")
     base_timestamp = datetime.now()
     for i, row in enumerate(rows):
-        safety_workdata_id = id_generation(db, "SWD", HRSafetyWorkdata.safety_workdata_id)
+        new_num = last_num + i + 1
+        safety_workdata_id = f"SWD{today_str}{str(new_num).zfill(4)}"
+        # safety_workdata_id = id_generation(db, "SWD", HRSafetyWorkdata.safety_workdata_id)
         # Create demographics record
         record = HRSafetyWorkdata(
             safety_workdata_id=safety_workdata_id,
@@ -2574,15 +2585,27 @@ def insert_parental_leave_bulk (db:Session, rows) -> int:
     records = []
     record_logs = []
     
+    last_id_row = db.query(HRParentalLeave).order_by(HRParentalLeave.parental_leave_id.desc()).first()
+    if last_id_row and last_id_row.parental_leave_id.startswith("PL"):
+        last_num = int(last_id_row.parental_leave_id[-4:])
+    else:
+        last_num = 0
+        
+    today_str = datetime.today().strftime("%Y%m%d")
     base_timestamp = datetime.now()
     for i, row in enumerate(rows):
-        parental_leave_id = id_generation(db, "PL", HRParentalLeave.parental_leave_id)
+        new_num = last_num + i + 1
+        parental_leave_id = f"PL{today_str}{str(new_num).zfill(4)}"
+        #parental_leave_id = id_generation(db, "PL", HRParentalLeave.parental_leave_id)
         
-        start_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
-        num_days = int(row["days"])
+        # if isinstance(row["date"], str):
+        #     start_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
+        # else:
+        #     start_date = row["date"]
+        # num_days = int(row["days"])
 
-        end_date = start_date + timedelta(days=num_days)
-        months_availed = num_days // 30
+        #end_date = start_date + timedelta(days=num_days)
+        #months_availed = num_days // 30
         
         # Create demographics record
         record = HRParentalLeave(
@@ -2591,8 +2614,8 @@ def insert_parental_leave_bulk (db:Session, rows) -> int:
             type_of_leave=row["type_of_leave"],
             date=row["date"],
             days=row["days"],
-            end_date=end_date,
-            months_availed=months_availed
+            #end_date=end_date,
+            #months_availed=months_availed
         )
         records.append(record)
         
@@ -2652,9 +2675,18 @@ def insert_occupational_safety_health_bulk (db:Session, rows) -> int:
     records = []
     record_logs = []
     
+    last_id_row = db.query(HROsh).order_by(HROsh.osh_id.desc()).first()
+    if last_id_row and last_id_row.osh_id.startswith("OSH"):
+        last_num = int(last_id_row.osh_id[-4:])
+    else:
+        last_num = 0
+        
+    today_str = datetime.today().strftime("%Y%m%d")
     base_timestamp = datetime.now()
     for i, row in enumerate(rows):
-        osh_id = id_generation(db, "OSH", HROsh.osh_id)
+        new_num = last_num + i + 1
+        osh_id = f"OSH{today_str}{str(new_num).zfill(4)}"
+        #osh_id = id_generation(db, "OSH", HROsh.osh_id)
         
         # Create occupational safety health record
         record = HROsh(
@@ -2725,20 +2757,29 @@ def insert_training_bulk (db:Session, rows) -> int:
     records = []
     record_logs = []
     
+    last_id_row = db.query(HRTraining).order_by(HRTraining.training_id.desc()).first()
+    if last_id_row and last_id_row.training_id.startswith("TR"):
+        last_num = int(last_id_row.training_id[-4:])
+    else:
+        last_num = 0
+        
+    today_str = datetime.today().strftime("%Y%m%d")
     base_timestamp = datetime.now()
     for i, row in enumerate(rows):
-        training_id = id_generation(db, "TR", HRTraining.training_id)
-        total_training_hours = int(row["training_hours"]) * int(row["number_of_participants"])
+        new_num = last_num + i + 1
+        training_id = f"TR{today_str}{str(new_num).zfill(4)}"
+        #training_id = id_generation(db, "TR", HRTraining.training_id)
+        #total_training_hours = int(row["training_hours"]) * int(row["number_of_participants"])
         
         # Create training record
-        record = HROsh(
+        record = HRTraining(
             training_id=training_id,
             company_id=row["company_id"],
             date=row["date"],
             training_title=row["training_title"],
             training_hours=row["training_hours"],
             number_of_participants=row["number_of_participants"],
-            total_training_hours=total_training_hours
+            #total_training_hours=total_training_hours
         )
         records.append(record)
         
