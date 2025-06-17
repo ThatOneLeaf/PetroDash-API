@@ -2407,7 +2407,7 @@ def update_training(db: Session, training_id: str, data):
     return record
 
 # ====================================== BULK INSERT HR DATA ======================================
-# --- Demographics ---
+# --- Employability ---
 def insert_employability_bulk(db: Session, rows) -> int:
     if not rows:
         return 0
@@ -2429,14 +2429,6 @@ def insert_employability_bulk(db: Session, rows) -> int:
             employment_status=row["employment_status"]
         )
         record_demo.append(record)
-            
-        # Create tenure record    
-        record = HRTenure(
-            employee_id=row["employee_id"],
-            start_date=row["start_date"],
-            end_date=row["end_date"]
-        )
-        record_tenure.append(record)
         
         # Create RecordLog record
         status_time = base_timestamp + timedelta(hours=i + 1)
@@ -2449,36 +2441,22 @@ def insert_employability_bulk(db: Session, rows) -> int:
         )
         record_logs_demo.append(record_log)
     
-    # Insert tenure records
-    db.bulk_save_objects(record_tenure)
-    db.commit()
-    
-    
-    # Call the stored procedure after inserting data
-    try:
-        db.execute(text("""
-            CALL silver.load_hr_silver(
-                load_demographics := FALSE,
-                load_tenure := TRUE,
-                load_parental_leave := FALSE,
-                load_training := FALSE,
-                load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
-            )
-        """))
-        
-        db.commit()
-        print("Stored procedure executed successfully")
-        
-    except Exception as e:
-        print(f"Error executing stored procedure: {e}")
-        db.rollback()
-        
+    # Insert demographics records
     db.bulk_save_objects(record_demo)
     db.commit()
 
-    # Call the stored procedure after inserting data
+    # Insert tenure records
+    for i, row in enumerate(rows):
+        record = HRTenure(
+            employee_id=row["employee_id"],
+            start_date=row["start_date"],
+            end_date=row["end_date"]
+        )
+        record_tenure.append(record)
+    db.bulk_save_objects(record_tenure)
+    db.commit()
+
+    # Call the stored procedure to load demographics
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
@@ -2491,21 +2469,29 @@ def insert_employability_bulk(db: Session, rows) -> int:
                 load_from_sql := FALSE
             )
         """))
-        
         db.commit()
         print("Stored procedure executed successfully")
-        
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-    
-    # Insert record_status_log entries using RecordStatus model
+
+    # Call the stored procedure to load tenure
     try:
-        db.bulk_save_objects(record_logs_demo)
+        db.execute(text("""
+            CALL silver.load_hr_silver(
+                load_demographics := FALSE,
+                load_tenure := TRUE,
+                load_parental_leave := FALSE,
+                load_training := FALSE,
+                load_safety_workdata := FALSE,
+                load_occupational_safety_health := FALSE,
+                load_from_sql := TRUE
+            )
+        """))
         db.commit()
-        print("Checker status logs inserted.")
+        print("Stored procedure executed successfully")
     except Exception as e:
-        print(f"Error inserting checker status logs: {e}")
+        print(f"Error executing stored procedure: {e}")
         db.rollback()
     
     return len(record_demo)

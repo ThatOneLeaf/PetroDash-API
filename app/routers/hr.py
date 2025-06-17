@@ -723,19 +723,25 @@ def get_employability_records_by_status(
 ):
     try:
         logging.info(f"Fetching employability records. Filter status_id: {status_id}")
-
+     
         query = text("""
             SELECT demo.*, tenure.*, cm.company_name, csl.status_id
             FROM silver.hr_demographics demo
             JOIN silver.hr_tenure tenure 
                 ON demo.employee_id = tenure.employee_id
-            JOIN public.record_status csl
+            JOIN (
+                SELECT DISTINCT ON (record_id) record_id, status_id
+                FROM public.record_status
+                ORDER BY record_id, status_timestamp DESC
+            ) csl
                 ON demo.employee_id = csl.record_id
+            JOIN public.status st 
+                ON st.status_id = csl.status_id
             JOIN ref.company_main cm
                 ON demo.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
         """)
-
+        
         result = db.execute(query, {"status_id": status_id})
         data = [dict(row._mapping) for row in result]
 
@@ -881,35 +887,7 @@ def get_employability_combined_by_id(employee_id: str, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="Tenure record not found")
     
     return EmployabilityCombinedOut(demographics=demographics, tenure=tenure)
-'''
-@router.get("/get_hr_osh_by_id/{osh_id}", response_model=HROshOut)
-def get_hr_osh_by_id(osh_id: str, db: Session = Depends(get_db)):
-    record = get_one(db, HROsh, "osh_id", osh_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Occupational Safety and Health record not found")
-    return record
 
-@router.get("/get_hr_parental_leave_by_id/{parental_leave_id}", response_model=HRParentalLeaveOut)
-def get_hr_parental_leave_by_id(parental_leave_id: str, db: Session = Depends(get_db)):
-    record = get_one(db, HRParentalLeave, "parental_leave_id", parental_leave_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Parental Leave record not found")
-    return record
-
-@router.get("/get_hr_safety_workdata_by_id/{safety_workdata_id}", response_model=HRSafetyWorkdataOut)
-def get_hr_safety_workdata_by_id(safety_workdata_id: str, db: Session = Depends(get_db)):
-    record = get_one(db, HRSafetyWorkdata, "safety_workdata_id", safety_workdata_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Safety Workdata record not found")
-    return record
-
-@router.get("/get_hr_training_by_id/{training_id}", response_model=HRTrainingOut)
-def get_hr_training_by_id(training_id: str, db: Session = Depends(get_db)):
-    record = get_one(db, HRTraining, "training_id", training_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Training record not found")
-    return record
-'''
 
 # ====================== ADD SINGLE RECORD ====================== 
 # --- EMPLOYABILITY ---
@@ -1332,10 +1310,13 @@ def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Ses
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
-    TRUE_VALUES = {"TRUE", "True", "true", 1, True}
-    FALSE_VALUES = {"FALSE", "False", "false", 0, False}
+    TRUE_VALUES = {"TRUE", "YES", 1, True}
+    FALSE_VALUES = {"FALSE", "NO", 0, False}
 
     def parse_lost_time(value):
+        if isinstance(value, str):
+            value = value.upper()
+            
         if value in TRUE_VALUES:
             return True
         elif value in FALSE_VALUES:
@@ -1370,6 +1351,7 @@ def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Ses
 
             # Validate and parse lost_time
             try:
+                
                 lost_time = parse_lost_time(row["lost_time"])
             except ValueError as e:
                 validation_errors.append(f"Row {row_number}: {e}")
