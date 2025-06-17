@@ -176,7 +176,8 @@ def update_csr_activity(db: Session, data: dict):
                 project_id = :project_id,
                 project_year = :project_year,
                 csr_report = :csr_report,
-                project_expenses = :project_expenses
+                project_expenses = :project_expenses,
+                project_remarks = :project_remarks
             WHERE csr_id = :csr_id
         """), 
         {
@@ -184,7 +185,8 @@ def update_csr_activity(db: Session, data: dict):
             'project_id': data["project_id"],
             'project_year': data["project_year"],
             'csr_report': data["csr_report"],
-            'project_expenses': data["project_expenses"]
+            'project_expenses': data["project_expenses"],
+            'project_remarks': data["project_remarks"]
         })
 
         db.commit()

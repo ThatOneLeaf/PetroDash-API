@@ -49,6 +49,11 @@ def get_csr_programs(db: Session = Depends(get_db)):
                 date_created,
                 date_updated
             FROM silver.csr_programs
+            WHERE (
+                program_id = 'HE'
+                OR program_id = 'ED'
+                OR program_id = 'LI'
+            )
             ORDER BY program_name
         """))
         
@@ -97,7 +102,11 @@ def get_csr_projects(program_id: Optional[str] = None, db: Session = Depends(get
                 cp.date_updated
             FROM silver.csr_projects cp
             JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
-            {where_clause}
+            {where_clause} AND (
+                cp.project_id LIKE 'HE%'
+                OR cp.project_id LIKE 'ED%'
+                OR cp.project_id LIKE 'LI%'
+            )
             ORDER BY pr.program_name, cp.project_name
         """), params)
 
@@ -269,7 +278,14 @@ def get_csr_activity_specific(
             'csrReport': float(row.csr_report) if row.csr_report else 0,
             'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
             'projectRemarks': row.project_remarks,
-            'statusId': row.status_id
+            'statusId': (
+                "Approved" if row.status_id == "APP"
+                else "For Revision (Site)" if row.status_id == "FRS"
+                else "For Revision (Head)" if row.status_id == "FRH"
+                else "Under Review (Site)" if row.status_id == "URS"
+                else "Under Review (Head)" if row.status_id == "URH"
+                else row.status_id
+            ),
         }
         return data
 
@@ -283,7 +299,7 @@ def update_csr_activity_single(data: dict, db: Session = Depends(get_db)):
         logging.info("Update single csr activity record")
         CURRENT_YEAR = datetime.now().year
 
-        required_fields = ['project_year', 'project_id', 'csr_report', 'project_expenses']
+        required_fields = ['project_year', 'project_id', 'csr_report', 'project_expenses', 'project_remarks']
         missing = [field for field in required_fields if field not in data]
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
@@ -310,6 +326,7 @@ def update_csr_activity_single(data: dict, db: Session = Depends(get_db)):
         }
 
         update_csr_activity(db, record)
+
         return {"message": "1 record successfully updated."}
 
     except HTTPException:
