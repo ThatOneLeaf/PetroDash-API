@@ -109,21 +109,24 @@ def insert_csr_activity(db: Session, data: dict):
                 project_id,
                 project_year,
                 csr_report,
-                project_expenses
+                project_expenses,
+                project_remarks
             ) VALUES (
                 :csr_id,
                 :company_id,
                 :project_id,
                 :project_year,
                 :csr_report,
-                :project_expenses
+                :project_expenses,
+                :project_remarks
             )
             ON CONFLICT (csr_id) DO UPDATE SET
                 company_id = EXCLUDED.company_id,
                 project_id = EXCLUDED.project_id,
                 project_year = EXCLUDED.project_year,
                 csr_report = EXCLUDED.csr_report,
-                project_expenses = EXCLUDED.project_expenses
+                project_expenses = EXCLUDED.project_expenses,
+                project_remarks = EXCLUDED.project_remarks
         """), 
         {
             'csr_id': csr_id,
@@ -131,7 +134,8 @@ def insert_csr_activity(db: Session, data: dict):
             'project_id': data["project_id"],
             'project_year': data["project_year"],
             'csr_report': data["csr_report"],
-            'project_expenses': data["project_expenses"]
+            'project_expenses': data["project_expenses"],
+            'project_remarks': data["project_remarks"],
         })
 
         db.commit()
@@ -140,7 +144,7 @@ def insert_csr_activity(db: Session, data: dict):
 
         db.commit()
 
-        #logging.info("CSR Activity record created and processed to silver layer successfully")
+        print("CSR Activity record created and processed to silver layer successfully")
 
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
@@ -150,7 +154,7 @@ def insert_csr_activity(db: Session, data: dict):
         checker_log = RecordStatus(
             cs_id=f"CS-{csr_id}",
             record_id=csr_id,
-            status_id="PND",
+            status_id="URS",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -189,25 +193,9 @@ def update_csr_activity(db: Session, data: dict):
 
         db.commit()
 
-        #logging.info("CSR Activity record created and processed to silver layer successfully")
-
     except Exception as e:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
-    
-    # try:
-    #     checker_log = RecordStatus(
-    #         cs_id=f"CS-{csr_id}",
-    #         record_id=csr_id,
-    #         status_id="PND",
-    #         status_timestamp=datetime.now(),
-    #         remarks="real-data updated"
-    #     )
-    #     db.add(checker_log)
-    #     db.commit()
-    # except Exception as e:
-    #     print(f"Error inserting checker status log: {e}")
-    #     db.rollback()
 
     return  {"message": "CSR Activity record updated successfully"}
 

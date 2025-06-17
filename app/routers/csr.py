@@ -167,7 +167,7 @@ def get_csr_activities(
                 ca.project_year,
                 ROUND(ca.csr_report::numeric, 2) as csr_report,
                 ROUND(ca.project_expenses::numeric, 2) as project_expenses,
-                csl.status_id,
+                rs.status_id,
                 ca.project_remarks,
                 ca.date_created,
                 ca.date_updated
@@ -175,14 +175,15 @@ def get_csr_activities(
             JOIN ref.company_main cm ON ca.company_id = cm.company_id
             JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
             JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
-            JOIN public.record_status csl ON ca.csr_id = csl.record_id
+            JOIN public.record_status rs ON ca.csr_id = rs.record_id
             {where_clause} AND
                 (
                     ca.project_id LIKE 'HE%' 
                     OR ca.project_id LIKE 'ED%' 
                     OR ca.project_id LIKE 'LI%'
                 )
-            ORDER BY ca.csr_report DESC NULLS LAST, cm.company_name, pr.program_name, cp.project_name
+            -- ORDER BY ca.csr_report DESC NULLS LAST, cm.company_name, pr.program_name, cp.project_name
+            ORDER BY rs.status_id DESC
         """), params)
 
         data = [
@@ -200,8 +201,10 @@ def get_csr_activities(
                 'projectRemarks': row.project_remarks,
                 'statusId': (
                     "Approved" if row.status_id == "APP"
-                    else "Under Review Site" if row.status_id == "URS"
-                    else "For Revision Site" if row.status_id == "FRS"
+                    else "For Revision (Site)" if row.status_id == "FRS"
+                    else "For Revision (Head)" if row.status_id == "FRH"
+                    else "Under Review (Site)" if row.status_id == "URS"
+                    else "Under Review (Head)" if row.status_id == "URH"
                     else row.status_id
                 ),
             }
@@ -302,7 +305,8 @@ def update_csr_activity_single(data: dict, db: Session = Depends(get_db)):
             "project_id": data["project_id"],
             "project_year": data["project_year"],
             "csr_report": data["csr_report"],
-            "project_expenses": data["project_expenses"]
+            "project_expenses": data["project_expenses"],
+            "project_remarks": data["project_remarks"],
         }
 
         update_csr_activity(db, record)
@@ -346,8 +350,10 @@ def insert_csr_activity_single(data: dict, db: Session = Depends(get_db)):
             "project_id": data["project_id"],
             "project_year": data["project_year"],
             "csr_report": data["csr_report"],
-            "project_expenses": data["project_expenses"]
+            "project_expenses": data["project_expenses"],
+            "project_remarks": data["project_remarks"]
         }
+        print(record)
         insert_csr_activity(db, record)
 
         return {"message": "1 record successfully inserted."}
