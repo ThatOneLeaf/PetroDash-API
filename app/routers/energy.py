@@ -11,6 +11,7 @@ from app.crud.base import get_one, get_all, get_many, get_many_filtered, get_one
 from datetime import datetime
 import pandas as pd
 import io
+import math
 import logging
 import traceback
 
@@ -355,10 +356,21 @@ def process_query_data(
     # Pie chart
     pie_chart = {
         metric: [
-            {"name": row[x], "value": float(row[metric])}
-            for _, row in grouped_df.groupby(x, dropna=False)[metric].sum().reset_index().iterrows()
+            {
+                "name": row[x],
+                "value": float(row[metric]),
+                "percent": float(row[metric]) / float(total) * 100 if total else 0
+            }
+            for _, row in grouped_df.groupby(x, dropna=False)[metric]
+                .sum()
+                .reset_index()
+                .pipe(lambda df: (
+                    df.assign(_total=df[metric].sum())  # add total column
+                ))
+                .iterrows()
         ]
         for metric in v
+        for total in [grouped_df.groupby(x, dropna=False)[metric].sum().sum()]  # compute total once per metric
     }
 
     # Bar chart
@@ -476,7 +488,8 @@ def get_energy_dashboard(
 
     try:
         energy = """
-            SELECT * 
+            SELECT 
+                *
             FROM gold.func_fact_energy(
                 :power_plant_ids,
                 :company_ids,
@@ -501,9 +514,31 @@ def get_energy_dashboard(
             quarters=quarters,
             years=years
         )
+        
+        # format ------------------
+        def format_large_number(value):
+            if value >= 1_000_000_000:
+                return f"{value / 1_000_000_000:.1f}B"
+            elif value >= 1_000_000:
+                return f"{value / 1_000_000:.1f}M"
+            elif value >= 1_000:
+                return f"{value:,.0f}"
+            else:
+                return f"{value:.4f}"
+
+        def format_equivalence(record):
+            record["co2_equivalent"] = format_large_number(round(float(record["co2_equivalent"]), 4))
+            return record
 
         equivalence = """
-            SELECT * 
+            SELECT 
+                energy_generated,
+                co2_avoided,
+                conversion_value,
+                co2_equivalent,
+                metric,
+                equivalence_category,
+                equivalence_label
             FROM gold.func_co2_equivalence_per_metric(
                 :power_plant_ids,
                 :company_ids,
@@ -526,8 +561,14 @@ def get_energy_dashboard(
             quarters=quarters,
             years=years
         )
-        equivalence_dict = {f"EQ_{i+1}": record for i, record in enumerate(eq_result)}
 
+        # Apply formatting
+        equivalence_dict = {
+            f"EQ_{i+1}": format_equivalence(record)
+            for i, record in enumerate(eq_result)
+        }
+        
+        
         hp = """
             SELECT *
             FROM gold.func_household_powered(
