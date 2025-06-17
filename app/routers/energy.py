@@ -11,6 +11,7 @@ from app.crud.base import get_one, get_all, get_many, get_many_filtered, get_one
 from datetime import datetime
 import pandas as pd
 import io
+import math
 import logging
 import traceback
 
@@ -484,18 +485,7 @@ def get_energy_dashboard(
     logging.info(f"Filters - company_ids: {company_ids}, power_plant_ids: {power_plant_ids}, "
                  f"generation_sources: {generation_sources}, provinces: {provinces}, "
                  f"months: {months}, quarters: {quarters}, years: {years}")
-# power_plant_id,
-# company_id,
-# generation_source,
-# site_name,
-# company_name,
-# province,
-# month,
-# month_name,
-# year,
-# quarter,
-# total_energy_generated / 1000 AS total_energy_generated,
-# total_co2_avoidance
+
     try:
         energy = """
             SELECT 
@@ -524,9 +514,31 @@ def get_energy_dashboard(
             quarters=quarters,
             years=years
         )
+        
+        # format ------------------
+        def format_large_number(value):
+            if value >= 1_000_000_000:
+                return f"{value / 1_000_000_000:.1f}B"
+            elif value >= 1_000_000:
+                return f"{value / 1_000_000:.1f}M"
+            elif value >= 1_000:
+                return f"{value:,.0f}"
+            else:
+                return f"{value:.4f}"
+
+        def format_equivalence(record):
+            record["co2_equivalent"] = format_large_number(round(float(record["co2_equivalent"]), 4))
+            return record
 
         equivalence = """
-            SELECT * 
+            SELECT 
+                energy_generated,
+                co2_avoided,
+                conversion_value,
+                co2_equivalent,
+                metric,
+                equivalence_category,
+                equivalence_label
             FROM gold.func_co2_equivalence_per_metric(
                 :power_plant_ids,
                 :company_ids,
@@ -549,8 +561,14 @@ def get_energy_dashboard(
             quarters=quarters,
             years=years
         )
-        equivalence_dict = {f"EQ_{i+1}": record for i, record in enumerate(eq_result)}
 
+        # Apply formatting
+        equivalence_dict = {
+            f"EQ_{i+1}": format_equivalence(record)
+            for i, record in enumerate(eq_result)
+        }
+        
+        
         hp = """
             SELECT *
             FROM gold.func_household_powered(
