@@ -355,10 +355,21 @@ def process_query_data(
     # Pie chart
     pie_chart = {
         metric: [
-            {"name": row[x], "value": float(row[metric])}
-            for _, row in grouped_df.groupby(x, dropna=False)[metric].sum().reset_index().iterrows()
+            {
+                "name": row[x],
+                "value": float(row[metric]),
+                "percent": float(row[metric]) / float(total) * 100 if total else 0
+            }
+            for _, row in grouped_df.groupby(x, dropna=False)[metric]
+                .sum()
+                .reset_index()
+                .pipe(lambda df: (
+                    df.assign(_total=df[metric].sum())  # add total column
+                ))
+                .iterrows()
         ]
         for metric in v
+        for total in [grouped_df.groupby(x, dropna=False)[metric].sum().sum()]  # compute total once per metric
     }
 
     # Bar chart
@@ -473,10 +484,22 @@ def get_energy_dashboard(
     logging.info(f"Filters - company_ids: {company_ids}, power_plant_ids: {power_plant_ids}, "
                  f"generation_sources: {generation_sources}, provinces: {provinces}, "
                  f"months: {months}, quarters: {quarters}, years: {years}")
-
+# power_plant_id,
+# company_id,
+# generation_source,
+# site_name,
+# company_name,
+# province,
+# month,
+# month_name,
+# year,
+# quarter,
+# total_energy_generated / 1000 AS total_energy_generated,
+# total_co2_avoidance
     try:
         energy = """
-            SELECT * 
+            SELECT 
+                *
             FROM gold.func_fact_energy(
                 :power_plant_ids,
                 :company_ids,
