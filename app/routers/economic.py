@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 import time
 
 from ..dependencies import get_db
+from ..auth_decorators import require_role, office_checker_only
 
 router = APIRouter()
 
@@ -337,6 +338,7 @@ def get_type_id(type_identifier, db: Session):
         return None
 
 @router.get("/retention", response_model=List[Dict])
+@office_checker_only
 def get_economic_retention(db: Session = Depends(get_db)):
     """
     Get economic value retention data
@@ -369,6 +371,7 @@ def get_economic_retention(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/value-generated-data", response_model=List[Dict])
+@office_checker_only
 def get_value_generated_data(db: Session = Depends(get_db)):
     """
     Get economic value generated data from gold.vw_economic_value_generated view
@@ -419,6 +422,7 @@ def get_value_generated_data(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/expenditures", response_model=List[Dict])
+@office_checker_only
 def get_economic_expenditures(db: Session = Depends(get_db)):
     """
     Get economic expenditure data from gold.vw_economic_expenditure_by_company view
@@ -473,6 +477,7 @@ def get_economic_expenditures(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/expenditures/{comp}/{year}", response_model=Dict)
+@office_checker_only
 def get_expenditure_by_company_year(comp: str, year: int, db: Session = Depends(get_db)):
     """
     Get expenditure records for a specific company and year with company name and type descriptions
@@ -544,6 +549,7 @@ def get_expenditure_by_company_year(comp: str, year: int, db: Session = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/capital-provider-payments", response_model=List[Dict])
+@office_checker_only
 def get_capital_provider_payments(db: Session = Depends(get_db)):
     """
     Get capital provider payment data from silver.econ_capital_provider_payment table
@@ -588,7 +594,11 @@ def get_capital_provider_payments(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/value-generated")
-def create_value_generated(value_data: dict, db: Session = Depends(get_db)):
+@office_checker_only
+def create_value_generated(
+    value_data: dict, 
+    db: Session = Depends(get_db)
+):
     """
     Insert economic value generated data into bronze layer and process to silver
     """
@@ -651,6 +661,7 @@ def create_value_generated(value_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/value-generated/{year}", response_model=Dict)
+@office_checker_only
 def get_value_generated_by_year(year: int, db: Session = Depends(get_db)):
     """
     Get value generated record for a specific year
@@ -699,7 +710,12 @@ def get_value_generated_by_year(year: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/value-generated/{year}")
-def update_value_generated(year: int, value_data: dict, db: Session = Depends(get_db)):
+@office_checker_only
+def update_value_generated(
+    year: int, 
+    value_data: dict, 
+    db: Session = Depends(get_db)
+):
     """
     Update economic value generated data in bronze layer and process to silver
     """
@@ -757,7 +773,11 @@ def update_value_generated(year: int, value_data: dict, db: Session = Depends(ge
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/expenditures")
-def create_expenditure(expenditure_data: dict, db: Session = Depends(get_db)):
+@office_checker_only
+def create_expenditure(
+    expenditure_data: dict, 
+    db: Session = Depends(get_db)
+):
     """
     Insert economic expenditure data into bronze layer and process to silver
     """
@@ -834,7 +854,14 @@ def create_expenditure(expenditure_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/expenditures/{comp}/{year}/{type}")
-def update_expenditure(comp: str, year: int, type: str, expenditure_data: dict, db: Session = Depends(get_db)):
+@office_checker_only
+def update_expenditure(
+    comp: str, 
+    year: int, 
+    type: str, 
+    expenditure_data: dict, 
+    db: Session = Depends(get_db)
+):
     """
     Update economic expenditure data in bronze layer and process to silver
     """
@@ -902,7 +929,11 @@ def update_expenditure(comp: str, year: int, type: str, expenditure_data: dict, 
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/capital-provider-payments")
-def create_capital_provider_payment(payment_data: dict, db: Session = Depends(get_db)):
+@office_checker_only
+def create_capital_provider_payment(
+    payment_data: dict, 
+    db: Session = Depends(get_db)
+):
     """
     Insert capital provider payment data into bronze layer and process to silver
     """
@@ -953,6 +984,7 @@ def create_capital_provider_payment(payment_data: dict, db: Session = Depends(ge
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/capital-provider-payments/{year}", response_model=Dict)
+@office_checker_only
 def get_capital_provider_payment_by_year(year: int, db: Session = Depends(get_db)):
     """
     Get capital provider payment record for a specific year
@@ -995,7 +1027,12 @@ def get_capital_provider_payment_by_year(year: int, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/capital-provider-payments/{year}")
-def update_capital_provider_payment(year: int, payment_data: dict, db: Session = Depends(get_db)):
+@office_checker_only
+def update_capital_provider_payment(
+    year: int, 
+    payment_data: dict, 
+    db: Session = Depends(get_db)
+):
     """
     Update capital provider payment data in bronze layer and process to silver
     """
@@ -1047,6 +1084,7 @@ def update_capital_provider_payment(year: int, payment_data: dict, db: Session =
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/process-bronze-to-silver")
+@office_checker_only
 def process_all_bronze_to_silver(db: Session = Depends(get_db)):
     """
     Process all bronze economic data to silver layer
@@ -1075,6 +1113,7 @@ def process_all_bronze_to_silver(db: Session = Depends(get_db)):
 
 # Template generation routes using helper function
 @router.get("/template-generated")
+@office_checker_only
 async def download_economic_generated_template():
     """Generate Excel template for economic generated data"""
     try:
@@ -1091,6 +1130,7 @@ async def download_economic_generated_template():
         raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
 
 @router.get("/template-expenditures")
+@office_checker_only
 async def download_economic_expenditures_template():
     """Generate Excel template for economic expenditures data"""
     try:
@@ -1107,6 +1147,7 @@ async def download_economic_expenditures_template():
         raise HTTPException(status_code=500, detail=f"Error generating template: {str(e)}")
 
 @router.get("/template-capital-provider")
+@office_checker_only
 async def download_economic_capital_provider_template():
     """Generate Excel template for economic capital provider payments data"""
     try:
@@ -1124,7 +1165,11 @@ async def download_economic_capital_provider_template():
 
 # Import routes using helper function
 @router.post("/import-generated")
-async def import_economic_generated_data(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@office_checker_only
+async def import_economic_generated_data(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
     """Import economic generated data from Excel file"""
     config = {
         'expected_columns': {
@@ -1159,7 +1204,11 @@ async def import_economic_generated_data(file: UploadFile = File(...), db: Sessi
     return await process_excel_import(file, config, db)
 
 @router.post("/import-expenditures")
-async def import_economic_expenditures_data(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@office_checker_only
+async def import_economic_expenditures_data(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
     """Import economic expenditures data from Excel file"""
     config = {
         'expected_columns': {
@@ -1203,7 +1252,11 @@ async def import_economic_expenditures_data(file: UploadFile = File(...), db: Se
     return await process_excel_import(file, config, db)
 
 @router.post("/import-capital-provider")
-async def import_economic_capital_provider_data(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@office_checker_only
+async def import_economic_capital_provider_data(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
     """Import economic capital provider payments data from Excel file"""
     config = {
         'expected_columns': {
@@ -1230,6 +1283,7 @@ async def import_economic_capital_provider_data(file: UploadFile = File(...), db
     return await process_excel_import(file, config, db)
 
 @router.get("/reference-data", response_model=Dict)
+@office_checker_only
 def get_reference_data(db: Session = Depends(get_db)):
     """
     Get reference data for companies and expenditure types
@@ -1276,6 +1330,7 @@ def get_reference_data(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/summary", response_model=List[Dict])
+@require_role("R02", "R03")
 def get_economic_summary(
     years: str = None,
     order_by: str = "year", 
@@ -1319,6 +1374,7 @@ def get_economic_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/generated-details", response_model=List[Dict])
+@require_role("R02", "R03")
 def get_generated_details(
     years: str = None,
     order_by: str = "year",
@@ -1365,6 +1421,7 @@ def get_generated_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/distributed-details", response_model=List[Dict])
+@require_role("R02", "R03")
 def get_distributed_details(
     years: str = None,
     order_by: str = "year",
@@ -1414,6 +1471,7 @@ def get_distributed_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/company-distribution", response_model=List[Dict])
+@require_role("R02", "R03")
 def get_company_distribution(
     companies: str = None,
     years: str = None,
@@ -1464,6 +1522,7 @@ def get_company_distribution(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/expenditure-by-company", response_model=List[Dict])
+@require_role("R02", "R03")
 def get_expenditure_by_company(
     companies: str = None,
     types: str = None,
@@ -1530,7 +1589,10 @@ def get_expenditure_by_company(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/filter-options", response_model=Dict)
-def get_dashboard_filter_options(db: Session = Depends(get_db)):
+@require_role("R02", "R03")
+def get_dashboard_filter_options(
+    db: Session = Depends(get_db)
+):
     """
     Get available filter options for the dashboard
     """

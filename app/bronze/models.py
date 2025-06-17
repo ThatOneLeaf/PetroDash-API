@@ -172,7 +172,7 @@ class HRTenure(Base):
     start_date = Column(TIMESTAMP, primary_key=True, index=True)
     end_date = Column(TIMESTAMP, nullable=True)
     
-class HRTraining(Base_silver):
+class HRTraining(Base):
     __tablename__ = "hr_training"
     
     training_id = Column(String(20), primary_key=True, index=True)
@@ -183,7 +183,7 @@ class HRTraining(Base_silver):
     number_of_participants = Column(Numeric)
     #total_training_hours = Column(Numeric)
     
-class HRSafetyWorkdata(Base_silver):
+class HRSafetyWorkdata(Base):
     __tablename__ = "hr_safety_workdata"
     
     safety_workdata_id = Column(String(20), primary_key=True, index=True)

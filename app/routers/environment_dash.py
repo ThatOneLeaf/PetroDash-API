@@ -1077,26 +1077,22 @@ def get_electricity_source_bar_chart(
 
         # Prepare structured data for bar chart
         data = []
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
+                # Prepare structured data for bar chart
+        unique_sources = [row.consumption_source for row in rows]
+        source_color_map = generate_unique_color_map(unique_sources)
 
-        source_color_map = {}
-        color_index = 0
-
-        for row in rows:
-            source = row.consumption_source
-            if source not in source_color_map:
-                source_color_map[source] = color_palette[color_index % len(color_palette)]
-                color_index += 1
-
-            data.append({
+        data = [
+            {
                 "company_id": row.company_id,
                 "source": row.consumption_source,
                 "value": float(row.total_consumption or 0),
                 "color": source_color_map[row.consumption_source]
-            })
+            }
+            for row in rows if float(row.total_consumption or 0) > 0
+        ]
 
         return {
-            "data": [item for item in data if item["value"] > 0],
+            "data": data,
             "unit": rows[0].unit_of_measurement if rows else "kWh",
             "message": "Success"
         }

@@ -444,11 +444,6 @@ def process_raw_data(
     return df.to_dict(orient="records")
 
 
-from typing import Optional, List, Dict, Any
-from fastapi import Query, Depends, HTTPException
-from sqlalchemy.orm import Session
-import logging
-import traceback
 
 def parse_comma_separated(value: Optional[str]) -> Optional[List[str]]:
     if value:
@@ -521,10 +516,10 @@ def get_energy_dashboard(
                 return f"{value / 1_000_000_000:.1f}B"
             elif value >= 1_000_000:
                 return f"{value / 1_000_000:.1f}M"
-            elif value <= 0:
+            elif value <1:
                 return f"{value:,.4f}"
             else:
-                return f"{value:,.0f}"
+                return math.ceil(value)
 
         def format_equivalence(record):
             record["co2_equivalent"] = format_large_number(round(float(record["co2_equivalent"]), 4))
@@ -597,10 +592,35 @@ def get_energy_dashboard(
             years=years
         )
 
+
+        label_query = text("""
+            SELECT
+                generation_source AS label,
+                TRIM(
+                    CONCAT(
+                        'kg CO₂ avoided = EG(kWh) × ', kg_co2_per_kwh, ' kg CO₂/kWh',
+                        CASE 
+                            WHEN co2_emitted_kg IS NOT NULL THEN 
+                            '; kg CO₂ emitted = EG(kWh) × ' || ROUND(co2_emitted_kg / 1000.0, 6) || ' kg CO₂/kWh; Emission Reduction = kg CO₂ avoided - kg CO₂ emitted'
+                            ELSE
+                            ''
+                        END
+                    )
+                ) AS formula
+            FROM
+                ref.ref_emission_factors
+        """)
+
+        # This returns each row as a dictionary-like object
+        label_result = db.execute(label_query).mappings().all()
+        label_dicts = [dict(row) for row in label_result]
+
+
         return {
             "energy_data": energy_result,
             "equivalence_data": equivalence_dict,
-            "house_powered": hp_result
+            "house_powered": hp_result,
+            "formula":label_dicts
         }
 
     except Exception as e:
