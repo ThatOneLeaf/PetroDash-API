@@ -779,13 +779,14 @@ def get_water_abstraction_records(db: Session = Depends(get_db)):
                 COALESCE(bewa.quarter, 'N/A') AS quarter,
                 bewa.volume,
                 bewa.unit_of_measurement AS unit,
-                s.status_name AS status
+                COALESCE(s2.status_name, s1.status_name) as status  -- Changed order: s2 first, then s1
             FROM bronze.envi_water_abstraction bewa
-            LEFT JOIN silver.wa_id_mapping wim ON bewa.wa_id = wim.wa_id_bronze
-            LEFT JOIN silver.envi_water_abstraction sewa ON sewa.wa_id = wim.wa_id_silver
-            INNER JOIN public.record_status csl ON csl.record_id = bewa.wa_id
-            INNER JOIN public.status s ON s.status_id = csl.status_id
-            INNER JOIN ref.company_main cm ON cm.company_id = bewa.company_id
+            INNER JOIN ref.company_main cm ON bewa.company_id = cm.company_id
+            INNER JOIN silver.wa_id_mapping wim ON bewa.wa_id = wim.wa_id_bronze
+            LEFT JOIN record_status rs1 ON wim.wa_id_silver = rs1.record_id
+            LEFT JOIN record_status rs2 ON wim.wa_id_bronze = rs2.record_id
+            LEFT JOIN status s1 ON rs1.status_id = s1.status_id
+            LEFT JOIN status s2 ON rs2.status_id = s2.status_id
         """)
 
         result = db.execute(query)

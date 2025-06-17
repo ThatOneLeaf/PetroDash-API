@@ -521,10 +521,10 @@ def get_energy_dashboard(
                 return f"{value / 1_000_000_000:.1f}B"
             elif value >= 1_000_000:
                 return f"{value / 1_000_000:.1f}M"
-            elif value >= 1_000:
-                return f"{value:,.0f}"
+            elif value <= 0:
+                return f"{value:,.4f}"
             else:
-                return f"{value:.4f}"
+                return f"{value:,.0f}"
 
         def format_equivalence(record):
             record["co2_equivalent"] = format_large_number(round(float(record["co2_equivalent"]), 4))
