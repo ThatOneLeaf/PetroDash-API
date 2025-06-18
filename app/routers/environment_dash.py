@@ -17,6 +17,8 @@ from collections import defaultdict
 import hashlib
 import random
 
+from ..auth_decorators import require_role, office_checker_only
+
 def generate_unique_color_map(property_names, palette=None):
     property_names = sorted(set(property_names))  # remove duplicates and sort
 
@@ -61,6 +63,7 @@ router = APIRouter()
 # WATER DASHBOARD
 # key metrics
 @router.get("/abstraction", response_model=Dict)
+#@require_role("R02", "R03")
 def get_water_abstraction(
     db: Session = Depends(get_db),
     company_id: Optional[Union[str, List[str]]] = Query(None),
@@ -131,6 +134,7 @@ def get_water_abstraction(
         }
 
 @router.get("/discharge", response_model=Dict)
+#@require_role("R02", "R03")
 def get_water_discharge(
     db: Session = Depends(get_db),
     company_id: Optional[Union[str, List[str]]] = Query(None),
@@ -201,6 +205,7 @@ def get_water_discharge(
         }
 
 @router.get("/consumption", response_model=Dict)
+#@require_role("R02", "R03")
 def get_water_consumption(
     db: Session = Depends(get_db),
     company_id: Optional[Union[str, List[str]]] = Query(None),
@@ -272,6 +277,7 @@ def get_water_consumption(
 
 # pie chart
 @router.get("/pie-chart", response_model=Dict)
+#@require_role("R02", "R03")
 def get_water_summary_pie(
     db: Session = Depends(get_db),
     company_id: Optional[Union[str, List[str]]] = Query(None),
@@ -384,6 +390,7 @@ def get_water_summary_pie(
 
 # line chart
 @router.get("/line-chart", response_model=Dict)
+#@require_role("R02", "R03")
 def get_water_summary_line_chart(
     db: Session = Depends(get_db),
     company_id: Optional[Union[str, List[str]]] = Query(None),
@@ -482,6 +489,7 @@ def get_water_summary_line_chart(
 
 # stacked-bar chart
 @router.get("/stacked-bar", response_model=Dict)
+#@require_role("R02", "R03")
 def get_stacked_bar_summary(
     db: Session = Depends(get_db),
     company_id: Optional[Union[str, List[str]]] = Query(None),
@@ -599,6 +607,7 @@ def get_stacked_bar_summary(
 
 # water years
 @router.get("/water-years", response_model=Dict)
+#@require_role("R02", "R03")
 def get_distinct_years(db: Session = Depends(get_db)):
     """
     Get distinct list of years from environment water summary (all data).
@@ -2032,22 +2041,22 @@ def get_hazard_waste_key_metrics(
         years = year if isinstance(year, list) else [year] if year else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
-        unit = unit if isinstance(unit, list) else [unit] if unit else None
+        units = unit if isinstance(unit, list) else [unit] if unit else None  # Fixed variable name
 
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_hazard_waste_generated_by_year(
-                CAST(:company_ids AS VARCHAR(10)[]),
-                CAST(:years AS SMALLINT[]),
-                CAST(:quarters AS VARCHAR(2)[]),
-                CAST(:waste_types AS VARCHAR(15)[]),
-                CAST(:unit AS VARCHAR(15)[])
+                ARRAY[:company_ids]::text[], 
+                ARRAY[:years]::smallint[],
+                ARRAY[:quarters]::text[],
+                ARRAY[:waste_types]::text[],
+                ARRAY[:units]::text[]
             )
         """), {
             'company_ids': company_ids,
             'years': years,
             'quarters': quarters,
             'waste_types': waste_types,
-            'unit': unit
+            'units': units  # Fixed parameter name
         })
 
         rows = [
@@ -2079,43 +2088,100 @@ def get_hazard_waste_key_metrics(
                 }
             }
 
+        # Debug: Print all rows to see what we're getting
+        print("Debug - All rows:")
+        for row in rows:
+            print(f"  {row}")
+
         # Separate by unit
         kg_data = [row for row in rows if row['unit'] == 'Kilogram']
         liter_data = [row for row in rows if row['unit'] == 'Liter']
 
+        print(f"Debug - KG data count: {len(kg_data)}")
+        print(f"Debug - Liter data count: {len(liter_data)}")
+
+        # Get unique waste types for debugging
+        kg_waste_types = list(set([row['waste_type'] for row in kg_data]))
+        liter_waste_types = list(set([row['waste_type'] for row in liter_data]))
+        
+        print(f"Debug - Unique KG waste types: {kg_waste_types}")
+        print(f"Debug - Unique Liter waste types: {liter_waste_types}")
+
         # Compute KG metrics
         total_kg = sum(row['total_generate'] for row in kg_data)
         kg_yearly = {}
-        kg_by_type = {}
-
+        
+        # Calculate yearly totals for KG
         for row in kg_data:
             kg_yearly[row['year']] = kg_yearly.get(row['year'], 0) + row['total_generate']
-            kg_by_type[row['waste_type']] = kg_by_type.get(row['waste_type'], []) + [row['total_generate']]
+
+        # Calculate waste type totals across all years for KG
+        kg_by_type_totals = {}
+        for row in kg_data:
+            waste_type = row['waste_type']
+            kg_by_type_totals[waste_type] = kg_by_type_totals.get(waste_type, 0) + row['total_generate']
+
+        # Calculate average per year for each waste type (total/number of years that waste type appears)
+        kg_waste_type_years = {}
+        for row in kg_data:
+            waste_type = row['waste_type']
+            if waste_type not in kg_waste_type_years:
+                kg_waste_type_years[waste_type] = set()
+            kg_waste_type_years[waste_type].add(row['year'])
 
         avg_kg_per_year = sum(kg_yearly.values()) / len(kg_yearly) if kg_yearly else 0
-        kg_by_type_avg = [
-            {"waste_type": k, "average_generated": round(sum(v)/len(v), 2)} for k, v in kg_by_type.items()
-        ]
+        
+        kg_by_type_avg = []
+        for waste_type, total in kg_by_type_totals.items():
+            years_count = len(kg_waste_type_years[waste_type])
+            avg = total / years_count if years_count > 0 else 0
+            kg_by_type_avg.append({
+                "waste_type": waste_type, 
+                "average_generated": round(avg, 2)
+            })
 
-        # Compute Liter metrics
+        print(f"Debug - KG waste type averages: {kg_by_type_avg}")
+
+        # Compute Liter metrics (same logic)
         total_liters = sum(row['total_generate'] for row in liter_data)
         liter_yearly = {}
-        liter_by_type = {}
-
+        
+        # Calculate yearly totals for Liters
         for row in liter_data:
             liter_yearly[row['year']] = liter_yearly.get(row['year'], 0) + row['total_generate']
-            liter_by_type[row['waste_type']] = liter_by_type.get(row['waste_type'], []) + [row['total_generate']]
+
+        # Calculate waste type totals across all years for Liters
+        liter_by_type_totals = {}
+        for row in liter_data:
+            waste_type = row['waste_type']
+            liter_by_type_totals[waste_type] = liter_by_type_totals.get(waste_type, 0) + row['total_generate']
+
+        # Calculate average per year for each waste type
+        liter_waste_type_years = {}
+        for row in liter_data:
+            waste_type = row['waste_type']
+            if waste_type not in liter_waste_type_years:
+                liter_waste_type_years[waste_type] = set()
+            liter_waste_type_years[waste_type].add(row['year'])
 
         avg_liters_per_year = sum(liter_yearly.values()) / len(liter_yearly) if liter_yearly else 0
-        liter_by_type_avg = [
-            {"waste_type": k, "average_generated": round(sum(v)/len(v), 2)} for k, v in liter_by_type.items()
-        ]
+        
+        liter_by_type_avg = []
+        for waste_type, total in liter_by_type_totals.items():
+            years_count = len(liter_waste_type_years[waste_type])
+            avg = total / years_count if years_count > 0 else 0
+            liter_by_type_avg.append({
+                "waste_type": waste_type, 
+                "average_generated": round(avg, 2)
+            })
+
+        print(f"Debug - Liter waste type averages: {liter_by_type_avg}")
 
         # Combined Summary
         total_combined = total_kg + total_liters
         avg_combined = avg_kg_per_year + avg_liters_per_year
 
-        # Most Generated Waste Type
+        # Most Generated Waste Type (across all units)
         all_by_type = {}
         for row in rows:
             all_by_type[row['waste_type']] = all_by_type.get(row['waste_type'], 0) + row['total_generate']
@@ -2141,7 +2207,7 @@ def get_hazard_waste_key_metrics(
                 "most_generated_waste_type": {
                     "waste_type": top_type[0],
                     "total_generated": round(top_type[1], 2)
-                }
+                } if top_type[0] else None
             }
         }
 
@@ -2527,10 +2593,10 @@ def get_hazard_waste_dis_key_metrics(
 
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_hazard_waste_disposed_by_year(
-                CAST(:company_ids AS VARCHAR(10)[]),
-                CAST(:years AS SMALLINT[]),
-                CAST(:waste_types AS VARCHAR(15)[]),
-                CAST(:unit AS VARCHAR(15)[])
+                ARRAY[:company_ids]::text[],
+                ARRAY[:years]::smallint[],
+                ARRAY[:waste_types]::text[],
+                ARRAY[:unit]::text[]
             )
         """), {
             'company_ids': company_ids,
