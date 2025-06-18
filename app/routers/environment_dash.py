@@ -608,7 +608,7 @@ def get_stacked_bar_summary(
 # water years
 @router.get("/water-years", response_model=Dict)
 #@require_role("R02", "R03")
-def get_distinct_years(db: Session = Depends(get_db)):
+def get_distinct_years(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     """
     Get distinct list of years from environment water summary (all data).
     """
@@ -637,7 +637,7 @@ def get_distinct_years(db: Session = Depends(get_db)):
 # ELECTRICITY DASHBOARD
 # comsumption-source
 @router.get("/comsumption-source", response_model=Dict)
-def get_distinct_consumption_source(db: Session = Depends(get_db)):
+def get_distinct_consumption_source(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     try:
         result = db.execute(text("""
             SELECT DISTINCT consumption_source 
@@ -662,7 +662,7 @@ def get_distinct_consumption_source(db: Session = Depends(get_db)):
     
 # electricity-years
 @router.get("/electricity-years", response_model=Dict)
-def get_distinct_electricity_years(db: Session = Depends(get_db)):
+def get_distinct_electricity_years(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     try:
         result = db.execute(text("""
             SELECT DISTINCT year 
@@ -1882,7 +1882,7 @@ def get_diesel_quarter_bar_chart(
 
 #diesel-years
 @router.get("/diesel-years", response_model=Dict)
-def get_distinct_diesel_years(db: Session = Depends(get_db)):
+def get_distinct_diesel_years(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     try:
         result = db.execute(text("""
             SELECT DISTINCT year 
@@ -1907,7 +1907,7 @@ def get_distinct_diesel_years(db: Session = Depends(get_db)):
 
 # diesel-cp-name
 @router.get("/diesel-cp-name", response_model=Dict)
-def get_distinct_diesel_cp_name(db: Session = Depends(get_db)):
+def get_distinct_diesel_cp_name(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     try:
         result = db.execute(text("""
             SELECT DISTINCT company_property_name 
@@ -1932,7 +1932,7 @@ def get_distinct_diesel_cp_name(db: Session = Depends(get_db)):
     
 # diesel-cp-type
 @router.get("/diesel-cp-type", response_model=Dict)
-def get_distinct_diesel_cp_type(db: Session = Depends(get_db)):
+def get_distinct_diesel_cp_type(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     try:
         result = db.execute(text("""
             SELECT DISTINCT company_property_type 
