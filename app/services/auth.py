@@ -52,6 +52,7 @@ class AuthService:
     def get_user(email: str, db: Session) -> Optional[UserInDB]:
         """Get user from database by email."""
         try:
+            print(f"[AUTH DEBUG] Looking up user: {email}")
             # Query your accounts table - adjust the query based on your actual table structure
             query = text("""
                 SELECT 
@@ -69,6 +70,7 @@ class AuthService:
             result = db.execute(query, {"email": email}).fetchone()
             
             if result:
+                print(f"[AUTH DEBUG] User found - Email: {result.email}, Role: {result.roles}, Status: {result.account_status}")
                 # Convert result to dict and create UserInDB object
                 user_data = {
                     "username": result.email,
@@ -78,12 +80,15 @@ class AuthService:
                     "disabled": result.account_status != 'active',
                     "roles": [result.roles] if result.roles else ["user"]  # Convert single role to list
                 }
+                print(f"[AUTH DEBUG] User data created - Roles: {user_data['roles']}, Disabled: {user_data['disabled']}")
                 return UserInDB(**user_data)
+            else:
+                print(f"[AUTH DEBUG] User not found: {email}")
             
             return None
             
         except Exception as e:
-            print(f"Database error in get_user: {str(e)}")
+            print(f"[AUTH DEBUG] Database error in get_user: {str(e)}")
             return None
     
     @staticmethod
@@ -116,6 +121,7 @@ class AuthService:
     @staticmethod
     def verify_token(token: str) -> TokenData:
         """Verify and decode a JWT token."""
+        print(f"[AUTH DEBUG] Verifying token type: {type(token)}")
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -127,21 +133,27 @@ class AuthService:
             if username is None:
                 raise credentials_exception
             token_data = TokenData(username=username)
-        except jwt.PyJWTError:
+            print(f"[AUTH DEBUG] Token decoded successfully, username: {username}")
+        except jwt.PyJWTError as e:
+            print(f"[AUTH DEBUG] JWT decode error: {str(e)}")
             raise credentials_exception
         return token_data
     
     @staticmethod
     def get_current_user(token: str, db: Session) -> User:
         """Get the current user from a JWT token."""
+        print(f"[AUTH DEBUG] Getting current user from token")
         token_data = AuthService.verify_token(token)
+        print(f"[AUTH DEBUG] Token verified, username: {token_data.username}")
         user = AuthService.get_user(email=token_data.username, db=db)
         if user is None:
+            print(f"[AUTH DEBUG] User not found for token username: {token_data.username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        print(f"[AUTH DEBUG] Current user retrieved: {user.email}, roles: {user.roles}")
         return User(**user.dict())
     
     @staticmethod
