@@ -293,6 +293,219 @@ def get_csr_activity_specific(
         logging.error(f"Error fetching CSR activity: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/investments-per-project", response_model=List[Dict])
+def get_help_investments(
+    year: Optional[int] = None,
+    company_id: Optional[str] = None,
+    program_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get HELP investments with optional filters
+    Returns list of expenses per company, project, and program
+    """
+    try:
+        logging.info(f"Executing CSR investments query with filters - year: {year}, company_id: {company_id}, program_id: {program_id}")
+        
+        where_conditions = []
+        params = {}
+        
+        if year:
+            where_conditions.append("cact.project_year = :year")
+            params['year'] = year
+            
+        if company_id:
+            where_conditions.append("cact.company_id = :company_id")
+            params['company_id'] = company_id
+            
+        # if program_id:
+        #     where_conditions.append("cp.program_id = :program_id")
+        #     params['program_id'] = program_id
+        
+        where_clause = ""
+        if where_conditions:
+            where_clause = "WHERE " + " AND ".join(where_conditions)
+
+        result = db.execute(text(f"""
+            SELECT 
+                cact.company_id,
+                cproj.project_name,
+                SUM(project_expenses) AS "project_investments"
+            FROM silver.csr_activity AS cact
+            LEFT JOIN silver.csr_projects AS cproj
+            ON cact.project_id = cproj.project_id
+            LEFT JOIN silver.csr_programs AS cprog
+            ON cproj.program_id = cprog.program_id
+            LEFT JOIN ref.company_main AS ccomp
+            ON cact.company_id = ccomp.company_id
+            {where_clause} AND
+                (
+                    cact.project_id LIKE 'HE%' 
+                    OR cact.project_id LIKE 'ED%' 
+                    OR cact.project_id LIKE 'LI%'
+                )
+            GROUP BY cact.company_id, cact.project_year, cproj.project_name
+            ORDER BY "project_investments"
+        """), params)
+
+        data = [
+            {
+                'projectName': row.project_name,
+                'projectExpenses': float(row.project_investments) if row.project_investments else 0
+            }
+            for row in result
+        ]
+
+        logging.info(f"Query returned {len(data)} CSR activities")
+        return data
+        
+    except Exception as e:
+        logging.error(f"Error fetching CSR activities: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/investments-per-program", response_model=List[Dict])
+def get_help_investments(
+    year: Optional[int] = None,
+    company_id: Optional[str] = None,
+    program_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get HELP investments with optional filters
+    Returns list of expenses per company, project, and program
+    """
+    try:
+        logging.info(f"Executing CSR investments query with filters - year: {year}, company_id: {company_id}, program_id: {program_id}")
+        
+        where_conditions = []
+        params = {}
+        
+        if year:
+            where_conditions.append("cact.project_year = :year")
+            params['year'] = year
+            
+        if company_id:
+            where_conditions.append("cact.company_id = :company_id")
+            params['company_id'] = company_id
+            
+        # if program_id:
+        #     where_conditions.append("cp.program_id = :program_id")
+        #     params['program_id'] = program_id
+        
+        where_clause = ""
+        if where_conditions:
+            where_clause = "WHERE " + " AND ".join(where_conditions)
+
+        result = db.execute(text(f"""
+            SELECT 
+                cprog.program_name,
+                SUM(project_expenses) AS "project_investments"
+            FROM silver.csr_activity AS cact
+            LEFT JOIN silver.csr_projects AS cproj
+            ON cact.project_id = cproj.project_id
+            LEFT JOIN silver.csr_programs AS cprog
+            ON cproj.program_id = cprog.program_id
+            LEFT JOIN ref.company_main AS ccomp
+            ON cact.company_id = ccomp.company_id
+            {where_clause} AND
+                (
+                    cact.project_id LIKE 'HE%' 
+                    OR cact.project_id LIKE 'ED%' 
+                    OR cact.project_id LIKE 'LI%'
+                )
+            GROUP BY cact.project_year, cprog.program_name
+            ORDER BY "project_investments"
+        """), params)
+
+        data = [
+            {
+                'programName': row.program_name,
+                'projectExpenses': float(row.project_investments) if row.project_investments else 0
+            }
+            for row in result
+        ]
+
+        logging.info(f"Query returned {len(data)} CSR activities")
+        return data
+        
+    except Exception as e:
+        logging.error(f"Error fetching CSR activities: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/investments-per-company", response_model=List[Dict])
+def get_help_investments(
+    year: Optional[int] = None,
+    company_id: Optional[str] = None,
+    program_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get HELP investments with optional filters
+    Returns list of expenses per company, project, and program
+    """
+    try:
+        logging.info(f"Executing CSR investments query with filters - year: {year}, company_id: {company_id}, program_id: {program_id}")
+        
+        where_conditions = []
+        params = {}
+        
+        if year:
+            where_conditions.append("cact.project_year = :year")
+            params['year'] = year
+            
+        # if company_id:
+        #     where_conditions.append("cact.company_id = :company_id")
+        #     params['company_id'] = company_id
+            
+        # if program_id:
+        #     where_conditions.append("cp.program_id = :program_id")
+        #     params['program_id'] = program_id
+        
+        where_clause = ""
+        if where_conditions:
+            where_clause = "WHERE " + " AND ".join(where_conditions)
+
+        result = db.execute(text(f"""
+            SELECT 
+                ccomp.company_name,
+                SUM(project_expenses) AS "project_investments"
+            FROM silver.csr_activity AS cact
+            LEFT JOIN silver.csr_projects AS cproj
+            ON cact.project_id = cproj.project_id
+            LEFT JOIN silver.csr_programs AS cprog
+            ON cproj.program_id = cprog.program_id
+            LEFT JOIN ref.company_main AS ccomp
+            ON cact.company_id = ccomp.company_id
+            {where_clause} AND
+                (
+                    cact.project_id LIKE 'HE%' 
+                    OR cact.project_id LIKE 'ED%' 
+                    OR cact.project_id LIKE 'LI%'
+                )
+            GROUP BY cact.project_year, ccomp.company_id
+            ORDER BY "project_investments"
+        """), params)
+
+        data = [
+            {
+                'companyName': row.company_name,
+                'projectExpenses': float(row.project_investments) if row.project_investments else 0
+            }
+            for row in result
+        ]
+
+        logging.info(f"Query returned {len(data)} CSR activities")
+        return data
+        
+    except Exception as e:
+        logging.error(f"Error fetching CSR activities: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ----------------------- POST METHODS ----------------------------
+
 @router.post("/activities-update")
 def update_csr_activity_single(data: dict, db: Session = Depends(get_db)):
     try:
