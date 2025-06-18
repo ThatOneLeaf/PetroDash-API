@@ -14,6 +14,7 @@ import io
 import math
 import logging
 import traceback
+from collections import defaultdict
 
 
 router = APIRouter()
@@ -285,7 +286,7 @@ def get_energy_dashboard_raw(
 # ====================== dashboard ====================== #
 def process_query_data(
     db: Session,
-    query_str: str,  # ✅ Query is now passed as a string
+    query_str: str,  
     x: str,
     y: str,
     v: List[str],
@@ -676,10 +677,21 @@ def get_energy_dashboard(
             years=years
         )
 
-        # Apply formatting
+        # Nested grouping: category → EQ → list of records
+        grouped_equivalence = defaultdict(lambda: defaultdict(list))
+
+        for i, record in enumerate(eq_result):
+            category = record.get("equivalence_category", "Uncategorized")  # Change this if your key is different
+            eq_key = f"EQ_{i+1}"
+
+            formatted_record = format_equivalence(record)
+
+            grouped_equivalence[category][eq_key].append(formatted_record)
+
+        # Convert defaultdicts to regular dicts
         equivalence_dict = {
-            f"EQ_{i+1}": format_equivalence(record)
-            for i, record in enumerate(eq_result)
+            category: dict(eqs)
+            for category, eqs in grouped_equivalence.items()
         }
         
         
