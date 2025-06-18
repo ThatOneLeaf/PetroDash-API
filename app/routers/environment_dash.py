@@ -17,7 +17,7 @@ from collections import defaultdict
 import hashlib
 import random
 
-from ..auth_decorators import require_role, office_checker_only
+from ..auth_decorators import require_role, office_checker_only, get_current_user_with_roles
 
 def generate_unique_color_map(property_names, palette=None):
     property_names = sorted(set(property_names))  # remove duplicates and sort
@@ -63,9 +63,9 @@ router = APIRouter()
 # WATER DASHBOARD
 # key metrics
 @router.get("/abstraction", response_model=Dict)
-#@require_role("R02", "R03")
 def get_water_abstraction(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None)
@@ -134,9 +134,9 @@ def get_water_abstraction(
         }
 
 @router.get("/discharge", response_model=Dict)
-#@require_role("R02", "R03")
 def get_water_discharge(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None)
@@ -205,9 +205,9 @@ def get_water_discharge(
         }
 
 @router.get("/consumption", response_model=Dict)
-#@require_role("R02", "R03")
 def get_water_consumption(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None)
@@ -277,9 +277,9 @@ def get_water_consumption(
 
 # pie chart
 @router.get("/pie-chart", response_model=Dict)
-#@require_role("R02", "R03")
 def get_water_summary_pie(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None)
@@ -390,9 +390,9 @@ def get_water_summary_pie(
 
 # line chart
 @router.get("/line-chart", response_model=Dict)
-#@require_role("R02", "R03")
 def get_water_summary_line_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None)
@@ -489,9 +489,9 @@ def get_water_summary_line_chart(
 
 # stacked-bar chart
 @router.get("/stacked-bar", response_model=Dict)
-#@require_role("R02", "R03")
 def get_stacked_bar_summary(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
     year: Optional[Union[int, List[int]]] = Query(None)
@@ -689,6 +689,7 @@ def get_distinct_electricity_years(db: Session = Depends(get_db)):
 @router.get("/electricity-key-metrics", response_model=Dict)
 def get_electricity_key_metrics(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     consumption_source: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
@@ -761,6 +762,7 @@ def get_electricity_key_metrics(
 @router.get("/elec-pie-chart", response_model=Dict)
 def get_electricity_consumption_pie_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     consumption_source: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
@@ -872,6 +874,7 @@ def get_electricity_consumption_pie_chart(
 @router.get("/elect-line-chart", response_model=Dict)
 def get_electricity_consumption_line_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     consumption_source: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
@@ -979,6 +982,7 @@ def get_electricity_consumption_line_chart(
 @router.get("/elect-perc-bar-chart", response_model=Dict)
 def get_electricity_consumption_bar_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     consumption_source: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
@@ -1088,6 +1092,7 @@ def get_electricity_consumption_bar_chart(
 @router.get("/elect-source-bar-chart", response_model=Dict)
 def get_electricity_source_bar_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     consumption_source: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
@@ -1170,6 +1175,7 @@ def get_electricity_source_bar_chart(
 @router.get("/elect-quarter-bar-chart", response_model=Dict)
 def get_quarterly_electric_consumption_bar_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     consumption_source: Optional[Union[str, List[str]]] = Query(None),
     quarter: Optional[Union[str, List[str]]] = Query(None),
@@ -1296,6 +1302,7 @@ def get_quarterly_electric_consumption_bar_chart(
 @router.get("/diesel-pie-chart", response_model=Dict)
 def get_diesel_consumption_pie_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     property_name: Optional[Union[str, List[str]]] = Query(None),
     property_type: Optional[Union[str, List[str]]] = Query(None),
@@ -1411,6 +1418,7 @@ def get_diesel_consumption_pie_chart(
 @router.get("/diesel-cp-chart", response_model=Dict)
 def get_diesel_consumption_by_cp_name_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     company_property_name: Optional[Union[str, List[str]]] = Query(None),
     company_property_type: Optional[Union[str, List[str]]] = Query(None),
@@ -1496,6 +1504,7 @@ def get_diesel_consumption_by_cp_name_chart(
 @router.get("/diesel-line-chart", response_model=Dict)
 def get_diesel_consumption_line_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     property_name: Optional[Union[str, List[str]]] = Query(None),
     property_type: Optional[Union[str, List[str]]] = Query(None),
@@ -1567,6 +1576,7 @@ def get_diesel_consumption_line_chart(
 @router.get("/diesel-cp-type-chart", response_model=Dict)
 def get_diesel_consumption_by_cp_type_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     property_name: Optional[Union[str, List[str]]] = Query(None),
     property_type: Optional[Union[str, List[str]]] = Query(None),
@@ -1669,6 +1679,7 @@ def get_diesel_consumption_by_cp_type_chart(
 @router.get("/diesel-cp-line-chart", response_model=Dict)
 def get_diesel_consumption_line_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     company_property_name: Optional[Union[str, List[str]]] = Query(None),
     company_property_type: Optional[Union[str, List[str]]] = Query(None),
@@ -1761,6 +1772,7 @@ def get_diesel_consumption_line_chart(
 @router.get("/diesel-quarter-bar-chart", response_model=Dict)
 def get_diesel_quarter_bar_chart(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     company_property_name: Optional[Union[str, List[str]]] = Query(None),
     company_property_type: Optional[Union[str, List[str]]] = Query(None),
@@ -1947,6 +1959,7 @@ def get_distinct_diesel_cp_type(db: Session = Depends(get_db)):
 @router.get("/diesel-key-metrics", response_model=Dict)
 def get_diesel_key_metrics(
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03")),
     company_id: Optional[Union[str, List[str]]] = Query(None),
     company_property_name: Optional[Union[str, List[str]]] = Query(None),
     company_property_type: Optional[Union[str, List[str]]] = Query(None),
