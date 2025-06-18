@@ -383,6 +383,15 @@ def process_query_data(
         for metric in v
     }
 
+    # Step 1: Group by [x, period] and sum values in v (like energy)
+    grouped_df = df.groupby([x, "period"], dropna=False)[v].sum().reset_index()
+
+    # Step 2: Pivot to get periods as rows, x categories as columns (stacked bars)
+    pivot_df = grouped_df.pivot(index="period", columns=x, values=v[0]).fillna(0).reset_index()
+
+    # Step 3: Convert to list of dicts (for charting libraries)
+    stacked_bar_chart = pivot_df.to_dict(orient="records")
+
     # Totals
     totals = {metric: float(df[metric].sum()) for metric in v}
 
@@ -390,7 +399,8 @@ def process_query_data(
         "line_graph": line_graph,
         "bar_chart": bar_chart,
         "pie_chart": pie_chart,
-        "totals": totals
+        "totals": totals,
+        "stacked_bar":stacked_bar_chart
     }
 
 def process_fa_data(
