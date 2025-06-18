@@ -772,15 +772,15 @@ def get_electricity_consumption_pie_chart(
     try:
         # Debug logs
         print(f"Received parameters - company_id: {company_id}, source: {consumption_source}, quarter: {quarter}, year: {year}")
-
+        
         # Convert inputs to arrays
         company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
         sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         years = year if isinstance(year, list) else [year] if year else None
-
+        
         print(f"Processed parameters - company_ids: {company_ids}, sources: {sources}, quarters: {quarters}, years: {years}")
-
+        
         # Required check
         if not company_ids or not quarters or not years:
             return {
@@ -788,13 +788,13 @@ def get_electricity_consumption_pie_chart(
                 "unit": "kWh",
                 "message": "Missing required parameters"
             }
-
+        
         # Execute function
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_electric_consumption_by_perc_lvl(
-                ARRAY[:company_ids]::text[], 
+                ARRAY[:company_ids]::text[],
                 ARRAY[:sources]::text[],
-                ARRAY[:quarters]::text[], 
+                ARRAY[:quarters]::text[],
                 ARRAY[:years]::smallint[]
             )
         """), {
@@ -803,48 +803,66 @@ def get_electricity_consumption_pie_chart(
             "quarters": quarters,
             "years": years
         })
-
+        
         rows = result.fetchall()
         print(f"Fetched {len(rows)} rows")
-
+        
         if not rows:
             return {
                 "data": [],
                 "unit": "kWh",
                 "message": "No data found"
             }
-
+        
         # Data preparation
-        data = []
         total = sum(row.total_consumption or 0 for row in rows)
         print(f"Total electric consumption: {total}")
-
+        
         if total == 0:
             return {
                 "data": [],
                 "unit": rows[0].unit_of_measurement if rows else "kWh",
                 "message": "All values are zero"
             }
-
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]  # Extend if needed
-
-        for idx, row in enumerate(rows):
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        
+        data = []
+        fallback_index = 0
+        for row in rows:
             value = row.total_consumption or 0
             percentage = (value / total) * 100 if total > 0 else 0
+            
+            # Get color from database or use fallback
+            color = company_colors.get(row.company_id)
+            if not color:
+                color = fallback_colors[fallback_index % len(fallback_colors)]
+                fallback_index += 1
+            
             data.append({
                 "label": row.company_id,
                 "value": round(value, 2),
                 "percentage": round(percentage, 2),
-                "color": color_palette[idx % len(color_palette)]
+                "color": color
             })
-
+        
         return {
             "data": [item for item in data if item["value"] > 0],
             "unit": rows[0].unit_of_measurement if rows else "kWh",
             "total_records": len(rows),
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in electric consumption pie chart:", str(e))
         import traceback
@@ -864,26 +882,26 @@ def get_electricity_consumption_line_chart(
     """
     try:
         print(f"Received parameters - company_id: {company_id}, source: {consumption_source}, quarter: {quarter}, year: {year}")
-
+        
         company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
         sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         years = year if isinstance(year, list) else [year] if year else None
-
+        
         print(f"Processed parameters - company_ids: {company_ids}, sources: {sources}, quarters: {quarters}, years: {years}")
-
+        
         if not company_ids or not years:
             return {
                 "data": [],
                 "unit": "kWh",
                 "message": "Missing required parameters"
             }
-
+        
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_electric_consumption_by_year(
-                ARRAY[:company_ids]::text[], 
+                ARRAY[:company_ids]::text[],
                 ARRAY[:sources]::text[],
-                ARRAY[:quarters]::text[], 
+                ARRAY[:quarters]::text[],
                 ARRAY[:years]::smallint[]
             )
         """), {
@@ -892,40 +910,58 @@ def get_electricity_consumption_line_chart(
             "quarters": quarters,
             "years": years
         })
-
+        
         rows = result.fetchall()
         print(f"Fetched {len(rows)} rows")
-
+        
         if not rows:
             return {
                 "data": [],
                 "unit": "kWh",
                 "message": "No data found"
             }
-
+        
         from collections import defaultdict
-
         company_data = defaultdict(list)
         unit = rows[0].unit_of_measurement if rows else "kWh"
-
+        
         for row in rows:
             company_data[row.company_id].append({
                 "year": int(row.year),
                 "total_consumption": float(row.total_consumption)
             })
-
+        
+        # Sort data by year for each company
         for company in company_data:
             company_data[company] = sorted(company_data[company], key=lambda x: x["year"])
-
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]  # Extend if needed
-
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        
         # Map colors to company IDs (consistent ordering)
         sorted_company_ids = sorted(company_data.keys())
-        color_map = {
-            company: color_palette[idx % len(color_palette)]
-            for idx, company in enumerate(sorted_company_ids)
-        }
-
+        color_map = {}
+        fallback_index = 0
+        
+        for company in sorted_company_ids:
+            # Get color from database or use fallback
+            color = company_colors.get(company)
+            if not color:
+                color = fallback_colors[fallback_index % len(fallback_colors)]
+                fallback_index += 1
+            color_map[company] = color
+        
+        print(f"Final color mapping: {color_map}")
+        
         return {
             "data": company_data,
             "colors": color_map,
@@ -933,7 +969,7 @@ def get_electricity_consumption_line_chart(
             "total_records": len(rows),
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in electric consumption line chart:", str(e))
         import traceback
@@ -954,22 +990,22 @@ def get_electricity_consumption_bar_chart(
     try:
         # Debug logs
         print(f"Received parameters - company_id: {company_id}, source: {consumption_source}, quarter: {quarter}, year: {year}")
-
+        
         # Convert inputs to lists
         company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
         sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         years = year if isinstance(year, list) else [year] if year else None
-
+        
         print(f"Processed parameters - company_ids: {company_ids}, sources: {sources}, quarters: {quarters}, years: {years}")
-
+        
         if not company_ids or not quarters or not years:
             return {
                 "data": [],
                 "unit": "kWh",
                 "message": "Missing required parameters"
             }
-
+        
         # Execute function
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_electric_consumption_by_perc_lvl(
@@ -984,17 +1020,17 @@ def get_electricity_consumption_bar_chart(
             "quarters": quarters,
             "years": years
         })
-
+        
         rows = result.fetchall()
         print(f"Fetched {len(rows)} rows")
-
+        
         if not rows:
             return {
                 "data": [],
                 "unit": "kWh",
                 "message": "No data found"
             }
-
+        
         # Aggregate total consumption per company
         company_totals = {}
         for row in rows:
@@ -1002,28 +1038,47 @@ def get_electricity_consumption_bar_chart(
                 company_totals[row.company_id] += float(row.total_consumption or 0)
             else:
                 company_totals[row.company_id] = float(row.total_consumption or 0)
-
+        
         # Sort in descending order
         sorted_totals = sorted(company_totals.items(), key=lambda x: x[1], reverse=True)
-
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]  # Extend if needed
-
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        
         # Prepare response data
         data = []
-        for idx, (company, value) in enumerate(sorted_totals):
+        fallback_index = 0
+        for company, value in sorted_totals:
+            # Get color from database or use fallback
+            color = company_colors.get(company)
+            if not color:
+                color = fallback_colors[fallback_index % len(fallback_colors)]
+                fallback_index += 1
+            
             data.append({
                 "label": company,
                 "value": round(value, 2),
-                "color": color_palette[idx % len(color_palette)]
+                "color": color
             })
-
+        
+        print(f"Final bar chart data with colors: {[(item['label'], item['color']) for item in data]}")
+        
         return {
             "data": data,
             "unit": rows[0].unit_of_measurement if rows else "kWh",
             "total_records": len(rows),
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in electricity consumption bar chart:", str(e))
         import traceback
@@ -1129,7 +1184,7 @@ def get_quarterly_electric_consumption_bar_chart(
         sources = consumption_source if isinstance(consumption_source, list) else [consumption_source] if consumption_source else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         years = year if isinstance(year, list) else [year] if year else None
-
+        
         # Safety check for required fields
         if not company_ids or not quarters or not years:
             return {
@@ -1137,7 +1192,7 @@ def get_quarterly_electric_consumption_bar_chart(
                 "unit": "",
                 "message": "Missing required parameters"
             }
-
+        
         # Call stored function
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_electric_consumption_by_quarter(
@@ -1152,51 +1207,70 @@ def get_quarterly_electric_consumption_bar_chart(
             "quarters": quarters,
             "years": years
         })
-
+        
         rows = result.fetchall()
-
+        
         if not rows:
             return {
                 "data": [],
                 "unit": "",
                 "message": "No data found"
             }
-
+        
         # Clean and organize data
         quarter_order = ['Q1', 'Q2', 'Q3', 'Q4']
         valid_rows = []
         unique_companies = set()
-
+        
         for row in rows:
             if not row.year or not row.quarter or not row.total_consumption or not row.company_id:
                 continue
-
+            
             quarter_cleaned = str(row.quarter).upper().replace(" ", "")
             if quarter_cleaned not in quarter_order:
                 continue
-
+            
             unique_companies.add(row.company_id)
             valid_rows.append({
                 "company_id": row.company_id,
                 "quarter": quarter_cleaned,
                 "value": float(row.total_consumption),
             })
-
+        
         if not valid_rows:
             return {
                 "data": [],
                 "unit": rows[0].unit_of_measurement if rows else "",
                 "message": "No valid data after filtering"
             }
-
-        # Assign colors
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
+        
+        # Assign colors to companies
         sorted_companies = sorted(unique_companies)
-        color_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-        company_color_dict = {
-            company: color_palette[idx % len(color_palette)]
-            for idx, company in enumerate(sorted_companies)
-        }
-
+        company_color_dict = {}
+        fallback_index = 0
+        
+        for company in sorted_companies:
+            # Get color from database or use fallback
+            color = company_colors.get(company)
+            if not color:
+                color = fallback_colors[fallback_index % len(fallback_colors)]
+                fallback_index += 1
+            company_color_dict[company] = color
+        
+        print(f"Final company color mapping: {company_color_dict}")
+        
         data = []
         for item in valid_rows:
             data.append({
@@ -1205,13 +1279,13 @@ def get_quarterly_electric_consumption_bar_chart(
                 "value": round(item["value"], 2),
                 "color": company_color_dict[item["company_id"]]
             })
-
+        
         return {
             "data": data,
             "unit": rows[0].unit_of_measurement if rows else "",
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in /elect-quarter-bar-chart:", str(e))
         import traceback
@@ -1240,19 +1314,19 @@ def get_diesel_consumption_pie_chart(
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         months = month if isinstance(month, list) else [month] if month else None
         years = year if isinstance(year, list) else [year] if year else None
-
+        
         print(f"Processed parameters - company_ids: {company_ids}, property_names: {property_names}, property_types: {property_types}, months: {months}, quarters: {quarters}, years: {years}")
-
+        
         if not company_ids or not years or (not months and not quarters):
             return {
                 "data": [],
                 "unit": "L",
                 "message": "Missing required parameters"
             }
-
+        
         # Execute the SQL function
         result = db.execute(text("""
-            SELECT * FROM gold.func_environment_diesel_consumption_by_perc_lvl(                                 
+            SELECT * FROM gold.func_environment_diesel_consumption_by_perc_lvl(
                 ARRAY[:company_ids]::text[],
                 ARRAY[:property_names]::text[],
                 ARRAY[:property_types]::text[],
@@ -1268,49 +1342,66 @@ def get_diesel_consumption_pie_chart(
             "years": years,
             "quarters": quarters
         })
-
+        
         rows = result.fetchall()
         print(f"Fetched {len(rows)} rows")
-
+        
         if not rows:
             return {
                 "data": [],
                 "unit": "L",
                 "message": "No data found"
             }
-
+        
         total = sum(row.total_consumption or 0 for row in rows)
         print(f"Total diesel consumption: {total}")
-
+        
         if total == 0:
             return {
                 "data": [],
                 "unit": rows[0].unit_of_measurement if rows else "L",
                 "message": "All values are zero"
             }
-
-        # Color palette
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
-
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        
         # Format data
         data = []
-        for idx, row in enumerate(rows):
+        fallback_index = 0
+        for row in rows:
             value = row.total_consumption or 0
             percentage = (value / total) * 100 if total > 0 else 0
+            
+            # Get color from database or use fallback
+            color = company_colors.get(row.company_id)
+            if not color:
+                color = fallback_colors[fallback_index % len(fallback_colors)]
+                fallback_index += 1
+            
             data.append({
                 "company_id": row.company_id,
                 "value": round(value, 2),
                 "percentage": round(percentage, 2),
-                "color": color_palette[idx % len(color_palette)]
+                "color": color
             })
-
+        
         return {
             "data": [item for item in data if item["value"] > 0],
             "unit": rows[0].unit_of_measurement if rows else "L",
             "total_records": len(rows),
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in diesel consumption pie chart:", str(e))
         import traceback
@@ -2425,33 +2516,22 @@ def get_hazard_waste_percentage_pie_chart(
     unit: Optional[Union[str, List[str]]] = Query(None),
 ):
     try:
-        # Palette placed directly inside the function
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
-
-        def generate_color_map(keys, palette):
-            keys = sorted(set(keys))
-            while len(palette) < len(keys):
-                # Extend palette with random hex colors if not enough
-                new_color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
-                if new_color not in palette:
-                    palette.append(new_color)
-            return {key: palette[i] for i, key in enumerate(keys)}
-
         company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
         years = year if isinstance(year, list) else [year] if year else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
         unit = unit if isinstance(unit, list) else [unit] if unit else None
-
+        
         query = text("""
             SELECT * FROM gold.func_environment_hazard_waste_generated_by_perc_lvl(
-                ARRAY[:company_ids]::text[], 
+                ARRAY[:company_ids]::text[],
                 ARRAY[:years]::smallint[],
                 ARRAY[:quarters]::text[],
                 ARRAY[:waste_types]::text[],
                 ARRAY[:unit]::text[]
             )
         """)
+        
         result = db.execute(query, {
             "company_ids": company_ids,
             "years": years,
@@ -2459,43 +2539,74 @@ def get_hazard_waste_percentage_pie_chart(
             "waste_types": waste_types,
             "unit": unit
         })
-
+        
         rows = result.fetchall()
+        
         if not rows:
             return {"data": [], "unit": "", "message": "No data found"}
-
+        
         data = [{
             "company_id": r.company_id,
             "unit": r.unit,
             "total_generate": float(r.total_generate or 0)
         } for r in rows]
-
+        
         total_all = sum(d["total_generate"] for d in data)
+        
         if total_all == 0:
             return {"data": [], "unit": "", "message": "No waste generated"}
-
-        company_ids = [d["company_id"] for d in data]
-        color_map = generate_color_map(company_ids, color_palette)
-
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        
+        def generate_color_map(company_data, company_colors_dict, fallback_palette):
+            """Generate color mapping using database colors with fallback"""
+            unique_companies = sorted(set(d["company_id"] for d in company_data))
+            color_map = {}
+            fallback_index = 0
+            
+            for company in unique_companies:
+                # Get color from database or use fallback
+                color = company_colors_dict.get(company)
+                if not color:
+                    color = fallback_palette[fallback_index % len(fallback_palette)]
+                    fallback_index += 1
+                color_map[company] = color
+            
+            return color_map
+        
+        # Generate color mapping using database colors
+        color_map = generate_color_map(data, company_colors, fallback_colors)
+        print(f"Final color mapping: {color_map}")
+        
+        # Add percentage and color to each data item
         for d in data:
             d["percentage"] = round((d["total_generate"] / total_all) * 100, 2)
             d["color"] = color_map[d["company_id"]]
-
+        
         unique_units = list(sorted(set(d["unit"] for d in data)))
-
+        
         return {
             "data": data,
             "unit": unique_units,
             "total_generate": round(total_all, 2),
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in /hazard-waste-perc-pie-chart:", str(e))
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
 # hazardous waste (disposed) section
 # get disposed hazardous waste type
@@ -2714,22 +2825,11 @@ def get_hazard_waste_disposed_percentage_pie_chart(
     unit: Optional[Union[str, List[str]]] = Query(None),
 ):
     try:
-        # Color palette placed directly in the function
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
-
-        def generate_color_map(keys, palette):
-            keys = sorted(set(keys))
-            while len(palette) < len(keys):
-                new_color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
-                if new_color not in palette:
-                    palette.append(new_color)
-            return {key: palette[i] for i, key in enumerate(keys)}
-
         company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
         years = year if isinstance(year, list) else [year] if year else None
         waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
         unit = unit if isinstance(unit, list) else [unit] if unit else None
-
+        
         query = text("""
             SELECT * FROM gold.func_environment_hazard_waste_disposed_by_perc_lvl(
                 ARRAY[:company_ids]::text[],
@@ -2738,43 +2838,76 @@ def get_hazard_waste_disposed_percentage_pie_chart(
                 ARRAY[:unit]::text[]
             )
         """)
+        
         result = db.execute(query, {
             "company_ids": company_ids,
             "years": years,
             "waste_types": waste_types,
             "unit": unit
         })
-
+        
         rows = result.fetchall()
+        
         if not rows:
             return {"data": [], "unit": "", "message": "No data found"}
-
+        
         data = [{
             "company_id": r.company_id,
             "unit": r.unit,
             "total_disposed": float(r.total_disposed or 0)
         } for r in rows]
-
+        
         total_all = sum(d["total_disposed"] for d in data)
+        
         if total_all == 0:
             return {"data": [], "unit": "", "message": "No waste disposed"}
-
-        company_ids = [d["company_id"] for d in data]
-        color_map = generate_color_map(company_ids, color_palette)
-
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        
+        def generate_color_map(company_data, company_colors_dict, fallback_palette):
+            """Generate color mapping using database colors with fallback"""
+            unique_companies = sorted(set(d["company_id"] for d in company_data))
+            color_map = {}
+            fallback_index = 0
+            
+            for company in unique_companies:
+                # Get color from database or use fallback
+                color = company_colors_dict.get(company)
+                if not color:
+                    color = fallback_palette[fallback_index % len(fallback_palette)]
+                    fallback_index += 1
+                color_map[company] = color
+            
+            return color_map
+        
+        # Generate color mapping using database colors
+        color_map = generate_color_map(data, company_colors, fallback_colors)
+        print(f"Final color mapping: {color_map}")
+        
+        # Add percentage and color to each data item
         for d in data:
             d["percentage"] = round((d["total_disposed"] / total_all) * 100, 2)
             d["color"] = color_map[d["company_id"]]
-
+        
         unique_units = list(sorted(set(d["unit"] for d in data)))
-
+        
         return {
             "data": data,
             "unit": unique_units,
             "total_disposed": round(total_all, 2),
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in /hazard-waste-dis-perc-pie-chart:", str(e))
         import traceback
@@ -2923,9 +3056,7 @@ def get_hazard_waste_dis_perc_bar_chart(
         years = year if isinstance(year, list) else [year] if year else None
         waste_types = waste_type if isinstance(waste_type, list) else [waste_type] if waste_type else None
         unit = unit if isinstance(unit, list) else [unit] if unit else None
-
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
-
+        
         result = db.execute(text("""
             SELECT * FROM gold.func_environment_hazard_waste_disposed_by_year(
                 ARRAY[:company_ids]::text[],
@@ -2939,21 +3070,46 @@ def get_hazard_waste_dis_perc_bar_chart(
             "waste_types": waste_types,
             "unit": unit
         })
-
+        
         rows = result.fetchall()
+        
         if not rows:
             return {"data": [], "unit": "", "message": "No data found"}
-
+        
         # Group by company_id, each having per-year records
         company_year_data = defaultdict(lambda: defaultdict(float))
         for row in rows:
             company_year_data[row.company_id][row.year] += float(row.total_disposed or 0)
-
-        # Assign fixed color to each company
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        
+        # Assign colors to companies
         company_ids_sorted = sorted(company_year_data.keys())
-        color_map = {cid: color_palette[i % len(color_palette)] for i, cid in enumerate(company_ids_sorted)}
+        color_map = {}
+        fallback_index = 0
+        
+        for company_id in company_ids_sorted:
+            # Get color from database or use fallback
+            color = company_colors.get(company_id)
+            if not color:
+                color = fallback_colors[fallback_index % len(fallback_colors)]
+                fallback_index += 1
+            color_map[company_id] = color
+        
+        print(f"Final color mapping: {color_map}")
+        
         unit_value = rows[0].unit if rows else "kg or L"
-
+        
         chart_data = []
         for company_id, yearly_data in company_year_data.items():
             year_data = [{"year": int(y), "total_disposed": round(v, 2)} for y, v in sorted(yearly_data.items())]
@@ -2962,14 +3118,14 @@ def get_hazard_waste_dis_perc_bar_chart(
                 "color": color_map[company_id],
                 "data": year_data
             })
-
+        
         return {
             "data": chart_data,
             "unit": unit_value,
             "total_records": len(rows),
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in hazard waste disposed perc bar chart:", str(e))
         import traceback
@@ -3198,29 +3354,17 @@ def get_non_hazard_waste_percentage_pie_chart(
     unit_of_measurement: Optional[Union[str, List[str]]] = Query(None),
 ):
     try:
-        # Color palette placed directly inside the function
-        color_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
-
-        def generate_color_map(keys, palette):
-            keys = sorted(set(keys))
-            while len(palette) < len(keys):
-                # Extend palette with random hex colors if not enough
-                new_color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
-                if new_color not in palette:
-                    palette.append(new_color)
-            return {key: palette[i] for i, key in enumerate(keys)}
-
         # Convert parameters to lists if they're single values
         company_ids = company_id if isinstance(company_id, list) else [company_id] if company_id else None
         years = year if isinstance(year, list) else [year] if year else None
         quarters = quarter if isinstance(quarter, list) else [quarter] if quarter else None
         metrics_list = metrics if isinstance(metrics, list) else [metrics] if metrics else None
         units = unit_of_measurement if isinstance(unit_of_measurement, list) else [unit_of_measurement] if unit_of_measurement else None
-
+        
         # Execute the PostgreSQL function
         query = text("""
             SELECT * FROM gold.func_environment_non_hazard_waste_by_perc_lvl(
-                ARRAY[:company_ids]::text[], 
+                ARRAY[:company_ids]::text[],
                 ARRAY[:metrics]::text[],
                 ARRAY[:quarters]::text[],
                 ARRAY[:years]::smallint[],
@@ -3235,42 +3379,72 @@ def get_non_hazard_waste_percentage_pie_chart(
             "years": years,
             "units": units
         })
-
+        
         rows = result.fetchall()
+        
         if not rows:
             return {"data": [], "unit": "", "message": "No data found"}
-
+        
         # Transform the data
         data = [{
             "company_id": r.company_id,
             "unit_of_measurement": r.unit_of_measurement,
             "total_waste": float(r.total_waste or 0)
         } for r in rows]
-
+        
         # Calculate total waste across all companies
         total_all = sum(d["total_waste"] for d in data)
+        
         if total_all == 0:
             return {"data": [], "unit": "", "message": "No waste data available"}
-
-        # Generate color mapping for companies
-        company_ids = [d["company_id"] for d in data]
-        color_map = generate_color_map(company_ids, color_palette)
-
+        
+        # Get company colors from database
+        company_color_result = db.execute(text("""
+            SELECT company_id, company_name, color 
+            FROM ref.company_main
+        """))
+        
+        company_colors = {row.company_id: row.color for row in company_color_result.fetchall()}
+        print(f"Fetched company colors: {company_colors}")
+        
+        # Fallback color palette for companies without assigned colors
+        fallback_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+        
+        def generate_color_map(company_data, company_colors_dict, fallback_palette):
+            """Generate color mapping using database colors with fallback"""
+            unique_companies = sorted(set(d["company_id"] for d in company_data))
+            color_map = {}
+            fallback_index = 0
+            
+            for company in unique_companies:
+                # Get color from database or use fallback
+                color = company_colors_dict.get(company)
+                if not color:
+                    color = fallback_palette[fallback_index % len(fallback_palette)]
+                    fallback_index += 1
+                color_map[company] = color
+            
+            return color_map
+        
+        # Generate color mapping using database colors
+        color_map = generate_color_map(data, company_colors, fallback_colors)
+        print(f"Final color mapping: {color_map}")
+        
         # Add percentage and color to each data point
         for d in data:
             d["percentage"] = round((d["total_waste"] / total_all) * 100, 2)
             d["color"] = color_map[d["company_id"]]
-
+        
         # Get unique units for response
         unique_units = list(sorted(set(d["unit_of_measurement"] for d in data)))
-
+        
         return {
             "data": data,
             "unit": unique_units,
             "total_waste": round(total_all, 2),
             "message": "Success"
         }
-
+        
     except Exception as e:
         print("Error in /non-hazard-waste-perc-pie-chart:", str(e))
         import traceback
@@ -3454,66 +3628,72 @@ def get_non_hazard_waste_metrics_line_chart(
         unique_years = sorted(set(d["year"] for d in raw_data))
         unique_units = sorted(set(d["unit_of_measurement"] for d in raw_data))
 
-        # Create a combined key for company + metric to generate unique colors for each line
-        company_metric_combinations = []
-        for company in unique_companies:
-            for metric in unique_metrics:
-                company_metric_combinations.append(f"{company}_{metric}")
-
-        # Generate color mapping for each company-metric combination (each line)
-        line_color_map = generate_unique_color_map(company_metric_combinations)
+        # Generate color mapping for each metric (not company-metric combination)
+        line_color_map = generate_unique_color_map(unique_metrics)
 
         # Prepare data structure for line chart
-        # Each company-metric combination will be a separate line
+        # Each metric will be a single line combining all companies
         chart_data = []
         
-        for company in unique_companies:
-            for metric in unique_metrics:
-                line_key = f"{company}_{metric}"
+        for metric in unique_metrics:
+            # Create a single line for this metric, combining all companies
+            line_data = {
+                "metrics": metric,
+                "color": line_color_map[metric],
+                "data_points": [],
+                "total_waste_sum": 0,
+                "companies_included": []  # Track which companies contribute to this metric
+            }
+            
+            # Create data points for each year by combining all companies
+            for year in unique_years:
+                # Sum waste amounts for this metric-year combination across all companies
+                year_total = 0
+                year_unit = ""
+                companies_for_year = []
                 
-                # Get all data points for this company-metric combination
-                line_data = {
-                    "company_id": company,
-                    "metrics": metric,
-                    "color": line_color_map[line_key],
-                    "data_points": [],
-                    "total_waste_sum": 0
-                }
-                
-                # Create data points for each year
-                for year in unique_years:
-                    # Find the waste amount for this company-metric-year combination
+                for company in unique_companies:
                     data_point = next(
                         (r for r in raw_data 
                          if r["company_id"] == company and r["metrics"] == metric and r["year"] == year), 
                         None
                     )
                     
-                    waste_amount = data_point["total_waste"] if data_point else 0
-                    unit = data_point["unit_of_measurement"] if data_point else ""
-                    
-                    line_data["data_points"].append({
-                        "year": year,
-                        "total_waste": waste_amount,
-                        "unit_of_measurement": unit
-                    })
-                    
-                    line_data["total_waste_sum"] += waste_amount
+                    if data_point:
+                        year_total += data_point["total_waste"]
+                        year_unit = data_point["unit_of_measurement"]  # Assuming same unit for same metric
+                        companies_for_year.append(company)
                 
-                # Round the total waste sum
-                line_data["total_waste_sum"] = round(line_data["total_waste_sum"], 2)
+                line_data["data_points"].append({
+                    "year": year,
+                    "total_waste": round(year_total, 2),
+                    "unit_of_measurement": year_unit,
+                    "companies_contributing": companies_for_year
+                })
                 
-                # Only include lines that have some data (not all zeros)
-                if line_data["total_waste_sum"] > 0:
-                    chart_data.append(line_data)
+                line_data["total_waste_sum"] += year_total
+            
+            # Get all companies that contribute to this metric
+            line_data["companies_included"] = sorted(set(
+                company for point in line_data["data_points"] 
+                for company in point["companies_contributing"]
+            ))
+            
+            # Round the total waste sum
+            line_data["total_waste_sum"] = round(line_data["total_waste_sum"], 2)
+            
+            # Only include lines that have some data (not all zeros)
+            if line_data["total_waste_sum"] > 0:
+                chart_data.append(line_data)
 
         # Create legend data for the lines
         legend_data = [
             {
-                "company_id": line["company_id"],
                 "metrics": line["metrics"],
                 "color": line["color"],
-                "label": f"{line['company_id']} - {line['metrics']}"
+                "label": line["metrics"],
+                "companies_included": line["companies_included"],
+                "total_companies": len(line["companies_included"])
             }
             for line in chart_data
         ]
@@ -3524,15 +3704,49 @@ def get_non_hazard_waste_metrics_line_chart(
         # Prepare summary by year for additional insights
         year_summary = []
         for year in unique_years:
-            year_total = sum(
-                point["total_waste"] 
-                for line in chart_data 
-                for point in line["data_points"] 
-                if point["year"] == year
-            )
+            year_metrics_summary = []
+            year_total = 0
+            
+            for metric in unique_metrics:
+                metric_year_total = 0
+                for company in unique_companies:
+                    data_point = next(
+                        (r for r in raw_data 
+                         if r["company_id"] == company and r["metrics"] == metric and r["year"] == year), 
+                        None
+                    )
+                    if data_point:
+                        metric_year_total += data_point["total_waste"]
+                
+                if metric_year_total > 0:
+                    year_metrics_summary.append({
+                        "metrics": metric,
+                        "total_waste": round(metric_year_total, 2)
+                    })
+                    year_total += metric_year_total
+            
             year_summary.append({
                 "year": year,
-                "total_waste": round(year_total, 2)
+                "total_waste": round(year_total, 2),
+                "metrics_breakdown": year_metrics_summary
+            })
+
+        # Add company breakdown summary for reference
+        company_summary = []
+        for company in unique_companies:
+            company_total = sum(
+                r["total_waste"] for r in raw_data 
+                if r["company_id"] == company
+            )
+            company_metrics = sorted(set(
+                r["metrics"] for r in raw_data 
+                if r["company_id"] == company
+            ))
+            
+            company_summary.append({
+                "company_id": company,
+                "total_waste": round(company_total, 2),
+                "metrics_available": company_metrics
             })
 
         return {
@@ -3543,6 +3757,7 @@ def get_non_hazard_waste_metrics_line_chart(
             "units": unique_units,
             "legend": legend_data,
             "year_summary": year_summary,
+            "company_summary": company_summary,
             "grand_total": round(grand_total, 2),
             "message": "Success"
         }
