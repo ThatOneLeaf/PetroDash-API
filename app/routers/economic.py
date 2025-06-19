@@ -1495,6 +1495,7 @@ def get_company_distribution(
             if year_list:
                 year_array = f"ARRAY{year_list}::SMALLINT[]"
         
+        # First get the main data
         query = f"""
             SELECT * FROM gold.func_economic_value_distribution_percentage(
                 {company_array if company_array else 'NULL'},
@@ -1506,12 +1507,22 @@ def get_company_distribution(
         
         result = db.execute(text(query))
         
+        # Get company colors separately
+        color_query = """
+            SELECT company_name, color 
+            FROM ref.company_main 
+            WHERE color IS NOT NULL
+        """
+        color_result = db.execute(text(color_query))
+        company_colors = {row.company_name: row.color for row in color_result}
+        
         data = [
             {
                 'year': row.year,
                 'companyName': row.company_name,
                 'totalDistributed': float(row.total_economic_value_distributed_by_company) if row.total_economic_value_distributed_by_company else 0,
-                'percentage': float(row.percentage_of_total_distribution) if row.percentage_of_total_distribution else 0
+                'percentage': float(row.percentage_of_total_distribution) if row.percentage_of_total_distribution else 0,
+                'color': company_colors.get(row.company_name, '#2B8C37')
             }
             for row in result
         ]

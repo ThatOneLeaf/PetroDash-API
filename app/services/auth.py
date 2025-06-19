@@ -35,6 +35,12 @@ class User(BaseModel):
     full_name: Optional[str] = None
     disabled: Optional[bool] = False
     roles: list[str] = []
+    account_id: Optional[str] = None
+    power_plant_id: Optional[str] = None
+    company_id: Optional[str] = None
+    account_status: Optional[str] = None
+    date_created: Optional[datetime] = None
+    date_updated: Optional[datetime] = None
 
 class UserInDB(User):
     hashed_password: str
@@ -51,10 +57,10 @@ class AuthService:
     
     @staticmethod
     def get_user(email: str, db: Session) -> Optional[UserInDB]:
-        """Get user from database by email."""
+        """Get user from database by email with all user details."""
         try:
             print(f"[AUTH DEBUG] Looking up user: {email}")
-            # Query your accounts table - adjust the query based on your actual table structure
+            # Query accounts table to get all user details
             query = text("""
                 SELECT 
                     email as username,
@@ -62,6 +68,10 @@ class AuthService:
                     account_id,
                     account_role as roles,
                     account_status,
+                    power_plant_id,
+                    company_id,
+                    date_created,
+                    date_updated,
                     password as hashed_password
                 FROM account 
                 WHERE email = :email AND account_status = 'active'
@@ -72,16 +82,25 @@ class AuthService:
             
             if result:
                 print(f"[AUTH DEBUG] User found - Email: {result.email}, Role: {result.roles}, Status: {result.account_status}")
-                # Convert result to dict and create UserInDB object
+                print(f"[AUTH DEBUG] Additional details - Account ID: {result.account_id}, Power Plant ID: {result.power_plant_id}, Company ID: {result.company_id}")
+                
+                # Convert result to dict and create UserInDB object with all details
                 user_data = {
                     "username": result.email,
                     "email": result.email,
                     "full_name": result.email,  # You can join with user profile table if needed
                     "hashed_password": result.hashed_password,  # Keep for now, will be removed in SSO
                     "disabled": result.account_status != 'active',
-                    "roles": [result.roles] if result.roles else ["user"]  # Convert single role to list
+                    "roles": [result.roles] if result.roles else ["user"],  # Convert single role to list
+                    "account_id": result.account_id,
+                    "power_plant_id": result.power_plant_id,
+                    "company_id": result.company_id,
+                    "account_status": result.account_status,
+                    "date_created": result.date_created,
+                    "date_updated": result.date_updated
                 }
                 print(f"[AUTH DEBUG] User data created - Roles: {user_data['roles']}, Disabled: {user_data['disabled']}")
+                print(f"[AUTH DEBUG] Full user data: Account ID: {user_data['account_id']}, Power Plant: {user_data['power_plant_id']}, Company: {user_data['company_id']}")
                 return UserInDB(**user_data)
             else:
                 print(f"[AUTH DEBUG] User not found: {email}")
