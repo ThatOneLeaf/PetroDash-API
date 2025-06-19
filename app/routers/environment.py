@@ -2524,6 +2524,7 @@ async def export_excel(request: Request):
     )
 
 #=====================================EDIT RECORDS (BRONZE)=====================================
+
 @router.post("/edit_water_abstraction")
 def edit_water_abstraction(
     data: dict, db: Session = Depends(get_db)
@@ -2561,6 +2562,21 @@ def edit_water_abstraction(
 
         if data["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
             raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['quarter']}'")
+
+        # Validate quarter-month consistency
+        quarter_months = {
+            "Q1": ["January", "February", "March"],
+            "Q2": ["April", "May", "June"],
+            "Q3": ["July", "August", "September"],
+            "Q4": ["October", "November", "December"]
+        }
+        
+        if data["month"] not in quarter_months[data["quarter"]]:
+            raise HTTPException(
+                status_code=422, 
+                detail=f"Month '{data['month']}' does not belong to quarter '{data['quarter']}'. "
+                       f"Valid months for {data['quarter']} are: {', '.join(quarter_months[data['quarter']])}"
+            )
 
         if not isinstance(data["volume"], (int, float)) or data["volume"] < 0:
             raise HTTPException(status_code=422, detail="Invalid volume")
