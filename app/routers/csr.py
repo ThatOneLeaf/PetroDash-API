@@ -346,7 +346,7 @@ def get_help_investments(
                 cact.project_id,
                 cproj.project_name
             ORDER BY 
-                total_project_investments DESC;
+                project_investments DESC;
         """), params)
 
         data = [
