@@ -324,7 +324,9 @@ def get_help_investments(
         
         where_clause = ""
         if where_conditions:
-            where_clause = "WHERE " + " AND ".join(where_conditions)
+            where_clause = "WHERE " + " AND ".join(where_conditions) + " AND (cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%')"
+        else:
+            where_clause = "WHERE cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%'"
 
         result = db.execute(text(f"""
             SELECT 
@@ -336,12 +338,7 @@ def get_help_investments(
                 ON cact.project_id = cproj.project_id
             LEFT JOIN ref.company_main AS comp
                 ON cact.company_id = comp.company_id
-            {where_clause} AND
-                (
-                    cact.project_id LIKE 'HE%' 
-                    OR cact.project_id LIKE 'ED%' 
-                    OR cact.project_id LIKE 'LI%'
-                )
+            {where_clause}
             GROUP BY 
                 cact.project_id,
                 cproj.project_name
@@ -396,7 +393,9 @@ def get_help_investments(
         
         where_clause = ""
         if where_conditions:
-            where_clause = "WHERE " + " AND ".join(where_conditions)
+            where_clause = "WHERE " + " AND ".join(where_conditions) + " AND (cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%')"
+        else:
+            where_clause = "WHERE cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%'"
 
         result = db.execute(text(f"""
             SELECT 
@@ -409,13 +408,8 @@ def get_help_investments(
             ON cproj.program_id = cprog.program_id
             LEFT JOIN ref.company_main AS ccomp
             ON cact.company_id = ccomp.company_id
-            {where_clause} AND
-                (
-                    cact.project_id LIKE 'HE%' 
-                    OR cact.project_id LIKE 'ED%' 
-                    OR cact.project_id LIKE 'LI%'
-                )
-            GROUP BY cact.project_year, cprog.program_name
+            {where_clause}
+            GROUP BY cprog.program_name
             ORDER BY "project_investments"
         """), params)
 
@@ -466,7 +460,9 @@ def get_help_investments(
         
         where_clause = ""
         if where_conditions:
-            where_clause = "WHERE " + " AND ".join(where_conditions)
+            where_clause = "WHERE " + " AND ".join(where_conditions) + " AND (cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%')"
+        else:
+            where_clause = "WHERE cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%'"
 
         result = db.execute(text(f"""
             SELECT 
@@ -479,14 +475,9 @@ def get_help_investments(
             ON cproj.program_id = cprog.program_id
             LEFT JOIN ref.company_main AS ccomp
             ON cact.company_id = ccomp.company_id
-            {where_clause} AND
-                (
-                    cact.project_id LIKE 'HE%' 
-                    OR cact.project_id LIKE 'ED%' 
-                    OR cact.project_id LIKE 'LI%'
-                )
-            GROUP BY cact.project_year, ccomp.company_id
-            ORDER BY "project_investments"
+            {where_clause}
+            GROUP BY ccomp.company_id
+            ORDER BY "project_investments" DESC
         """), params)
 
         data = [
@@ -584,7 +575,6 @@ def insert_csr_activity_single(data: dict, db: Session = Depends(get_db)):
             "project_expenses": data["project_expenses"],
             "project_remarks": data["project_remarks"]
         }
-        print(record)
         insert_csr_activity(db, record)
 
         return {"message": "1 record successfully inserted."}
