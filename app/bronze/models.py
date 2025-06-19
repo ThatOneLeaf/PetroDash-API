@@ -176,9 +176,9 @@ class HRTraining(Base):
     __tablename__ = "hr_training"
     
     training_id = Column(String(20), primary_key=True, index=True)
-    company_id = Column(String(20), primary_key=True, index=True)
-    date = Column(String(50), primary_key=True, index=True)
-    training_title = Column(TEXT, primary_key=True, index=True)
+    company_id = Column(String(20))
+    date = Column(String(50))
+    training_title = Column(TEXT)
     training_hours = Column(TIMESTAMP)
     number_of_participants = Column(Numeric)
     #total_training_hours = Column(Numeric)
@@ -187,31 +187,52 @@ class HRSafetyWorkdata(Base):
     __tablename__ = "hr_safety_workdata"
     
     safety_workdata_id = Column(String(20), primary_key=True, index=True)
-    company_id = Column(String(20), primary_key=True, index=True)
-    contractor = Column(SmallInteger, primary_key=True, index=True)
-    date = Column(String(10), primary_key=True, index=True)
+    company_id = Column(String(20))
+    contractor = Column(TEXT)
+    date = Column(TIMESTAMP)
     manpower = Column(Integer)
     manhours = Column(Integer)
     
+class HRSafetyWorkdataSilver(Base_silver):
+    __tablename__ = "hr_safety_workdata"
+    
+    safety_workdata_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(10))
+    contractor = Column(TEXT)
+    date = Column(TIMESTAMP)
+    manpower = Column(Integer)
+    manhours = Column(Integer)
+    
+class HRParentalLeaveSilver(Base_silver):
+    __tablename__ = "hr_parental_leave"
+    
+    parental_leave_id = Column(String(20), primary_key=True, index=True)
+    employee_id = Column(String(20))
+    type_of_leave = Column(String(12))
+    date = Column(TIMESTAMP)
+    days = Column(Integer)
+    end_date = Column(TIMESTAMP)
+    months_availed = Column(Integer)
+
 class HRParentalLeave(Base):
     __tablename__ = "hr_parental_leave"
     
     parental_leave_id = Column(String(20), primary_key=True, index=True)
-    employee_id = Column(String(20), primary_key=True, index=True)
-    type_of_leave = Column(String(50))
+    employee_id = Column(String(20))
+    type_of_leave = Column(String(12))
     date = Column(TIMESTAMP)
     days = Column(Integer)
     #end_date = Column(TIMESTAMP)
     #months_availed = Column(Integer)
-    
+
 class HROsh(Base):
     __tablename__ = "hr_occupational_safety_health"
     
     osh_id = Column(String(20), primary_key=True, index=True)
-    company_id = Column(String(20), primary_key=True, index=True)
-    workforce_type = Column(TEXT, primary_key=True, index=True)
-    lost_time = Column(BOOLEAN, primary_key=True, index=True)
-    date = Column(TIMESTAMP, primary_key=True, index=True)
-    incident_type = Column(TEXT, primary_key=True, index=True)
-    incident_title = Column(TEXT, primary_key=True, index=True)
+    company_id = Column(String(20))
+    workforce_type = Column(TEXT)
+    lost_time = Column(BOOLEAN)
+    date = Column(TIMESTAMP)
+    incident_type = Column(TEXT)
+    incident_title = Column(TEXT)
     incident_count = Column(Integer)

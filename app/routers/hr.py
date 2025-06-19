@@ -728,7 +728,7 @@ def get_employability_records_by_status(
             SELECT demo.*, tenure.*, cm.company_name, csl.status_id
             FROM silver.hr_demographics demo
             JOIN silver.hr_tenure tenure 
-                ON demo.employee_id = tenure.employee_id
+                ON tenure.employee_id = demo.employee_id
             JOIN (
                 SELECT DISTINCT ON (record_id) record_id, status_id
                 FROM public.record_status

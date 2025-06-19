@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviCompanyProperty, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
-from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh
+from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh, HRParentalLeaveSilver, HRSafetyWorkdataSilver
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_single_pkey_id, generate_bulk_pkey_ids
 from app.utils.gen_help_id import generate_pkey_id, generate_bulk_id
@@ -10,6 +10,11 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 from app.public.models import RecordStatus
 from pandas import isna
+import logging
+import sys
+
+logger = logging.getLogger('uvicorn.error')
+logger.setLevel(logging.DEBUG)
 
 # ==================== ID Generation ====================
 def id_generation(db: Session, prefix: str, table_id_column):
@@ -1967,7 +1972,7 @@ def insert_employability(db: Session, data: dict):
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         db.commit()
@@ -1992,7 +1997,7 @@ def insert_employability(db: Session, data: dict):
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         db.commit()
@@ -2404,7 +2409,7 @@ def insert_employability_bulk(db: Session, rows) -> int:
         
     record_demo = []
     record_tenure = []
-    record_logs_demo = []
+    record_logs = []
     
     base_timestamp = datetime.now()
     for i, row in enumerate(rows):
@@ -2429,12 +2434,15 @@ def insert_employability_bulk(db: Session, rows) -> int:
             status_timestamp=status_time.date(),
             remarks="real-data inserted"
         )
-        record_logs_demo.append(record_log)
+        record_logs.append(record_log)
     
     # Insert demographics records
     db.bulk_save_objects(record_demo)
     db.commit()
-
+    
+    db.bulk_save_objects(record_logs)
+    db.commit()
+        
     # Insert tenure records
     for i, row in enumerate(rows):
         record = HRTenure(
@@ -2456,7 +2464,7 @@ def insert_employability_bulk(db: Session, rows) -> int:
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         db.commit()
@@ -2492,6 +2500,7 @@ def insert_safety_workdata_bulk (db:Session, rows) -> int:
         return 0
         
     records = []
+    records_Silver = []
     record_logs = []
     
     last_id_row = db.query(HRSafetyWorkdata).order_by(HRSafetyWorkdata.safety_workdata_id.desc()).first()
@@ -2506,7 +2515,7 @@ def insert_safety_workdata_bulk (db:Session, rows) -> int:
         new_num = last_num + i + 1
         safety_workdata_id = f"SWD{today_str}{str(new_num).zfill(4)}"
         # safety_workdata_id = id_generation(db, "SWD", HRSafetyWorkdata.safety_workdata_id)
-        # Create demographics record
+        # Create safety workdata record
         record = HRSafetyWorkdata(
             safety_workdata_id=safety_workdata_id,
             company_id=row["company_id"],
@@ -2516,6 +2525,16 @@ def insert_safety_workdata_bulk (db:Session, rows) -> int:
             manhours = row["manhours"],
         )
         records.append(record)
+        
+        record_Silver = HRSafetyWorkdataSilver(
+            safety_workdata_id=safety_workdata_id,
+            company_id=row["company_id"],
+            contractor=row["contractor"],
+            date = row["date"],
+            manpower = row["manpower"],
+            manhours = row["manhours"],
+        )
+        records_Silver.append(record_Silver)
         
         status_time = base_timestamp + timedelta(hours=i + 1)
         record_log = RecordStatus(
@@ -2531,27 +2550,29 @@ def insert_safety_workdata_bulk (db:Session, rows) -> int:
     db.bulk_save_objects(records)
     db.commit()
     
+    db.bulk_save_objects(records_Silver)
+    db.commit()
     
     # Call the stored procedure after inserting data
-    try:
-        db.execute(text("""
-            CALL silver.load_hr_silver(
-                load_demographics := FALSE,
-                load_tenure := FALSE,
-                load_parental_leave := FALSE,
-                load_training := FALSE,
-                load_safety_workdata := TRUE,
-                load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
-            )
-        """))
+    # try:
+    #     db.execute(text("""
+    #         CALL silver.load_hr_silver(
+    #             load_demographics := FALSE,
+    #             load_tenure := FALSE,
+    #             load_parental_leave := FALSE,
+    #             load_training := FALSE,
+    #             load_safety_workdata := TRUE,
+    #             load_occupational_safety_health := FALSE,
+    #             load_from_sql := TRUE
+    #         )
+    #     """))
         
-        db.commit()
-        print("Stored procedure executed successfully")
+    #     db.commit()
+    #     print("Stored procedure executed successfully")
         
-    except Exception as e:
-        print(f"Error executing stored procedure: {e}")
-        db.rollback()
+    # except Exception as e:
+    #     print(f"Error executing stored procedure: {e}")
+    #     db.rollback()
         
     
     # Insert record_status_log entries using RecordStatus model
@@ -2571,6 +2592,7 @@ def insert_parental_leave_bulk (db:Session, rows) -> int:
         return 0
         
     records = []
+    records_Silver = []
     record_logs = []
     
     last_id_row = db.query(HRParentalLeave).order_by(HRParentalLeave.parental_leave_id.desc()).first()
@@ -2586,26 +2608,38 @@ def insert_parental_leave_bulk (db:Session, rows) -> int:
         parental_leave_id = f"PL{today_str}{str(new_num).zfill(4)}"
         #parental_leave_id = id_generation(db, "PL", HRParentalLeave.parental_leave_id)
         
-        # if isinstance(row["date"], str):
-        #     start_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
-        # else:
-        #     start_date = row["date"]
-        # num_days = int(row["days"])
+        if isinstance(row["date"], str):
+            start_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
+        else:
+            start_date = row["date"]
+        num_days = int(row["days"])
 
-        #end_date = start_date + timedelta(days=num_days)
-        #months_availed = num_days // 30
+        end_date = start_date + timedelta(days=num_days)
+        months_availed = num_days // 30
         
-        # Create demographics record
+        # Create parental leave record bronze
         record = HRParentalLeave(
             parental_leave_id=parental_leave_id,
             employee_id=row["employee_id"],
             type_of_leave=row["type_of_leave"],
             date=row["date"],
             days=row["days"],
-            #end_date=end_date,
-            #months_availed=months_availed
+            # end_date=end_date,
+            # months_availed=months_availed
         )
         records.append(record)
+        
+        # Create parental leave silver
+        record_Silver = HRParentalLeaveSilver(
+            parental_leave_id=parental_leave_id,
+            employee_id=row["employee_id"],
+            type_of_leave=row["type_of_leave"],
+            date=row["date"],
+            days=row["days"],
+            end_date=end_date,
+            months_availed=months_availed
+        )
+        records_Silver.append(record_Silver)
         
         status_time = base_timestamp + timedelta(hours=i + 1)
         record_log = RecordStatus(
@@ -2621,27 +2655,32 @@ def insert_parental_leave_bulk (db:Session, rows) -> int:
     db.bulk_save_objects(records)
     db.commit()
     
+    db.bulk_save_objects(records_Silver)
+    db.commit()
     
     # Call the stored procedure after inserting data
-    try:
-        db.execute(text("""
-            CALL silver.load_hr_silver(
-                load_demographics := FALSE,
-                load_tenure := FALSE,
-                load_parental_leave := TRUE,
-                load_training := FALSE,
-                load_safety_workdata := FALSE,
-                load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
-            )
-        """))
+    # try:
+    #     logger.debug('Load Procedure')
+    #     db.execute(text("""
+    #         CALL silver.load_hr_silver(
+    #             load_demographics := FALSE,
+    #             load_tenure := FALSE,
+    #             load_parental_leave := TRUE,
+    #             load_training := FALSE,
+    #             load_safety_workdata := FALSE,
+    #             load_occupational_safety_health := FALSE,
+    #             load_from_sql := FALSE
+    #         )
+    #     """))
         
-        db.commit()
-        print("Stored procedure executed successfully")
+    #     db.commit()
+    #     logger.debug('This mean it passes')
+    #     print("Stored procedure executed successfully")
         
-    except Exception as e:
-        print(f"Error executing stored procedure: {e}")
-        db.rollback()
+    # except Exception as e:
+    #     print(f"Error executing stored procedure: {e}")
+    #     logger.debug('Nope')
+    #     db.rollback()
         
     
     # Insert record_status_log entries using RecordStatus model
@@ -2714,7 +2753,7 @@ def insert_occupational_safety_health_bulk (db:Session, rows) -> int:
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := TRUE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         
@@ -2796,7 +2835,7 @@ def insert_training_bulk (db:Session, rows) -> int:
                 load_training := TRUE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         
