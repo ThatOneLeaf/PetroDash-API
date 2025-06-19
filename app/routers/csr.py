@@ -470,7 +470,7 @@ def get_help_investments(
 
         result = db.execute(text(f"""
             SELECT 
-                ccomp.company_name,
+                ccomp.company_id,
                 SUM(project_expenses) AS "project_investments"
             FROM silver.csr_activity AS cact
             LEFT JOIN silver.csr_projects AS cproj
@@ -491,7 +491,7 @@ def get_help_investments(
 
         data = [
             {
-                'companyName': row.company_name,
+                'companyId': row.company_id,
                 'projectExpenses': float(row.project_investments) if row.project_investments else 0
             }
             for row in result
