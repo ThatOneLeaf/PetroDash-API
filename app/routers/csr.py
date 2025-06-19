@@ -400,7 +400,8 @@ def get_help_investments(
         result = db.execute(text(f"""
             SELECT 
                 cprog.program_name,
-                SUM(project_expenses) AS "project_investments"
+                SUM(project_expenses) AS "project_investments",
+                cact.date_updated
             FROM silver.csr_activity AS cact
             LEFT JOIN silver.csr_projects AS cproj
             ON cact.project_id = cproj.project_id
@@ -409,14 +410,15 @@ def get_help_investments(
             LEFT JOIN ref.company_main AS ccomp
             ON cact.company_id = ccomp.company_id
             {where_clause}
-            GROUP BY cprog.program_name
+            GROUP BY cprog.program_name, cact.date_updated
             ORDER BY "project_investments"
         """), params)
 
         data = [
             {
                 'programName': row.program_name,
-                'projectExpenses': float(row.project_investments) if row.project_investments else 0
+                'projectExpenses': float(row.project_investments) if row.project_investments else 0,
+                'dateUpdated': row.date_updated
             }
             for row in result
         ]
