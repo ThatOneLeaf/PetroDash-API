@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Form, UploadFile, File
 from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict, Any
+from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import text, update, select, bindparam, ARRAY, String, Integer
 from app.bronze.crud import EnergyRecords
@@ -980,6 +981,49 @@ def get_fund_allocation(
 
         return {"data":overall}
 
+
+    except Exception as e:
+        logging.error(f"Error retrieving energy records: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+def serialize_row(row):
+    return {
+        key: float(value) if isinstance(value, Decimal) else value
+        for key, value in row.items()
+    }
+
+@router.get("/overall_energy", response_model=Dict[str, Any])
+def get_overall(db: Session = Depends(get_db)):
+    try:
+        energy = text("""
+            SELECT
+                CONCAT(fe.company_name, ' (', fe.company_id, ')') AS company_id,
+                fe.total_energy_generated,
+                fe.total_co2_avoided,
+                hp.total_est_house_powered
+                FROM (
+                SELECT
+                    company_id,company_name,
+                    SUM(energy_generated_kwh) AS total_energy_generated,
+                    SUM(co2_avoidance_tons) AS total_co2_avoided
+                FROM gold.fact_energy_generated
+                GROUP BY company_id, company_name
+                ) fe
+                JOIN (
+                SELECT
+                    company_id,
+                    SUM(est_house_powered) AS total_est_house_powered
+                FROM gold.func_household_powered()
+                GROUP BY company_id
+                ) hp
+                ON fe.company_id = hp.company_id;
+        """)
+
+        result = db.execute(energy)
+        rows = result.mappings().all()
+
+        return {"data": [serialize_row(row) for row in rows]}  # ✅ Wrap in dict
 
     except Exception as e:
         logging.error(f"Error retrieving energy records: {str(e)}")
