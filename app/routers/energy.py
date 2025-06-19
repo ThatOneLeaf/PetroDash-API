@@ -785,10 +785,10 @@ def get_fund_allocation(
                  f"months: {months}, years: {years}")
 
     try:
-        energy = """
+        energy =text( """
             SELECT 
                 *
-            FROM gold.func_fact_energy(
+            FROM gold.func_fund_alloc(
                 :power_plant_ids,
                 :company_ids,
                 :ff_id,
@@ -796,24 +796,190 @@ def get_fund_allocation(
                 :years,
                 :ff_category
             );
-        """
-        energy_result = process_fa_data(
-            db=db,
-            query_str=energy,
-            x=x,
-            y=y,
-            v=["total_energy_generated", "total_co2_avoidance"],
-            power_plant_ids=power_plant_ids,
-            company_ids=company_ids,
-            ff_id=ff_id,
-            ff_category=ff_category,
-            months=months,
-            years=years
-        )
+        """)
+        result = db.execute(energy, {
+                "power_plant_ids": power_plant_ids,
+                "company_ids": company_ids,
+                "ff_id": ff_id,
+                "ff_category": ff_category,
+                "months": months,
+                "years": years
+            })
+        rows = result.mappings().all()
+        df = pd.DataFrame(rows)
+        v=['funds_allocated_peso']
+        if df.empty:
+            return {}
 
-        return {
-            "energy_data": energy_result,
-        }
+        if "month_name" in df.columns and pd.api.types.is_string_dtype(df["month_name"]):
+            df["month_name"] = df["month_name"].str.strip()
+
+        # Build period column
+        if y == "monthly":
+            df["period"] = df["year"].astype(str) + "-" + df["month"].astype(str).str.zfill(2)
+        elif y == "quarterly":
+            df["period"] = df["year"].astype(str) + "-Q" + df["quarter"].astype(str)
+        elif y == "yearly":
+            df["period"] = df["year"].astype(str)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid y value. Use 'monthly', 'quarterly', or 'yearly'.")
+
+        if x not in df.columns:
+            raise HTTPException(status_code=400, detail=f"'{x}' not found in data columns.")
+        for metric in v:
+            if metric not in df.columns:
+                raise HTTPException(status_code=400, detail=f"'{metric}' not found in data columns.")
+
+        fixed_cols = {x, "period", *v}
+        other_cols = [col for col in df.columns if col not in fixed_cols]
+
+        # Remove any group-by columns from the aggregation dictionary to avoid duplicates
+        groupby_cols = [x, "period", "ff_category", "ff_id", "ff_name"]
+
+        # Create a copy of other_cols that excludes groupby columns
+        agg_dict = {metric: 'sum' for metric in v}
+        for col in other_cols:
+            if col not in groupby_cols:
+                agg_dict[col] = 'first' 
+
+        # Now group by and reset index safely
+
+        grouped_df = df.groupby(groupby_cols, dropna=False).agg(agg_dict).reset_index()
+        overall = {}
+
+        for item in v:
+            value = {}
+            total_per_item = 0
+
+            for ff_cat in grouped_df["ff_category"].unique():
+                chart_data = {
+                    "stacked_by_period": [],
+                    "stacked_by_ffid": [],
+                    "pie": [],
+                    "total":0
+                }
+
+                category_df = grouped_df[grouped_df["ff_category"] == ff_cat]
+
+                category_df = category_df[pd.to_numeric(category_df[item], errors='coerce').notna()]
+                category_df[item] = category_df[item].astype(float)
+
+                # Define the group keys for your context
+                group_keys = ["period", x, "ff_name"]
+
+                # ✅ Remove duplicates based on grouping keys (not item itself)
+                category_df = category_df.drop_duplicates(subset=group_keys)
+
+                # ----- STACKED CHART BY PERIOD -----
+                chart_data["stacked_by_period"] = []
+                chart_data["stacked_by_ffid"] = []
+                # ✅ Correct grouping for: x-axis = period, stack = ff_name
+                ff_period_group = category_df.groupby(["period", "ff_name"])[item].sum().reset_index()
+
+                # Extract unique values
+                ff_names = sorted(category_df["ff_name"].unique())
+                periods = sorted(category_df["period"].unique())
+
+                # Initialize dict with period as key (since period is now x-axis)
+                period_data = {period: {"period": period} for period in periods}
+
+                # Fill the data
+                for _, row in ff_period_group.iterrows():
+                    period = row["period"]
+                    ff_name = row["ff_name"]
+                    val = row[item]
+                    period_data[period][ff_name] = val
+
+                # Fill missing ff_names with 0
+                for data in period_data.values():
+                    for ff in ff_names:
+                        data.setdefault(ff, 0)
+
+                chart_data["stacked_by_period"] = list(period_data.values())
+
+                # --- Stacked by FF ID (x-axis: ff_id, stacked by x) ---
+                ff_x_group = category_df.groupby(["ff_name", x])[item].sum().reset_index()
+
+                # Get unique ff_ids and x values
+                ff_ids = sorted(category_df["ff_name"].unique())
+                x_values = sorted(category_df[x].unique())
+
+                # Initialize dict with ff_id as key
+                ff_data = {ff_id: {"ff_name": ff_id} for ff_id in ff_ids}
+
+                for _, row in ff_x_group.iterrows():
+                    ff_id = row["ff_name"]
+                    x_val = row[x]
+                    val = row[item]
+                    ff_data[ff_id][x_val] = val
+
+                # Fill missing x values with 0
+                for data in ff_data.values():
+                    for x_val in x_values:
+                        data.setdefault(x_val, 0)
+
+                chart_data["stacked_by_ffid"] = list(ff_data.values())
+
+
+
+
+                # ----- PIE CHART -----
+                pie_df = category_df.groupby("ff_name")[item].sum().reset_index()
+                total_value = pie_df[item].sum()
+                total_per_item += total_value  # <-- Add to overall total for this item
+                chart_data["total"] = total_value  # <-- Save category total
+                pie_df = category_df.groupby(x)[item].sum().reset_index()
+                total_value = pie_df[item].sum()
+
+                chart_data["pie"] = [
+                    {
+                        "name": row[x],
+                        "value": row[item],
+                        "percent": round((row[item] / total_value) * 100, 2) if total_value > 0 else 0
+                    }
+                    for _, row in pie_df.iterrows()
+                ]
+
+                # ----- TABLE DATA (pivot with row totals) -----
+                pivot_df = category_df.pivot_table(
+                    index=x,                # rows = values of 'x' (e.g., period, region)
+                    columns="ff_name",      # columns = ff_name
+                    values=item,            # values = current metric
+                    aggfunc="sum",
+                    fill_value=0
+                ).reset_index()
+
+                # Add total per row
+                pivot_df["Total"] = pivot_df.drop(columns=[x]).sum(axis=1)
+
+                # Format all numeric columns with peso sign and 2 decimal places
+                for col in pivot_df.columns:
+                    if col != x:  # Skip the index column
+                        pivot_df[col] = pivot_df[col].apply(lambda v: f"₱{v:,.2f}")
+
+                # Rename x column to human-readable label
+                x_label_map = {
+                    "power_plant_id": "Power Project",
+                    "company_id": "Company",
+                    "period": "Period",  # Add more mappings as needed
+                    # ... any other mappings
+                }
+                pivot_df.rename(columns={x: x_label_map.get(x, x)}, inplace=True)
+
+                # Convert to list of dicts for frontend rendering
+                chart_data["tabledata"] = pivot_df.to_dict(orient="records")
+
+
+
+
+
+                value[ff_cat] = chart_data  # Store chart data per ff_category
+            value["total"] = total_per_item
+
+            overall[item] = value  # ✅ Properly store data per item
+
+        return {"data":overall}
+
 
     except Exception as e:
         logging.error(f"Error retrieving energy records: {str(e)}")
