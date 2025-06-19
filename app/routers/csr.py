@@ -328,24 +328,25 @@ def get_help_investments(
 
         result = db.execute(text(f"""
             SELECT 
-                cact.company_id,
+                cact.project_id,
                 cproj.project_name,
-                SUM(project_expenses) AS "project_investments"
+                SUM(cact.project_expenses) AS "project_investments"
             FROM silver.csr_activity AS cact
             LEFT JOIN silver.csr_projects AS cproj
-            ON cact.project_id = cproj.project_id
-            LEFT JOIN silver.csr_programs AS cprog
-            ON cproj.program_id = cprog.program_id
-            LEFT JOIN ref.company_main AS ccomp
-            ON cact.company_id = ccomp.company_id
+                ON cact.project_id = cproj.project_id
+            LEFT JOIN ref.company_main AS comp
+                ON cact.company_id = comp.company_id
             {where_clause} AND
                 (
                     cact.project_id LIKE 'HE%' 
                     OR cact.project_id LIKE 'ED%' 
                     OR cact.project_id LIKE 'LI%'
                 )
-            GROUP BY cact.company_id, cact.project_year, cproj.project_name
-            ORDER BY "project_investments"
+            GROUP BY 
+                cact.project_id,
+                cproj.project_name
+            ORDER BY 
+                total_project_investments DESC;
         """), params)
 
         data = [
