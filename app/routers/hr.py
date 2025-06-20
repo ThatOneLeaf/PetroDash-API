@@ -67,507 +67,37 @@ def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
     output.seek(0)
     return output
 
-# ====================== EMPLOYABILITY DASHBOARD ======================
-# ===== KPIs =====
-@router.get("/total_active_employees", response_model=List[dict])
-def get_total_active_employees(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Get the Total active employees count
-    """
-    try:
-        logging.info("Executing Active count of employees query")
-        
-        if year == None:
-            year = datetime.now().year
-        result = db.execute(text("""
-            SELECT
-                COUNT(employee_id) AS total_active_employees
-            FROM gold.func_employee_summary_yearly(NULL, NULL, :position_id, :company_id, :year) AS f;
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "total_active_employees": row.total_active_employees
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/average_tenure_rate", response_model=List[dict])
-def get_average_tenure_rate(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Get the Average tenure rate
-    """
-    try:
-        logging.info("Executing Average tenure rate query")
-        
-        if year == None:
-            year = datetime.now().year
-        result = db.execute(text("""
-            SELECT
-	            ROUND(AVG(avg_tenure), 2) AS avg_tenure_rate
-            FROM gold.func_hr_rate_summary_yearly(NULL, :position_id, :company_id, :year) AS f;
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "avg_tenure_rate": row.avg_tenure_rate
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-#REMOVE THIS
-@router.get("/attrition_rate_kpi", response_model=List[dict])
-def get_attrition_rate_kpi(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Get the Attrition rate KPI
-    """
-    try:
-        logging.info("Executing Attrition rate KPI query")
-        
-        if year == None:
-            year = datetime.now().year
-        result = db.execute(text("""
-            SELECT
-                year,
-                SUM(total_employees) AS total_employees,
-                SUM(resigned_count) AS resigned_count,
-                CASE
-                    WHEN SUM(total_employees) > 0 THEN ROUND((SUM(resigned_count)::NUMERIC / SUM(total_employees)) * 100, 2)
-                    ELSE NULL
-                END AS attrition_rate_percent,
-                CASE
-                    WHEN SUM(total_employees) > 0 THEN
-                        CASE
-                            WHEN (SUM(resigned_count)::NUMERIC / SUM(total_employees)) * 100 <= 2 THEN 'Low'
-                            WHEN (SUM(resigned_count)::NUMERIC / SUM(total_employees)) * 100 >= 10 THEN 'High'
-                            ELSE 'Mid'
-                        END
-                    ELSE NULL
-                END AS attrition_rate_status
-            FROM gold.func_hr_rate_summary_yearly(NULL, :position_id, :company_id, :year) AS f
-            GROUP BY year;
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "attrition_rate_percent": row.attrition_rate_percent,
-                "attrition_rate_status": row.attrition_rate_status
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ===== CHARTS =====
-@router.get("/employee_count_per_company", response_model=List[dict])
-def get_employee_count_per_company(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    try:
-        logging.info("Executing Active count of employees per Gender query")
-        
-        if year == None:
-            year = datetime.now().year
-            
-        result = db.execute(text("""
-            SELECT
-            year,
-            company_id,
-            company_name,
-            COUNT(DISTINCT employee_id) AS employee_count
-            FROM gold.func_employee_summary_yearly(NULL, NULL, :position_id, :company_id, :year)
-            GROUP BY year, company_id, company_name
-            ORDER BY year DESC, employee_count DESC;
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "company_id": row.company_id,
-                "employee_count": row.employee_count
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/gender_distribution_per_position", response_model=List[dict])
-def get_gender_distribution_per_position(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Get the Total active employees count
-    """
-    try:
-        logging.info("Executing Active count of employees per Gender query")
-        
-        if year == None:
-            year = datetime.now().year
-            
-        result = db.execute(text("""
-            SELECT
-                position_id,
-                position_name,
-                gender,
-                COUNT(*) AS employee_count
-            FROM gold.func_employee_summary_yearly(NULL, NULL, :position_id, :company_id, :year)
-            WHERE CURRENT_DATE BETWEEN start_date AND COALESCE(end_date, CURRENT_DATE)
-            GROUP BY position_id, position_name, gender
-            ORDER BY position_id, gender;
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "position_id": row.position_id,
-                "gender": row.gender,
-                "employee_count": row.employee_count
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-# CHANGE THIS TO PER MONTH
-# REMOVE THIS
-@router.get("/attrition_rate_per_month", response_model=List[dict])
-def get_attrition_rate_per_month(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Get the Attrition rate
-    """
-    try:
-        logging.info("Executing Attrition rate query")
-        
-        result = db.execute(text("""
-            WITH all_years AS (
-                SELECT
-                    MIN(EXTRACT(YEAR FROM start_date))::INT AS min_year,
-                    MAX(EXTRACT(YEAR FROM end_date))::INT AS max_year
-                FROM gold.dim_employee_descriptions
-            ),
-            year_array AS (
-                SELECT ARRAY(
-                    SELECT generate_series(min_year, max_year)
-                    FROM all_years
-                ) AS years
-            )
-            SELECT
-                year,
-                SUM(total_employees) AS total_employees,
-                SUM(resigned_count) AS resigned_count,
-                CASE
-                    WHEN SUM(total_employees) > 0 THEN ROUND((SUM(resigned_count)::NUMERIC / SUM(total_employees)) * 100, 2)
-                    ELSE NULL
-                END AS attrition_rate_percent
-            FROM gold.func_hr_rate_summary_yearly(NULL, NULL, NULL, (SELECT years FROM year_array))
-            GROUP BY year
-            ORDER BY year;
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "total_employees": row.total_employees,
-                "resigned_count": row.resigned_count,
-                "attrition_rate_percent": row.attrition_rate_percent,
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/age_distribution", response_model=List[dict])
-def get_age_distribution(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    try:
-        logging.info("Executing Age distribution query")
-        
-        if year == None:
-            year = datetime.now().year
-            
-        result = db.execute(text("""
-            WITH all_years AS (
-                SELECT
-                    MIN(EXTRACT(YEAR FROM start_date))::INT AS min_year,
-                    MAX(EXTRACT(YEAR FROM end_date))::INT AS max_year
-                FROM gold.dim_employee_descriptions
-            ),
-            year_array AS (
-                SELECT ARRAY(
-                    SELECT generate_series(min_year, max_year)
-                    FROM all_years
-                ) AS years
-            )
-            SELECT 
-                age_category,
-                SUM(employee_count) AS total_employees
-            FROM gold.func_employee_summary_monthly(
-                p_year := (SELECT years FROM year_array)
-            )
-            GROUP BY age_category
-            ORDER BY age_category;
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "age_category": row.age_category,
-                "total_employees": row.total_employees
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/total_leave", response_model=List[dict])
-def get_total_leave(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    try:
-        logging.info("Executing Age distribution query")
-        
-        if year == None:
-            year = datetime.now().year
-            
-        result = db.execute(text("""
-            SELECT
-                year,
-                type_of_leave,
-                SUM(leave_count) AS total_leave
-            FROM gold.func_parental_leave_summary_yearly(NULL, NULL, :position_id, :company_id, :year)
-            GROUP BY year, type_of_leave
-            ORDER BY year, type_of_leave;
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "type_of_leave": row.type_of_leave,
-                "total_leave": row.total_leave
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-
-# CHANGE THIS TO PER MONTH
-@router.get("/peak_leave_seasons", response_model=List[dict])
-def get_peak_leave_seasons(
-    year: Optional[int] = Query(None),
-    company_id: Optional[str] = Query(None),
-    position_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    try:
-        logging.info("Executing Age distribution query")
-        
-        if year == None:
-            year = datetime.now().year
-            
-        result = db.execute(text("""
-            SELECT 
-                year,
-                SUM(leave_count) AS total_leave
-            FROM gold.func_parental_leave_summary_monthly()
-            GROUP BY year
-            ORDER BY year;
-
-        """), {
-                'year': [year],
-                'company_id': [company_id] if company_id else None,
-                'position_id': [position_id] if position_id else None,
-        })
-
-        data = [
-            {
-                "year": row.year,
-                "total_leave": row.total_leave
-            }
-            for row in result
-        ]
-        
-        logging.info(f"Query returned {len(data)} rows")
-        logging.debug(f"Data: {data}")
-        
-        if not data:
-            logging.warning("No data found")
-            return []
-
-        return data
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
-# ====================== SAFETY AND TRAINING DASHBOARD ======================
+# ====================== DASHBOARD ======================
 # ===== KPIs =====
 @router.get("/total_safety_manhours", response_model=List[dict])
 def get_total_safety_manhours(
-    year: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
         logging.info("Executing Total Safety Manhours query")
         
-        if year == None:
-            year = datetime.now().year
+        if start_date is None:
+            # Set to January 1st of the current year
+            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        
+        if end_date is None:
+            # Set to today's date
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            
         result = db.execute(text("""
-            SELECT SUM(manhours) as total_safety_manhours
-            FROM gold.func_safety_workdata_summary(:year, NULL, NULL, :company_id, NULL);
+            SELECT SUM(manhours) AS total_safety_manhours
+            FROM gold.func_safety_workdata_summary(
+                :start_date,         -- p_start_date
+                :end_date,         -- p_end_date
+                :company_id,         -- p_company_id
+                NULL                  -- p_contractor
+            )
         """), {
-                'year': [year],
+                'start_date': start_date,
+                'end_date': end_date,
                 'company_id': [company_id] if company_id else None,
         })
 
@@ -593,38 +123,51 @@ def get_total_safety_manhours(
 
 @router.get("/total_safety_manpower", response_model=List[dict])
 def get_total_safety_manhours(
-    year: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
-    #     logging.info("Executing Total Safety Manhours query")
+        logging.info("Executing Total Safety Manpower query")
         
-    #     if year == None:
-    #         year = datetime.now().year
-    #     result = db.execute(text("""
-    #         SELECT SUM(manhours) as total_safety_manhours
-    #         FROM gold.func_safety_workdata_summary(:year, NULL, NULL, :company_id, NULL);
-    #     """), {
-    #             'year': [year],
-    #             'company_id': [company_id] if company_id else None,
-    #     })
+        if start_date is None:
+            # Set to January 1st of the current year
+            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        
+        if end_date is None:
+            # Set to today's date
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            
+        result = db.execute(text("""
+            SELECT SUM(manpower) AS total_safety_manpower
+            FROM gold.func_safety_workdata_summary(
+                :start_date,         -- p_start_date
+                :end_date,         -- p_end_date
+                :company_id,         -- p_company_id
+                NULL                  -- p_contractor
+            )
+        """), {
+                'start_date': start_date,
+                'end_date': end_date,
+                'company_id': [company_id] if company_id else None,
+        })
 
-    #     data = [
-    #         {
-    #             "total_safety_manhours": row.total_safety_manhours
-    #         }
-    #         for row in result
-    #     ]
+        data = [
+            {
+                "total_safety_manpower": row.total_safety_manpower
+            }
+            for row in result
+        ]
         
-    #     logging.info(f"Query returned {len(data)} rows")
-    #     logging.debug(f"Data: {data}")
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
         
-    #     if not data:
-    #         logging.warning("No data found")
-    #         return []
+        if not data:
+            logging.warning("No data found")
+            return []
 
-        return "No data yet"
+        return data
     except Exception as e:
         logging.error(f"Error fetching data: {str(e)}")
         logging.error(traceback.format_exc())
@@ -632,20 +175,30 @@ def get_total_safety_manhours(
 
 @router.get("/total_training_hours", response_model=List[dict])
 def get_total_training_hours(
-    year: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
         logging.info("Executing Total training hours query")
         
-        if year == None:
-            year = datetime.now().year
+        if start_date is None:
+            # Set to January 1st of the current year
+            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        
+        if end_date is None:
+            # Set to today's date
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            
         result = db.execute(text("""
-            SELECT SUM(total_training_hours) as total_training_hours
-            FROM gold.func_training_summary(:year, NULL, NULL, :company_id, NULL);
-        """), {
-                'year': [year],
+            SELECT SUM(training_hours) AS total_training_hours
+                FROM gold.func_training_summary(
+                :start_date, :end_date, :company_id, NULL
+                )
+                """), {
+                'start_date': start_date,
+                'end_date': end_date,
                 'company_id': [company_id] if company_id else None,
         })
 
@@ -668,34 +221,253 @@ def get_total_training_hours(
         logging.error(f"Error fetching data: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/no_lost_time", response_model=List[dict])
+def get_total_training_hours(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Total training hours query")
+        
+        if start_date is None:
+            # Set to January 1st of the current year
+            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        
+        if end_date is None:
+            # Set to today's date
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            
+        result = db.execute(text("""
+            SELECT COUNT(*) AS lost_time_incidents
+            FROM gold.func_occupational_safety_health_summary(
+            :start_date, :end_date, :company_id, NULL, TRUE, NULL, NULL
+            );
+                """), {
+                'start_date': start_date,
+                'end_date': end_date,
+                'company_id': [company_id] if company_id else None,
+        })
+
+        data = [
+            {
+                "lost_time_incidents": row.lost_time_incidents
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # ===== CHARTS =====
+@router.get("/employee_count_per_company", response_model=List[dict])
+def get_employee_count_per_company(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Active count of employees per Gender query")
+        
+        if start_date is None:
+            start_date = None
+        
+        if end_date is None:
+            end_date = None
+            
+        result = db.execute(text("""
+            SELECT company_name, COUNT(*) AS num_employees
+            FROM gold.func_employee_summary(
+            NULL, NULL, NULL, :company_id, :start_date, :end_date
+            )
+            GROUP BY company_name
+            ORDER BY company_name;
+        """), {
+                'start_date': start_date,
+                'end_date': end_date,
+                'company_id': [company_id] if company_id else None
+        })
+
+        data = [
+            {
+                "company_name": row.company_name,
+                "num_employees": row.num_employees
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/gender_distribution_per_position", response_model=List[dict])
+def get_gender_distribution_per_position(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the Total active employees count
+    """
+    try:
+        logging.info("Executing Active count of employees per Gender query")
+        
+        if start_date is None:
+            start_date = None
+        
+        if end_date is None:
+            end_date = None
+            
+        result = db.execute(text("""
+            SELECT
+                position_id AS position,
+                COUNT(*) FILTER (WHERE gender = 'M') AS male,
+                COUNT(*) FILTER (WHERE gender = 'F') AS female
+            FROM gold.func_employee_summary(
+            NULL, NULL, NULL, :company_id, :start_date, :end_date
+            )
+            GROUP BY position_id
+            ORDER BY position_id;
+        """), {
+                'start_date': start_date,
+                'end_date': end_date,
+                'company_id': [company_id] if company_id else None,
+        })
+
+        data = [
+            {
+                "position": row.position,
+                "male": row.male,
+                "female": row.female
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/age_distribution", response_model=List[dict])
+def get_age_distribution(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Age distribution query")
+        
+        if start_date is None:
+            start_date = None
+        
+        if end_date is None:
+            end_date = None
+            
+        result = db.execute(text("""
+            SELECT age_category,
+                COUNT(*) AS employee_count
+            FROM gold.func_employee_summary(
+            NULL, NULL, NULL, :company_id, :start_date, :end_date
+            )
+            GROUP BY age_category
+            ORDER BY age_category;
+        """), {
+                'start_date': start_date,
+                'end_date': end_date,
+                'company_id': [company_id] if company_id else None,
+        })
+
+        data = [
+            {
+                "age_category": row.age_category,
+                "employee_count": row.employee_count
+            }
+            for row in result
+        ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/incident_count_per_month", response_model=List[dict])
 def get_incident_count_per_month(
-    year: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
         logging.info("Executing Incident count per month query")
         
-        if year == None:
-            year = datetime.now().year
+        if start_date is None:
+            # Set to January 1st of the current year
+            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        
+        if end_date is None:
+            # Set to today's date
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            
         result = db.execute(text("""
-            SELECT 
-                incident_type, 
-                month_name,
-                incident_count
-            FROM gold.func_occupational_safety_health_summary(:year, NULL, NULL, :company_id, NULL, NULL, NULL, NULL);
+            SELECT year, company_name, company_id, month_name, month_value, SUM(incident_count) AS incidents
+            FROM gold.func_occupational_safety_health_summary(
+            :start_date, :end_date, :company_id, NULL, NULL, NULL
+            )
+            GROUP BY month_value, company_name, company_id, year, month_name
+            ORDER BY month_value, company_name, company_id, year, month_name;
         """), {
-                'year': [year],
+                'start_date': start_date,
+                'end_date': end_date,
                 'company_id': [company_id] if company_id else None
         })
 
         data = [
             {
-                "incident_type": row.incident_type,
+                "year": row.year,
                 "month_name": row.month_name,
-                "incident_count": row.incident_count
+                "incidents": row.incidents,
+                "company_name": row.company_name
             }
             for row in result
         ]
@@ -715,31 +487,41 @@ def get_incident_count_per_month(
 
 @router.get("/safety_manhours_per_month", response_model=List[dict])
 def get_safety_manhours_per_month(
-    year: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
-        logging.info("Executing Incident count per month query")
+        logging.info("Executing safety manhours per month query")
         
-        if year == None:
-            year = datetime.now().year
+        if start_date is None:
+            # Set to January 1st of the current year
+            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        
+        if end_date is None:
+            # Set to today's date
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            
         result = db.execute(text("""
-            SELECT 
-                SUM(manhours) as total_safety_manhours,
-                month_name
-            FROM gold.func_safety_workdata_summary(:year, NULL, NULL, :company_id, NULL)
-            GROUP BY month_name
-            ORDER BY month_name;
+            SELECT year, company_name, company_id, month_name, month_value, SUM(manhours) AS manhours
+            FROM gold.func_safety_workdata_summary(
+            :start_date, :end_date, :company_id, NULL
+            )
+            GROUP BY month_value, company_name, company_id, year, month_name, month_name
+            ORDER BY month_value, company_name, company_id, year, month_name;
         """), {
-                'year': [year],
+                'start_date': start_date,
+                'end_date': end_date,
                 'company_id': [company_id] if company_id else None
         })
 
         data = [
             {
-                "total_safety_manhours": row.total_safety_manhours,
-                "month_name": row.month_name
+                "year": row.year,
+                "month_name": row.month_name,
+                "manhours": row.manhours,
+                "company_name": row.company_name
             }
             for row in result
         ]
@@ -760,43 +542,59 @@ def get_safety_manhours_per_month(
 
 @router.get("/safety_manpower_per_month", response_model=List[dict])
 def get_safety_manhours_per_month(
-    year: Optional[int] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
-        logging.info("Executing Incident count per month query")
+        logging.info("Executing safety manpower per month query")
         
-        # if year == None:
-        #     year = datetime.now().year
-        # result = db.execute(text("""
-        #     SELECT 
-        #         SUM(manhours) as total_safety_manhours,
-        #         month_name
-        #     FROM gold.func_safety_workdata_summary(:year, NULL, NULL, :company_id, NULL)
-        #     GROUP BY month_name
-        #     ORDER BY month_name;
-        # """), {
-        #         'year': [year],
-        #         'company_id': [company_id] if company_id else None
-        # })
+        if start_date is None:
+            # Set to January 1st of the current year
+            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        
+        if end_date is None:
+            # Set to today's date
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            
+        result = db.execute(text("""
+            SELECT
+                year,
+                company_name, 
+                company_id,
+                month_name,
+                month_value,
+                SUM(manpower) AS total_monthly_safety_manpower
+            FROM gold.func_safety_workdata_summary(
+            :start_date, :end_date, :company_id, NULL
+            )
+            GROUP BY month_value, company_name, company_id, year, month_name
+            ORDER BY month_value, company_name, company_id, year, month_name;
+        """), {
+                'start_date': start_date,
+                'end_date': end_date,
+                'company_id': [company_id] if company_id else None
+        })
 
-        # data = [
-        #     {
-        #         "total_safety_manhours": row.total_safety_manhours,
-        #         "month_name": row.month_name
-        #     }
-        #     for row in result
-        # ]
+        data = [
+            {
+                "year": row.year,
+                "month_name": row.month_name,
+                "total_monthly_safety_manpower": row.total_monthly_safety_manpower,
+                "company_name": row.company_name
+            }
+            for row in result
+        ]
         
-        # logging.info(f"Query returned {len(data)} rows")
-        # logging.debug(f"Data: {data}")
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
         
-        # if not data:
-        #     logging.warning("No data found")
-        #     return []
+        if not data:
+            logging.warning("No data found")
+            return []
 
-        return "No data yet"
+        return data
     except Exception as e:
         logging.error(f"Error fetching data: {str(e)}")
         logging.error(traceback.format_exc())
