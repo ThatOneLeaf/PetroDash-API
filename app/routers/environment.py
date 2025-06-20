@@ -1298,21 +1298,27 @@ def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = De
         valid_company_ids = db.query(CompanyMain.company_id).all()
         valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
 
-        # Fetch valid units and metrics from database
-        valid_units = db.query(EnviHazardWasteDisposed.unit_of_measurement).distinct().all()
-        valid_metrics = db.query(EnviHazardWasteDisposed.metrics).distinct().all()
-
+        # Get valid units of measurement from database
+        valid_units = db.query(EnviWaterAbstraction.unit_of_measurement).all()
         valid_units_set = {unit[0] for unit in valid_units}
-        valid_metrics_set = {metric[0] for metric in valid_metrics}
+        
+        # Define month to quarter mapping
+        month_to_quarter = {
+            "January": "Q1", "February": "Q1", "March": "Q1",
+            "April": "Q2", "May": "Q2", "June": "Q2",
+            "July": "Q3", "August": "Q3", "September": "Q3",
+            "October": "Q4", "November": "Q4", "December": "Q4"
+        }
 
+        # data cleaning & row-level validation
         rows = []
         validation_errors = []
         CURRENT_YEAR = datetime.now().year
-
+        
         for i, row in df.iterrows():
             row_number = i + 2  # Excel row number (accounting for header)
-
-            # Validate company_id
+            
+            # Company ID validation
             if not isinstance(row["company_id"], str) or not row["company_id"].strip():
                 validation_errors.append(f"Row {row_number}: Invalid company_id")
                 continue
@@ -1322,51 +1328,58 @@ def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = De
                 validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
                 continue
 
-            # Validate year
             if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
                 validation_errors.append(f"Row {row_number}: Invalid year")
                 continue
 
-            # Validate metrics
-            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
-                validation_errors.append(f"Row {row_number}: Invalid metrics")
-                continue
-            metric_stripped = row["metrics"].strip()
-            if metric_stripped not in valid_metrics_set:
-                validation_errors.append(f"Row {row_number}: Metric '{metric_stripped}' does not exist in database. Valid metrics: {', '.join(sorted(valid_metrics_set))}")
+            if row["month"] not in month_to_quarter.keys():
+                validation_errors.append(f"Row {row_number}: Invalid month '{row['month']}'")
                 continue
 
-            # Validate unit_of_measurement
+            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
+                validation_errors.append(f"Row {row_number}: Invalid quarter '{row['quarter']}'")
+                continue
+
+            if not isinstance(row["volume"], (int, float)) or row["volume"] < 0:
+                validation_errors.append(f"Row {row_number}: Invalid volume")
+                continue
+
             if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
                 validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
                 continue
+
+            # Unit validation
             unit_stripped = row["unit_of_measurement"].strip()
             if unit_stripped not in valid_units_set:
                 validation_errors.append(f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}")
                 continue
 
-            # Validate waste_disposed
-            if not isinstance(row["waste_disposed"], (int, float)) or row["waste_disposed"] < 0:
-                validation_errors.append(f"Row {row_number}: Invalid waste_disposed")
+            # Month and quarter match validation
+            expected_quarter = month_to_quarter[row["month"]]
+            if row["quarter"] != expected_quarter:
+                validation_errors.append(f"Row {row_number}: Month '{row['month']}' should be in quarter '{expected_quarter}', but '{row['quarter']}' was provided")
                 continue
 
             # If all validations pass, add to rows
             rows.append({
                 "company_id": company_id_stripped,
                 "year": int(row["year"]),
-                "metrics": metric_stripped,
+                "month": row["month"],
+                "quarter": row["quarter"],
+                "volume": float(row["volume"]),
                 "unit_of_measurement": unit_stripped,
-                "waste_disposed": float(row["waste_disposed"]),
             })
 
+        # If there are validation errors, return them
         if validation_errors:
             error_message = "Data validation failed:\n" + "\n".join(validation_errors)
             raise HTTPException(status_code=422, detail=error_message)
 
+        # If no validation errors, proceed with bulk insert
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_hazard_waste_disposed(db, rows)
+        count = bulk_create_water_abstractions(db, rows)
         return {"message": f"{count} records successfully inserted."}
 
     except HTTPException:
