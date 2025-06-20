@@ -1294,6 +1294,216 @@ def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = De
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
 
+        # Get valid company IDs from CompanyMain
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
+
+        # Fetch valid units and metrics from database
+        valid_units = db.query(EnviHazardWasteDisposed.unit_of_measurement).distinct().all()
+        valid_metrics = db.query(EnviHazardWasteDisposed.metrics).distinct().all()
+
+        valid_units_set = {unit[0] for unit in valid_units}
+        valid_metrics_set = {metric[0] for metric in valid_metrics}
+
+        rows = []
+        validation_errors = []
+        CURRENT_YEAR = datetime.now().year
+
+        for i, row in df.iterrows():
+            row_number = i + 2  # Excel row number (accounting for header)
+
+            # Validate company_id
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            company_id_stripped = row["company_id"].strip()
+            if company_id_stripped not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
+                continue
+
+            # Validate year
+            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
+                validation_errors.append(f"Row {row_number}: Invalid year")
+                continue
+
+            # Validate metrics
+            if not isinstance(row["metrics"], str) or not row["metrics"].strip():
+                validation_errors.append(f"Row {row_number}: Invalid metrics")
+                continue
+            metric_stripped = row["metrics"].strip()
+            if metric_stripped not in valid_metrics_set:
+                validation_errors.append(f"Row {row_number}: Metric '{metric_stripped}' does not exist in database. Valid metrics: {', '.join(sorted(valid_metrics_set))}")
+                continue
+
+            # Validate unit_of_measurement
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
+                continue
+            unit_stripped = row["unit_of_measurement"].strip()
+            if unit_stripped not in valid_units_set:
+                validation_errors.append(f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}")
+                continue
+
+            # Validate waste_disposed
+            if not isinstance(row["waste_disposed"], (int, float)) or row["waste_disposed"] < 0:
+                validation_errors.append(f"Row {row_number}: Invalid waste_disposed")
+                continue
+
+            # If all validations pass, add to rows
+            rows.append({
+                "company_id": company_id_stripped,
+                "year": int(row["year"]),
+                "metrics": metric_stripped,
+                "unit_of_measurement": unit_stripped,
+                "waste_disposed": float(row["waste_disposed"]),
+            })
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
+
+        count = bulk_create_hazard_waste_disposed(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# DIESEL CONSUMPTION BULK UPLOAD
+@router.post("/bulk_upload_diesel_consumption")
+def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
+    
+    try:
+        logging.info("Add bulk diesel consumption data")
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+        df = normalize_dataframe_columns(df, 'diesel_consumption')
+
+        required_columns = {'company_id', 'cp_name', 'unit_of_measurement', 'consumption', 'date'}
+        if not required_columns.issubset(df.columns):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required columns: {required_columns - set(df.columns)}"
+            )
+
+        # Get valid company IDs from CompanyMain
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
+
+        # Fetch all valid unit_of_measurement values
+        valid_units = db.query(EnviDieselConsumption.unit_of_measurement).distinct().all()
+        valid_units_set = {unit[0].strip() for unit in valid_units}
+
+        # Fetch all company properties and build cp_name lookup
+        company_properties = db.query(EnviCompanyProperty).all()
+        cp_lookup = {}
+        cp_name_set = set()
+        for cp in company_properties:
+            key = (cp.company_id.lower(), cp.cp_name.lower())
+            cp_lookup[key] = cp.cp_id
+            cp_name_set.add(cp.cp_name.lower())
+
+        rows = []
+        validation_errors = []
+
+        for i, row in df.iterrows():
+            row_number = i + 2  # Excel row number
+
+            # Validate company_id
+            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
+                validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            company_id = row["company_id"].strip()
+            if company_id not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
+                continue
+
+            # Validate cp_name
+            if not isinstance(row["cp_name"], str) or not row["cp_name"].strip():
+                validation_errors.append(f"Row {row_number}: Invalid cp_name")
+                continue
+
+            cp_name = row["cp_name"].strip()
+            cp_lookup_key = (company_id.lower(), cp_name.lower())
+
+            # Validate if cp_name exists for the given company_id
+            if cp_lookup_key not in cp_lookup:
+                validation_errors.append(
+                    f"Row {row_number}: Company property not found for company_id '{company_id}' and cp_name '{cp_name}'"
+                )
+                continue
+
+            cp_id = cp_lookup[cp_lookup_key]
+
+            # Validate unit_of_measurement
+            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
+                validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
+                continue
+
+            unit_stripped = row["unit_of_measurement"].strip()
+            if unit_stripped not in valid_units_set:
+                validation_errors.append(
+                    f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}"
+                )
+                continue
+
+            # Validate consumption
+            if not isinstance(row["consumption"], (int, float)) or row["consumption"] < 0:
+                validation_errors.append(f"Row {row_number}: Invalid consumption")
+                continue
+
+            # Validate and parse date
+            try:
+                if isinstance(row["date"], str):
+                    parsed_date = pd.to_datetime(row["date"]).date()
+                elif hasattr(row["date"], 'date'):
+                    parsed_date = row["date"].date()
+                elif isinstance(row["date"], datetime.date):
+                    parsed_date = row["date"]
+                else:
+                    raise ValueError("Invalid date format")
+            except (ValueError, TypeError):
+                validation_errors.append(f"Row {row_number}: Invalid date format")
+                continue
+
+            year = parsed_date.year
+
+            rows.append({
+                "company_id": company_id,
+                "cp_id": cp_id,
+                "unit_of_measurement": unit_stripped,
+                "consumption": float(row["consumption"]),
+                "date": parsed_date,
+                "year": year
+            })
+
+        if validation_errors:
+            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
+            raise HTTPException(status_code=422, detail=error_message)
+
+        if not rows:
+            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
+
+        count = bulk_create_diesel_consumption(db, rows)
+        return {"message": f"{count} records successfully inserted."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
+
         # Get valid units of measurement from database
         valid_units = db.query(EnviWaterAbstraction.unit_of_measurement).all()  # Adjust table/column names as needed
         valid_units_set = {unit[0] for unit in valid_units}
@@ -1314,9 +1524,14 @@ def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = De
         for i, row in df.iterrows():
             row_number = i + 2  # Excel row number (accounting for header)
             
-            # Existing validations
+            # Company ID validation
             if not isinstance(row["company_id"], str) or not row["company_id"].strip():
                 validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            company_id_stripped = row["company_id"].strip()
+            if company_id_stripped not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
                 continue
 
             if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
@@ -1353,7 +1568,7 @@ def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = De
 
             # If all validations pass, add to rows
             rows.append({
-                "company_id": row["company_id"].strip(),
+                "company_id": company_id_stripped,
                 "year": int(row["year"]),
                 "month": row["month"],
                 "quarter": row["quarter"],
@@ -1396,6 +1611,10 @@ def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depe
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
 
+        # Get valid company IDs from CompanyMain
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
+
         # Get valid units of measurement from database
         valid_units = db.query(EnviWaterDischarge.unit_of_measurement).all()  # Adjust table/column names as needed
         valid_units_set = {unit[0] for unit in valid_units}
@@ -1408,9 +1627,14 @@ def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depe
         for i, row in df.iterrows():
             row_number = i + 2  # Excel row number (accounting for header)
             
-            # Existing validations
+            # Company ID validation
             if not isinstance(row["company_id"], str) or not row["company_id"].strip():
                 validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            company_id_stripped = row["company_id"].strip()
+            if company_id_stripped not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
                 continue
 
             if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
@@ -1437,7 +1661,7 @@ def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depe
 
             # If all validations pass, add to rows
             rows.append({
-                "company_id": row["company_id"].strip(),
+                "company_id": company_id_stripped,
                 "year": int(row["year"]),
                 "quarter": row["quarter"],
                 "volume": float(row["volume"]),
@@ -1479,6 +1703,10 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
 
+        # Get valid company IDs from CompanyMain
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
+
         # Get valid units of measurement from database
         valid_units = db.query(EnviWaterConsumption.unit_of_measurement).all()  # Adjust table/column names as needed
         valid_units_set = {unit[0] for unit in valid_units}
@@ -1491,9 +1719,14 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
         for i, row in df.iterrows():
             row_number = i + 2  # Excel row number (accounting for header)
             
-            # Existing validations
+            # Company ID validation
             if not isinstance(row["company_id"], str) or not row["company_id"].strip():
                 validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            company_id_stripped = row["company_id"].strip()
+            if company_id_stripped not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
                 continue
 
             if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
@@ -1520,7 +1753,7 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
 
             # If all validations pass, add to rows
             rows.append({
-                "company_id": row["company_id"].strip(),
+                "company_id": company_id_stripped,
                 "year": int(row["year"]),
                 "quarter": row["quarter"],
                 "volume": float(row["volume"]),
@@ -1544,7 +1777,8 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+# ELECTRIC CONSUMPTION BULK UPLOAD
 @router.post("/bulk_upload_electric_consumption")
 def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith((".xlsx", ".xls")):
@@ -1560,6 +1794,10 @@ def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session =
         required_columns = {'company_id', 'year', 'quarter', 'source', 'unit_of_measurement', 'consumption'}
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # Get valid company IDs from CompanyMain
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
 
         # Get valid units of measurement from database
         valid_units = db.query(EnviElectricConsumption.unit_of_measurement).all()  # Adjust table/column names as needed
@@ -1580,6 +1818,11 @@ def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session =
             # Company ID validation
             if not isinstance(row["company_id"], str) or not row["company_id"].strip():
                 validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            company_id_stripped = row["company_id"].strip()
+            if company_id_stripped not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
                 continue
 
             # Year validation
@@ -1621,7 +1864,7 @@ def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session =
 
             # If all validations pass, add to rows
             rows.append({
-                "company_id": row["company_id"].strip(),
+                "company_id": company_id_stripped,
                 "year": int(row["year"]),
                 "quarter": row["quarter"],
                 "source": source_stripped,
@@ -1647,6 +1890,7 @@ def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session =
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+# NON-HAZARD WASTE BULK UPLOAD
 @router.post("/bulk_upload_non_hazard_waste")
 def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith((".xlsx", ".xls")):
@@ -1664,6 +1908,10 @@ def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Dep
         }
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # Get valid company IDs from CompanyMain
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
 
         # Pre-fetch valid entries from the database
         valid_units = {row[0] for row in db.query(EnviNonHazardWaste.unit_of_measurement).all()}
@@ -1691,9 +1939,13 @@ def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Dep
             unit = str(row["unit_of_measurement"]).strip()
             waste = float(row["waste"]) if isinstance(row["waste"], (int, float)) else None
 
-            # Field validations
+            # Company ID validation
             if not company_id:
                 validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            if company_id not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
                 continue
 
             if year is None or not (1900 <= year <= CURRENT_YEAR + 1):
@@ -1759,6 +2011,7 @@ def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Dep
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+# HAZARD WASTE GENERATED BULK UPLOAD
 @router.post("/bulk_upload_hazard_waste_generated")
 def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith((".xlsx", ".xls")):
@@ -1775,6 +2028,10 @@ def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
 
+        # Get valid company IDs from CompanyMain
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
+
         # Get valid units and metrics from database
         valid_units = db.query(EnviHazardWasteGenerated.unit_of_measurement).all()
         valid_units_set = {unit[0] for unit in valid_units}
@@ -1790,8 +2047,14 @@ def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session
         for i, row in df.iterrows():
             row_number = i + 2  # Excel row number (accounting for header)
 
+            # Company ID validation
             if not isinstance(row["company_id"], str) or not row["company_id"].strip():
                 validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            company_id_stripped = row["company_id"].strip()
+            if company_id_stripped not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
                 continue
 
             if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
@@ -1825,7 +2088,7 @@ def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session
                 continue
 
             rows.append({
-                "company_id": row["company_id"].strip(),
+                "company_id": company_id_stripped,
                 "year": int(row["year"]),
                 "quarter": row["quarter"],
                 "metrics": metrics_stripped,
@@ -1848,7 +2111,7 @@ def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 @router.post("/bulk_upload_hazard_waste_disposed")
 def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.endswith((".xlsx", ".xls")):
@@ -1864,6 +2127,10 @@ def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session 
         required_columns = {'company_id', 'year', 'metrics', 'unit_of_measurement', 'waste_disposed'}
         if not required_columns.issubset(df.columns):
             raise HTTPException(status_code=400, detail=f"Missing required columns: {required_columns - set(df.columns)}")
+
+        # Get valid company IDs from CompanyMain
+        valid_company_ids = db.query(CompanyMain.company_id).all()
+        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
 
         # Fetch valid units and metrics from database
         valid_units = db.query(EnviHazardWasteDisposed.unit_of_measurement).distinct().all()
@@ -1882,6 +2149,11 @@ def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session 
             # Validate company_id
             if not isinstance(row["company_id"], str) or not row["company_id"].strip():
                 validation_errors.append(f"Row {row_number}: Invalid company_id")
+                continue
+
+            company_id_stripped = row["company_id"].strip()
+            if company_id_stripped not in valid_company_ids_set:
+                validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
                 continue
 
             # Validate year
@@ -1914,7 +2186,7 @@ def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session 
 
             # If all validations pass, add to rows
             rows.append({
-                "company_id": row["company_id"].strip(),
+                "company_id": company_id_stripped,
                 "year": int(row["year"]),
                 "metrics": metric_stripped,
                 "unit_of_measurement": unit_stripped,
@@ -1929,124 +2201,6 @@ def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session 
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
         count = bulk_create_hazard_waste_disposed(db, rows)
-        return {"message": f"{count} records successfully inserted."}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@router.post("/bulk_upload_diesel_consumption")
-def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
-    
-    try:
-        logging.info("Add bulk diesel consumption data")
-        contents = file.file.read()
-        df = pd.read_excel(BytesIO(contents))
-        df = normalize_dataframe_columns(df, 'diesel_consumption')
-
-        required_columns = {'company_id', 'cp_name', 'unit_of_measurement', 'consumption', 'date'}
-        if not required_columns.issubset(df.columns):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Missing required columns: {required_columns - set(df.columns)}"
-            )
-
-        # Fetch all valid unit_of_measurement values
-        valid_units = db.query(EnviDieselConsumption.unit_of_measurement).distinct().all()
-        valid_units_set = {unit[0].strip() for unit in valid_units}
-
-        # Fetch all company properties and build cp_name lookup
-        company_properties = db.query(EnviCompanyProperty).all()
-        cp_lookup = {}
-        cp_name_set = set()
-        for cp in company_properties:
-            key = (cp.company_id.lower(), cp.cp_name.lower())
-            cp_lookup[key] = cp.cp_id
-            cp_name_set.add(cp.cp_name.lower())
-
-        rows = []
-        validation_errors = []
-
-        for i, row in df.iterrows():
-            row_number = i + 2  # Excel row number
-
-            # Validate company_id
-            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
-                validation_errors.append(f"Row {row_number}: Invalid company_id")
-                continue
-
-            # Validate cp_name
-            if not isinstance(row["cp_name"], str) or not row["cp_name"].strip():
-                validation_errors.append(f"Row {row_number}: Invalid cp_name")
-                continue
-
-            company_id = row["company_id"].strip()
-            cp_name = row["cp_name"].strip()
-            cp_lookup_key = (company_id.lower(), cp_name.lower())
-
-            # Validate if cp_name exists for the given company_id
-            if cp_lookup_key not in cp_lookup:
-                validation_errors.append(
-                    f"Row {row_number}: Company property not found for company_id '{company_id}' and cp_name '{cp_name}'"
-                )
-                continue
-
-            cp_id = cp_lookup[cp_lookup_key]
-
-            # Validate unit_of_measurement
-            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
-                validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
-                continue
-
-            unit_stripped = row["unit_of_measurement"].strip()
-            if unit_stripped not in valid_units_set:
-                validation_errors.append(
-                    f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}"
-                )
-                continue
-
-            # Validate consumption
-            if not isinstance(row["consumption"], (int, float)) or row["consumption"] < 0:
-                validation_errors.append(f"Row {row_number}: Invalid consumption")
-                continue
-
-            # Validate and parse date
-            try:
-                if isinstance(row["date"], str):
-                    parsed_date = pd.to_datetime(row["date"]).date()
-                elif hasattr(row["date"], 'date'):
-                    parsed_date = row["date"].date()
-                elif isinstance(row["date"], datetime.date):
-                    parsed_date = row["date"]
-                else:
-                    raise ValueError("Invalid date format")
-            except (ValueError, TypeError):
-                validation_errors.append(f"Row {row_number}: Invalid date format")
-                continue
-
-            year = parsed_date.year
-
-            rows.append({
-                "company_id": company_id,
-                "cp_id": cp_id,
-                "unit_of_measurement": unit_stripped,
-                "consumption": float(row["consumption"]),
-                "date": parsed_date,
-                "year": year
-            })
-
-        if validation_errors:
-            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
-            raise HTTPException(status_code=422, detail=error_message)
-
-        if not rows:
-            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
-
-        count = bulk_create_diesel_consumption(db, rows)
         return {"message": f"{count} records successfully inserted."}
 
     except HTTPException:
