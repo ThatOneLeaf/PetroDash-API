@@ -159,6 +159,7 @@ def get_average_tenure_rate(
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+#REMOVE THIS
 @router.get("/attrition_rate_kpi", response_model=List[dict])
 def get_attrition_rate_kpi(
     year: Optional[int] = Query(None),
@@ -326,6 +327,7 @@ def get_gender_distribution_per_position(
         raise HTTPException(status_code=500, detail=str(e))
 
 # CHANGE THIS TO PER MONTH
+# REMOVE THIS
 @router.get("/attrition_rate_per_month", response_model=List[dict])
 def get_attrition_rate_per_month(
     year: Optional[int] = Query(None),
@@ -467,11 +469,12 @@ def get_total_leave(
             
         result = db.execute(text("""
             SELECT
+                year,
                 type_of_leave,
                 SUM(leave_count) AS total_leave
             FROM gold.func_parental_leave_summary_yearly(NULL, NULL, :position_id, :company_id, :year)
-            GROUP BY type_of_leave
-            ORDER BY type_of_leave;
+            GROUP BY year, type_of_leave
+            ORDER BY year, type_of_leave;
         """), {
                 'year': [year],
                 'company_id': [company_id] if company_id else None,
@@ -583,6 +586,45 @@ def get_total_safety_manhours(
             return []
 
         return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/total_safety_manpower", response_model=List[dict])
+def get_total_safety_manhours(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+    #     logging.info("Executing Total Safety Manhours query")
+        
+    #     if year == None:
+    #         year = datetime.now().year
+    #     result = db.execute(text("""
+    #         SELECT SUM(manhours) as total_safety_manhours
+    #         FROM gold.func_safety_workdata_summary(:year, NULL, NULL, :company_id, NULL);
+    #     """), {
+    #             'year': [year],
+    #             'company_id': [company_id] if company_id else None,
+    #     })
+
+    #     data = [
+    #         {
+    #             "total_safety_manhours": row.total_safety_manhours
+    #         }
+    #         for row in result
+    #     ]
+        
+    #     logging.info(f"Query returned {len(data)} rows")
+    #     logging.debug(f"Data: {data}")
+        
+    #     if not data:
+    #         logging.warning("No data found")
+    #         return []
+
+        return "No data yet"
     except Exception as e:
         logging.error(f"Error fetching data: {str(e)}")
         logging.error(traceback.format_exc())
@@ -710,6 +752,51 @@ def get_safety_manhours_per_month(
             return []
 
         return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/safety_manpower_per_month", response_model=List[dict])
+def get_safety_manhours_per_month(
+    year: Optional[int] = Query(None),
+    company_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Incident count per month query")
+        
+        # if year == None:
+        #     year = datetime.now().year
+        # result = db.execute(text("""
+        #     SELECT 
+        #         SUM(manhours) as total_safety_manhours,
+        #         month_name
+        #     FROM gold.func_safety_workdata_summary(:year, NULL, NULL, :company_id, NULL)
+        #     GROUP BY month_name
+        #     ORDER BY month_name;
+        # """), {
+        #         'year': [year],
+        #         'company_id': [company_id] if company_id else None
+        # })
+
+        # data = [
+        #     {
+        #         "total_safety_manhours": row.total_safety_manhours,
+        #         "month_name": row.month_name
+        #     }
+        #     for row in result
+        # ]
+        
+        # logging.info(f"Query returned {len(data)} rows")
+        # logging.debug(f"Data: {data}")
+        
+        # if not data:
+        #     logging.warning("No data found")
+        #     return []
+
+        return "No data yet"
     except Exception as e:
         logging.error(f"Error fetching data: {str(e)}")
         logging.error(traceback.format_exc())
