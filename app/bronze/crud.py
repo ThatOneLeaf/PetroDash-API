@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from .models import EnergyRecords, CSRActivity, CSRProject, CSRProgram, EnviCompanyProperty, EnviWaterAbstraction, EnviWaterDischarge, EnviWaterConsumption, EnviElectricConsumption, EnviDieselConsumption, EnviNonHazardWaste, EnviHazardWasteGenerated, EnviHazardWasteDisposed
-from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh, HRParentalLeaveSilver, HRSafetyWorkdataSilver
+from .models import HRDemographics, HRTenure, HRSafetyWorkdata, HRTraining, HRParentalLeave, HROsh, HRParentalLeaveSilver, HRSafetyWorkdataSilver, HRTrainingSilver
 from app.crud.base import get_one, get_many, get_many_filtered, get_all
 from app.utils.formatting_id import generate_single_pkey_id, generate_bulk_pkey_ids
 from app.utils.gen_help_id import generate_pkey_id, generate_bulk_id
@@ -2024,6 +2024,18 @@ def insert_safety_workdata(db: Session, data: dict):
     db.commit()
     db.refresh(record)
     
+    record_Silver = HRSafetyWorkdataSilver(
+        safety_workdata_id=safety_workdata_id,
+        company_id=data["company_id"],
+        contractor=data["contractor"],
+        date=data["date"],
+        manpower=data["manpower"],
+        manhours=data["manhours"]
+    )
+    db.add(record_Silver)
+    db.commit()
+    db.refresh(record_Silver)
+    
     try:
         checker_log = RecordStatus(
             cs_id=f"CS-{safety_workdata_id}",
@@ -2073,12 +2085,25 @@ def insert_parental_leave(db: Session, data: dict):
         type_of_leave=data["type_of_leave"],
         date=data["date"],
         days=data["days"],
-        end_date=end_date,
-        months_availed=months_availed
+        # end_date=end_date,
+        # months_availed=months_availed
     )
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    record_Silver = HRParentalLeaveSilver(
+        parental_leave_id=parental_leave_id,
+        employee_id=data["employee_id"],
+        type_of_leave=data["type_of_leave"],
+        date=data["date"],
+        days=data["days"],
+        end_date=end_date,
+        months_availed=months_availed
+    )
+    db.add(record_Silver)
+    db.commit()
+    db.refresh(record_Silver)
     
     try:
         checker_log = RecordStatus(
@@ -2103,7 +2128,7 @@ def insert_parental_leave(db: Session, data: dict):
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         db.commit()
@@ -2126,11 +2151,24 @@ def insert_training(db: Session, data: dict):
         training_title=data["training_title"],
         training_hours=data["training_hours"],
         number_of_participants=data["number_of_participants"],
-        total_training_hours=total_training_hours
+        #total_training_hours=total_training_hours
     )
     db.add(record)
     db.commit()
     db.refresh(record)
+    
+    record_Silver = HRTrainingSilver(
+        training_id=training_id,
+        company_id=data["company_id"],
+        date=data["date"],
+        training_title=data["training_title"],
+        training_hours=data["training_hours"],
+        number_of_participants=data["number_of_participants"],
+        total_training_hours=total_training_hours
+    )
+    db.add(record_Silver)
+    db.commit()
+    db.refresh(record_Silver)
     
     try:
         checker_log = RecordStatus(
@@ -2206,7 +2244,7 @@ def insert_occupational_safety_health(db: Session, data: dict):
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := TRUE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         db.commit()

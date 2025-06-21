@@ -177,12 +177,23 @@ class HRTraining(Base):
     
     training_id = Column(String(20), primary_key=True, index=True)
     company_id = Column(String(20))
-    date = Column(String(50))
+    date = Column(TIMESTAMP)
     training_title = Column(TEXT)
     training_hours = Column(TIMESTAMP)
     number_of_participants = Column(Numeric)
     #total_training_hours = Column(Numeric)
+
+class HRTrainingSilver(Base_silver):
+    __tablename__ = "hr_training"
     
+    training_id = Column(String(20), primary_key=True, index=True)
+    company_id = Column(String(20))
+    date = Column(TIMESTAMP)
+    training_title = Column(TEXT)
+    training_hours = Column(TIMESTAMP)
+    number_of_participants = Column(Numeric)
+    total_training_hours = Column(Numeric)   
+ 
 class HRSafetyWorkdata(Base):
     __tablename__ = "hr_safety_workdata"
     
