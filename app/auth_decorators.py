@@ -1,4 +1,5 @@
 from functools import wraps
+import asyncio
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from .dependencies import get_db
@@ -48,38 +49,41 @@ def require_role(*allowed_roles):
     """
     return Depends(get_current_user_with_roles(*allowed_roles))
 
+# Helper function to create role-based decorators that handle both sync and async functions
+def create_role_decorator(role_id: str):
+    """Create a decorator for a specific role that handles both sync and async functions"""
+    def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            # Handle async functions
+            @wraps(func)
+            async def async_wrapper(*args, current_user: User = Depends(get_current_user_with_roles(role_id)), **kwargs):
+                return await func(*args, **kwargs)
+            return async_wrapper
+        else:
+            # Handle sync functions
+            @wraps(func)
+            def sync_wrapper(*args, current_user: User = Depends(get_current_user_with_roles(role_id)), **kwargs):
+                return func(*args, **kwargs)
+            return sync_wrapper
+    return decorator
+
 # Convenience decorators for specific roles
 def system_admin_only(func):
     """Decorator for System Administrator only access (R01)"""
-    @wraps(func)
-    def wrapper(*args, current_user: User = Depends(get_current_user_with_roles("R01")), **kwargs):
-        return func(*args, **kwargs)
-    return wrapper
+    return create_role_decorator("R01")(func)
 
 def executive_only(func):
     """Decorator for Executive only access (R02)"""
-    @wraps(func)
-    def wrapper(*args, current_user: User = Depends(get_current_user_with_roles("R02")), **kwargs):
-        return func(*args, **kwargs)
-    return wrapper
+    return create_role_decorator("R02")(func)
 
 def office_checker_only(func):
     """Decorator for Head Office Checker only access (R03)"""
-    @wraps(func)
-    def wrapper(*args, current_user: User = Depends(get_current_user_with_roles("R03")), **kwargs):
-        return func(*args, **kwargs)
-    return wrapper
+    return create_role_decorator("R03")(func)
 
 def site_checker_only(func):
     """Decorator for Site Checker only access (R04)"""
-    @wraps(func)
-    def wrapper(*args, current_user: User = Depends(get_current_user_with_roles("R04")), **kwargs):
-        return func(*args, **kwargs)
-    return wrapper
+    return create_role_decorator("R04")(func)
 
 def encoder_only(func):
     """Decorator for Encoder only access (R05)"""
-    @wraps(func)
-    def wrapper(*args, current_user: User = Depends(get_current_user_with_roles("R05")), **kwargs):
-        return func(*args, **kwargs)
-    return wrapper
+    return create_role_decorator("R05")(func)
