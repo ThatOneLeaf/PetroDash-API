@@ -2057,13 +2057,13 @@ def get_diesel_key_metrics(
 def get_distinct_hazardous_waste_type(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     try:
         result = db.execute(text("""
-            SELECT DISTINCT waste_type
+            SELECT DISTINCT waste_type, unit
             FROM gold.func_environment_hazard_waste_generated_by_year(NULL, NULL, NULL, NULL, NULL)
             ORDER BY waste_type ASC
         """))
         
         rows = result.fetchall()
-        waste_type = [row.waste_type for row in rows]
+        waste_type = [{"waste_type": row.waste_type, "unit": row.unit} for row in rows]
 
         return {
             "data": waste_type,
@@ -2632,13 +2632,13 @@ def get_hazard_waste_percentage_pie_chart(
 def get_distinct_hazardous_waste_dis_type(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     try:
         result = db.execute(text("""
-            SELECT DISTINCT waste_type
+            SELECT DISTINCT waste_type, unit
             FROM gold.func_environment_hazard_waste_disposed_by_year(NULL, NULL, NULL, NULL)
             ORDER BY waste_type ASC
         """))
         
         rows = result.fetchall()
-        waste_type = [row.waste_type for row in rows]
+        waste_type = [{"waste_type": row.waste_type, "unit": row.unit} for row in rows]
 
         return {
             "data": waste_type,
@@ -3161,13 +3161,13 @@ def get_hazard_waste_dis_perc_bar_chart(
 def get_distinct_hazardous_metrics(db: Session = Depends(get_db), current_user = Depends(get_current_user_with_roles("R02", "R03"))):
     try:
         result = db.execute(text("""
-            SELECT DISTINCT metrics
+            SELECT DISTINCT metrics, unit_of_measurement
             FROM gold.func_environment_non_hazard_waste_by_year(NULL, NULL, NULL, NULL, NULL)
             ORDER BY metrics ASC
         """))
         
         rows = result.fetchall()
-        metrics = [row.metrics for row in rows]
+        metrics = [{"metrics": row.metrics, "unit_of_measurement": row.unit_of_measurement} for row in rows]
 
         return {
             "data": metrics,
