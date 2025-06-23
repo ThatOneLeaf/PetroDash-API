@@ -178,6 +178,7 @@ def update_csr_activity(db: Session, data: dict):
         db.execute(text("""
             UPDATE bronze.csr_activity
             SET 
+                company_id = :company_id,
                 project_id = :project_id,
                 project_year = :project_year,
                 csr_report = :csr_report,
@@ -187,6 +188,7 @@ def update_csr_activity(db: Session, data: dict):
         """), 
         {
             'csr_id': csr_id,
+            'company_id': data["company_id"],
             'project_id': data["project_id"],
             'project_year': data["project_year"],
             'csr_report': data["csr_report"],
