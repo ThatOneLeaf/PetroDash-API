@@ -16,6 +16,19 @@ import math
 import logging
 import traceback
 from collections import defaultdict
+from fastapi import APIRouter, Query
+from fastapi.responses import StreamingResponse
+import openpyxl
+from openpyxl.styles import Font, Alignment
+import io
+from datetime import datetime
+from typing import Literal
+from fastapi import APIRouter, Query
+from fastapi.responses import StreamingResponse
+import openpyxl
+from openpyxl.styles import Font, Alignment
+import io
+from datetime import datetime
 
 
 router = APIRouter()
@@ -1031,30 +1044,287 @@ def get_overall(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # ====================== template ====================== #
-@router.get("/download_template")
-def download_template():
-    columns = ["date", "energy_generated", "powerPlant", "metric"]
-    df = pd.DataFrame(columns=columns)
+@router.get("/download_template", response_class=StreamingResponse)
+def download_template(
+    company_id: str = Query(..., description="Company ID"),
+    powerplant_id: str = Query(..., description="Power Plant ID"),
+    metric: Literal["kWh", "MWh", "GWh"] = Query(..., description="Metric unit (kWh, MWh, GWh)"),
+):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    ws.title = f"{company_id} - {powerplant_id} - {today_str}"
+
+    # Title at C3
+    ws["C3"] = "Daily Power Generation"
+    ws["C3"].font = Font(name="Arial", size=28, bold=True)
+    ws["C3"].alignment = Alignment(horizontal="left")
+
+    # Company Info
+    ws["C5"] = "Company:"
+    ws["C5"].font = Font(bold=True)
+    ws["C5"].alignment = Alignment(horizontal="right")
+    ws["D5"] = company_id
+
+    # Power Plant Info
+    ws["C6"] = "Power Plant:"
+    ws["C6"].font = Font(bold=True)
+    ws["C6"].alignment = Alignment(horizontal="right")
+    ws["D6"] = powerplant_id
+
+    # Metric Info
+    ws["H6"] = "Metric:"
+    ws["H6"].font = Font(bold=True)
+    ws["H6"].alignment = Alignment(horizontal="right")
+    ws["I6"] = metric
+
+    # Headers
+    ws["C8"] = "Date (MM-DD-YYYY)"
+    ws["D8"] = f"Power Generated ({metric})"
+    ws["C8"].font = Font(bold=True)
+    ws["D8"].font = Font(bold=True)
+
+    # Auto-fit column widths
+    for col in ws.columns:
+        max_len = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            if cell.value:
+                max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[col_letter].width = max_len + 2
 
     buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Template")
-
+    wb.save(buffer)
     buffer.seek(0)
 
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=energy_template.xlsx"}
+        headers={"Content-Disposition": "attachment; filename=power_report_template.xlsx"}
     )
 
-# ====================== energy records by id ====================== #
-@router.get("/{energy_id}", response_model=EnergyRecordOut)
-def get_energy_by_id(energy_id: str, db: Session = Depends(get_db)):
-    record = get_one(db, EnergyRecords, "energy_id", energy_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Energy record not found")
-    return record
+
+@router.post("/read_template", response_model=Dict[str, Any])
+async def read_template(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if file is None:
+        raise HTTPException(status_code=400, detail="No file uploaded.")
+
+    if not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Only .xlsx files are supported.")
+
+    try:
+        contents = await file.read()
+
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        ws = wb.active
+
+        company = ws["D5"].value
+        powerplant = ws["D6"].value
+        metric = ws["I6"].value
+
+        # Metric validation
+        allowed_metrics = {"kWh", "MWh", "GWh"}
+        if metric not in allowed_metrics:
+            raise HTTPException(status_code=400, detail=f"Invalid metric: {metric}. Allowed: {', '.join(allowed_metrics)}")
+
+        # Fetch existing dates from the database
+        existing_dates = db.query(EnergyRecords.datetime).filter(
+            EnergyRecords.power_plant_id == powerplant,
+            EnergyRecords.unit_of_measurement == metric
+        ).all()
+        existing_dates_set = {r.datetime.date() if hasattr(r.datetime, "date") else r.datetime for r in existing_dates}
+
+        data = []
+        seen_dates = set()
+        row = 9
+        while True:
+            date_cell = ws[f"C{row}"].value
+            value_cell = ws[f"D{row}"].value
+
+            if date_cell is None and value_cell is None:
+                break
+
+            # Validate and parse date
+            try:
+                if isinstance(date_cell, str):
+                    parsed_date = datetime.strptime(date_cell, "%Y-%m-%d").date()
+                elif isinstance(date_cell, datetime):
+                    parsed_date = date_cell.date()
+                elif isinstance(date_cell, (int, float)):
+                    from openpyxl.utils.datetime import from_excel
+                    parsed_date = from_excel(date_cell, ws.parent.epoch).date()
+                else:
+                    raise ValueError
+            except Exception:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid or unrecognized date format in row {row}: {date_cell}"
+                )
+
+            if parsed_date in seen_dates:
+                raise HTTPException(status_code=400, detail=f"Duplicate date in uploaded file at row {row}: {parsed_date}")
+            seen_dates.add(parsed_date)
+
+            if parsed_date in existing_dates_set:
+                raise HTTPException(status_code=400, detail=f"Duplicate date found in database at row {row}: {parsed_date}")
+
+            # Validate Power Generated
+            if value_cell is None:
+                raise HTTPException(status_code=400, detail=f"Missing 'Power Generated' value in row {row}")
+            try:
+                value = float(value_cell)
+                if value < 0:
+                    raise ValueError
+            except:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid or non-numerical 'Power Generated' value in row {row}: {value_cell}"
+                )
+
+            data.append({
+                "Date Generated": parsed_date.strftime("%m-%d-%Y"),
+                "Power Generated": value,
+                "Metric": metric
+            })
+
+            row += 1
+
+        return {
+            "company": company,
+            "powerplant": powerplant,
+            "columns": ["Date Generated", "Power Generated", "Metric"],
+            "rows": data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+
+
+
+@router.post("/upload_energy_file")
+async def upload_energy_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if file is None:
+        raise HTTPException(status_code=400, detail="No file uploaded.")
+    if not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Only .xlsx files are supported.")
+
+    try:
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        ws = wb.active
+
+        power_plant_id = ws["D6"].value
+        unit = ws["I6"].value
+
+        if not power_plant_id or not unit:
+            raise HTTPException(status_code=400, detail="Missing required metadata in cells D6 or I6.")
+
+        # Parse records from C9/D9
+        data = []
+        row = 9
+        while True:
+            date_cell = ws[f"C{row}"].value
+            value_cell = ws[f"D{row}"].value
+            if date_cell is None and value_cell is None:
+                break
+            if date_cell and value_cell is not None:
+                data.append({
+                    "date": date_cell.date() if hasattr(date_cell, "date") else date_cell,
+                    "power_generated": value_cell
+                })
+            row += 1
+
+        if not data:
+            raise HTTPException(status_code=400, detail="No valid data rows found in the file.")
+
+        # Prepare IDs and insert
+        base_date_str = data[0]["date"].strftime("%Y%m%d")
+        existing_ids = db.query(EnergyRecords.energy_id).filter(
+            EnergyRecords.energy_id.like(f"EN-{base_date_str}-%")
+        ).all()
+        existing_suffixes = {
+            int(eid[0].split("-")[-1]) for eid in existing_ids if eid[0].split("-")[-1].isdigit()
+        }
+
+        now = datetime.now()
+        current_suffix = 1
+        records_to_add = []
+        duplicate_dates = []
+
+        for entry in data:
+            # Check if a record for this power_plant_id and date already exists
+            exists = db.query(EnergyRecords).filter(
+                EnergyRecords.power_plant_id == power_plant_id,
+                EnergyRecords.datetime == datetime.combine(entry["date"], datetime.min.time())
+            ).first()
+            if exists:
+                duplicate_dates.append(str(entry["date"]))
+                continue  # Skip this entry
+
+            # Find next available unique suffix
+            while current_suffix in existing_suffixes:
+                current_suffix += 1
+
+            energy_id = f"EN-{base_date_str}-{current_suffix:03d}"
+            current_suffix += 1  # Move to next potential suffix
+
+            record = EnergyRecords(
+                energy_id=energy_id,
+                power_plant_id=power_plant_id,
+                datetime=datetime.combine(entry["date"], datetime.min.time()),
+                energy_generated=entry["power_generated"],
+                unit_of_measurement=unit.lower(),
+                create_at=now,
+                updated_at=now
+            )
+
+            # Create corresponding record status
+            new_log = RecordStatus(
+                cs_id="CS-" + energy_id,
+                record_id=energy_id,
+                status_id="URS",
+                status_timestamp=now,
+                remarks=f"uploaded from template {file.filename} date: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            db.add(new_log)
+            db.add(record)
+            records_to_add.append(energy_id)
+
+        if not records_to_add:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No valid records to add. Duplicate dates: {', '.join(duplicate_dates)}" if duplicate_dates else "No valid records to add."
+            )
+
+        db.commit()
+        # Call stored procedure
+        try:
+            db.execute(text("CALL silver.load_csv_silver();"))
+            db.commit()
+        except Exception as proc_err:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Stored procedure error: {str(proc_err)}")
+
+        return {
+            "message": "Energy data uploaded successfully",
+            "records_saved": len(records_to_add),
+            "energy_ids": records_to_add,
+            "duplicates_skipped": duplicate_dates
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
 
 # ====================== generate energy id ====================== #
 def generate_energy_id(db: Session) -> str:
@@ -1319,6 +1589,7 @@ def change_status(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 # ====================== edit energy record ====================== #
+
 @router.post("/edit")
 def edit_energy_record(
     energy_id: str = Form(...),

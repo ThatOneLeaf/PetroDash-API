@@ -276,7 +276,7 @@ def get_no_lost_time(
 
         data = [
             {
-                "manhours_since_last_lti": int(row.manhours_since_last_lti)
+                "manhours_since_last_lti": row.manhours_since_last_lti
             }
             for row in result
         ]
@@ -985,6 +985,7 @@ def single_upload_parental_leave_record(data: dict, db: Session = Depends(get_db
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -1017,6 +1018,7 @@ def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
+        logging.error(traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -1415,6 +1417,8 @@ def edit_employability(
             "employment_status": data["employment_status"]
         }
         
+
+        print("📌 Received end_date:", data["end_date"])
         record_tenure = {
             "employee_id": data["employee_id"],
             "start_date": data["start_date"],
@@ -1535,14 +1539,14 @@ def edit_osh(
         if not isinstance(data["company_id"], str) or not data["company_id"].strip():
             raise HTTPException(status_code=422, detail="Invalid company_id")
 
-        if data["lost_time"] not in {"TRUE", "FALSE"}:
+        if data["lost_time"] not in {True, False}:
             raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['lost_time']}'")
 
         osh_id = data["osh_id"]
         record = {
             "company_id": data["company_id"],
             "workforce_type": data["workforce_type"],
-            "lost_time": data["lost_time"] == "TRUE",
+            "lost_time": data["lost_time"],
             "date": data["date"],
             "incident_type": data["incident_type"],
             "incident_title": data["incident_title"],
