@@ -276,7 +276,7 @@ def get_no_lost_time(
 
         data = [
             {
-                "manhours_since_last_lti": int(row.manhours_since_last_lti)
+                "manhours_since_last_lti": row.manhours_since_last_lti
             }
             for row in result
         ]
