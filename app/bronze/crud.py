@@ -1955,7 +1955,7 @@ def insert_employability(db: Session, data: dict):
         checker_log = RecordStatus(
             cs_id=f"CS-{data['employee_id']}",
             record_id=data["employee_id"],
-            status_id="URS",
+            status_id="URH",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -1982,6 +1982,7 @@ def insert_employability(db: Session, data: dict):
         print(f"Demographics: Error executing stored procedure: {e}")
         db.rollback()
     
+    print("Creating HRTenure object with:", data["employee_id"], data["start_date"], data.get("end_date"))
     record_tenure = HRTenure(
         employee_id=data["employee_id"],
         start_date=data["start_date"],
@@ -1991,6 +1992,7 @@ def insert_employability(db: Session, data: dict):
     db.commit()
     db.refresh(record_tenure)
     try:
+        print("Calling load_hr_silver for tenure...")
         db.execute(text("""
             CALL silver.load_hr_silver(
                 load_demographics := FALSE,
@@ -2042,7 +2044,7 @@ def insert_safety_workdata(db: Session, data: dict):
         checker_log = RecordStatus(
             cs_id=f"CS-{safety_workdata_id}",
             record_id=safety_workdata_id,
-            status_id="URS",
+            status_id="URH",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -2093,6 +2095,7 @@ def insert_parental_leave(db: Session, data: dict):
     db.add(record)
     db.commit()
     db.refresh(record)
+
     
     record_Silver = HRParentalLeaveSilver(
         parental_leave_id=parental_leave_id,
@@ -2111,7 +2114,7 @@ def insert_parental_leave(db: Session, data: dict):
         checker_log = RecordStatus(
             cs_id=f"CS-{parental_leave_id}",
             record_id=parental_leave_id,
-            status_id="URS",
+            status_id="URH",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -2120,6 +2123,8 @@ def insert_parental_leave(db: Session, data: dict):
     except Exception as e:
         print(f"Error inserting checker status log: {e}")
         db.rollback()
+
+
     
     try:
         db.execute(text("""
@@ -2176,7 +2181,7 @@ def insert_training(db: Session, data: dict):
         checker_log = RecordStatus(
             cs_id=f"CS-{training_id}",
             record_id=training_id,
-            status_id="URS",
+            status_id="URH",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -2227,7 +2232,7 @@ def insert_occupational_safety_health(db: Session, data: dict):
         checker_log = RecordStatus(
             cs_id=f"CS-{osh_id}",
             record_id=osh_id,
-            status_id="URS",
+            status_id="URH",
             status_timestamp=datetime.now(),
             remarks="real-data inserted"
         )
@@ -2303,6 +2308,7 @@ def update_employability(db: Session, employee_id: str, data_demo: dict, data_te
     db.refresh(record_tenure)
     
     try:
+       
         db.execute(text("""
             CALL silver.load_hr_silver(
                 load_demographics := FALSE,
@@ -2311,7 +2317,7 @@ def update_employability(db: Session, employee_id: str, data_demo: dict, data_te
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         db.commit()
@@ -2372,7 +2378,7 @@ def update_parental_leave(db: Session, parental_leave_id: str, data):
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := FALSE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         db.commit()
@@ -2402,7 +2408,7 @@ def update_occupational_safety_health(db: Session, osh_id: str, data):
                 load_training := FALSE,
                 load_safety_workdata := FALSE,
                 load_occupational_safety_health := TRUE,
-                load_from_sql := FALSE
+                load_from_sql := TRUE
             )
         """))
         db.commit()
