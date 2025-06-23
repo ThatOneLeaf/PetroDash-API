@@ -313,12 +313,17 @@ def get_employee_count_per_company(
             end_date = None
             
         result = db.execute(text("""
-            SELECT company_name, COUNT(*) AS num_employees
+            SELECT 
+                comp.company_name,
+                comp.company_id,
+                comp.color,
+                COUNT(*) AS num_employees
             FROM gold.func_employee_summary(
-            NULL, NULL, NULL, :company_id, :start_date, :end_date
-            )
-            GROUP BY company_name
-            ORDER BY company_name;
+                NULL, NULL, NULL, :company_id, :start_date, :end_date
+            ) emp
+            JOIN ref.company_main comp ON comp.company_id = emp.company_id
+            GROUP BY comp.company_name, comp.company_id, comp.color
+            ORDER BY comp.company_name;
         """), {
                 'start_date': start_date,
                 'end_date': end_date,
@@ -328,6 +333,8 @@ def get_employee_count_per_company(
         data = [
             {
                 "company_name": row.company_name,
+                "company_id": row.company_id,
+                "color": row.color,
                 "num_employees": row.num_employees
             }
             for row in result
@@ -467,7 +474,7 @@ def get_incident_count_per_month(
 ):
     try:
         logging.info("Executing Incident count per month query")
-        
+
         if start_date is None:
             start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
         if end_date is None:
@@ -484,14 +491,14 @@ def get_incident_count_per_month(
             select_group = "year"
             order_by = "year"
 
-        # Dynamic SQL using f-string
         sql = f"""
-            SELECT {select_group}, company_name, company_id, incident_title, SUM(incident_count) AS incidents
+            SELECT {select_group}, osh.company_name, osh.company_id, comp.color, osh.incident_title, SUM(osh.incident_count) AS incidents
             FROM gold.func_occupational_safety_health_summary(
                 :start_date, :end_date, :company_id, NULL, NULL, NULL, NULL
-            )
-            GROUP BY {select_group}, company_name, company_id, incident_title
-            ORDER BY {order_by}, company_name, company_id, incident_title;
+            ) osh
+            JOIN ref.company_main comp ON comp.company_id = osh.company_id
+            GROUP BY {select_group}, osh.company_name, osh.company_id, comp.color, osh.incident_title
+            ORDER BY {order_by}, osh.company_name, osh.company_id, osh.incident_title;
         """
 
         result = db.execute(text(sql), {
@@ -506,6 +513,7 @@ def get_incident_count_per_month(
                 "year": row.year,
                 "company_name": row.company_name,
                 "company_id": row.company_id,
+                "color": row.color,
                 "incident_title": row.incident_title,
                 "incidents": int(row.incidents)
             }
@@ -529,6 +537,7 @@ def get_incident_count_per_month(
         logging.error(f"Error fetching incident count: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/safety_manhours_per_month", response_model=List[dict])
 def get_safety_manhours_per_month(
@@ -559,12 +568,18 @@ def get_safety_manhours_per_month(
 
         # Dynamically build SQL
         sql = f"""
-            SELECT {select_group}, company_name, company_id, SUM(manhours) AS manhours
+            SELECT 
+                {select_group},
+                sw.company_name,
+                sw.company_id,
+                comp.color,
+                SUM(sw.manhours) AS manhours
             FROM gold.func_safety_workdata_summary(
                 :start_date, :end_date, :company_id, NULL
-            )
-            GROUP BY {select_group}, company_name, company_id
-            ORDER BY {order_by}, company_name, company_id;
+            ) sw
+            JOIN ref.company_main comp ON comp.company_id = sw.company_id
+            GROUP BY {select_group}, sw.company_name, sw.company_id, comp.color
+            ORDER BY {order_by}, sw.company_name, sw.company_id;
         """
 
         # Execute with parameters
@@ -580,6 +595,8 @@ def get_safety_manhours_per_month(
             item = {
                 "year": row.year,
                 "company_name": row.company_name,
+                "company_id": row.company_id,
+                "color":row.color,
                 "manhours": int(row.manhours)
             }
             if grouping == "monthly":
@@ -633,12 +650,19 @@ def get_safety_manpower_per_month(
 
         # Build SQL dynamically using f-string
         sql = f"""
-            SELECT {select_group}, company_name, company_id, SUM(manpower) AS total_monthly_safety_manpower
+            SELECT 
+                {select_group},
+                sw.company_name,
+                sw.company_id,
+                comp.color,
+                SUM(sw.manpower) AS total_monthly_safety_manpower
             FROM gold.func_safety_workdata_summary(
                 :start_date, :end_date, :company_id, NULL
-            )
-            GROUP BY {select_group}, company_name, company_id
-            ORDER BY {order_by}, company_name, company_id;
+            ) sw
+            JOIN ref.company_main comp ON comp.company_id = sw.company_id
+            GROUP BY {select_group}, sw.company_name, sw.company_id, comp.color
+            ORDER BY {order_by}, sw.company_name, sw.company_id;
+
         """
 
         result = db.execute(text(sql), {
@@ -654,6 +678,7 @@ def get_safety_manpower_per_month(
                 "year": row.year,
                 "company_name": row.company_name,
                 "company_id": row.company_id,
+                "color": row.color,
                 "total_monthly_safety_manpower": int(row.total_monthly_safety_manpower)
             }
             if grouping == "monthly":
