@@ -71,6 +71,7 @@ def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
 # ===== KPIs =====
 @router.get("/total_safety_manhours", response_model=List[dict])
 def get_total_safety_manhours(
+    grouping: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -98,7 +99,7 @@ def get_total_safety_manhours(
         """), {
                 'start_date': start_date,
                 'end_date': end_date,
-                'company_id': [company_id] if company_id else None,
+                'company_id': company_id.split(',') if company_id else None,
         })
 
         data = [
@@ -123,6 +124,7 @@ def get_total_safety_manhours(
 
 @router.get("/total_safety_manpower", response_model=List[dict])
 def get_total_safety_manhours(
+    grouping: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -150,7 +152,7 @@ def get_total_safety_manhours(
         """), {
                 'start_date': start_date,
                 'end_date': end_date,
-                'company_id': [company_id] if company_id else None,
+                'company_id': company_id.split(',') if company_id else None,
         })
 
         data = [
@@ -175,6 +177,7 @@ def get_total_safety_manhours(
 
 @router.get("/total_training_hours", response_model=List[dict])
 def get_total_training_hours(
+    grouping: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -199,7 +202,7 @@ def get_total_training_hours(
                 """), {
                 'start_date': start_date,
                 'end_date': end_date,
-                'company_id': [company_id] if company_id else None,
+                'company_id': company_id.split(',') if company_id else None,
         })
 
         data = [
@@ -223,37 +226,57 @@ def get_total_training_hours(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/no_lost_time", response_model=List[dict])
-def get_total_training_hours(
+def get_no_lost_time(
+    grouping: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
-        logging.info("Executing Total training hours query")
+        logging.info("Executing No Lost Time query")
         
-        if start_date is None:
-            # Set to January 1st of the current year
-            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        # if start_date is None:
+        #     # Set to January 1st of the current year
+        #     start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+        
+        # Get the latest LTI
+        lti_result = db.execute(text("""
+            SELECT MAX(TO_DATE(year || '-' || month_value || '-01', 'YYYY-MM-DD')) AS latest_lti_date
+            FROM gold.func_occupational_safety_health_summary(
+                NULL, CURRENT_DATE, :company_id, NULL, TRUE, NULL, NULL
+            )
+            WHERE incident_count > 0;
+        """), {
+            'company_id': company_id.split(',') if company_id else None
+        })
+        
+        latest_lti_date = lti_result.scalar()
+        
+        if latest_lti_date is None:
+            latest_lti_date = datetime(datetime.now().year, 1, 1).date()
+            logging.info(f"No LTI found. Using default start date: {latest_lti_date}")
+        else:
+            logging.info(f"Latest LTI found. Using start date: {latest_lti_date}")
         
         if end_date is None:
             # Set to today's date
             end_date = datetime.now().strftime("%Y-%m-%d")
             
         result = db.execute(text("""
-            SELECT COUNT(*) AS lost_time_incidents
-            FROM gold.func_occupational_safety_health_summary(
-            :start_date, :end_date, :company_id, NULL, TRUE, NULL, NULL
+            SELECT SUM(manhours) AS manhours_since_last_lti
+            FROM gold.func_safety_workdata_summary(
+                :start_date, :end_date, :company_id, NULL
             );
                 """), {
-                'start_date': start_date,
+                'start_date': latest_lti_date,
                 'end_date': end_date,
-                'company_id': [company_id] if company_id else None,
+                'company_id': company_id.split(',') if company_id else None,
         })
 
         data = [
             {
-                "lost_time_incidents": row.lost_time_incidents
+                "manhours_since_last_lti": int(row.manhours_since_last_lti)
             }
             for row in result
         ]
@@ -274,6 +297,7 @@ def get_total_training_hours(
 # ===== CHARTS =====
 @router.get("/employee_count_per_company", response_model=List[dict])
 def get_employee_count_per_company(
+    grouping: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -289,21 +313,28 @@ def get_employee_count_per_company(
             end_date = None
             
         result = db.execute(text("""
-            SELECT company_name, COUNT(*) AS num_employees
+            SELECT 
+                comp.company_name,
+                comp.company_id,
+                comp.color,
+                COUNT(*) AS num_employees
             FROM gold.func_employee_summary(
-            NULL, NULL, NULL, :company_id, :start_date, :end_date
-            )
-            GROUP BY company_name
-            ORDER BY company_name;
+                NULL, NULL, NULL, :company_id, :start_date, :end_date
+            ) emp
+            JOIN ref.company_main comp ON comp.company_id = emp.company_id
+            GROUP BY comp.company_name, comp.company_id, comp.color
+            ORDER BY comp.company_name;
         """), {
                 'start_date': start_date,
                 'end_date': end_date,
-                'company_id': [company_id] if company_id else None
+                'company_id': company_id.split(',') if company_id else None
         })
 
         data = [
             {
                 "company_name": row.company_name,
+                "company_id": row.company_id,
+                "color": row.color,
                 "num_employees": row.num_employees
             }
             for row in result
@@ -324,6 +355,7 @@ def get_employee_count_per_company(
 
 @router.get("/gender_distribution_per_position", response_model=List[dict])
 def get_gender_distribution_per_position(
+    grouping: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -354,7 +386,7 @@ def get_gender_distribution_per_position(
         """), {
                 'start_date': start_date,
                 'end_date': end_date,
-                'company_id': [company_id] if company_id else None,
+                'company_id': company_id.split(',') if company_id else None,
         })
 
         data = [
@@ -381,6 +413,7 @@ def get_gender_distribution_per_position(
 
 @router.get("/age_distribution", response_model=List[dict])
 def get_age_distribution(
+    grouping: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -406,7 +439,7 @@ def get_age_distribution(
         """), {
                 'start_date': start_date,
                 'end_date': end_date,
-                'company_id': [company_id] if company_id else None,
+                'company_id': company_id.split(',') if company_id else None,
         })
 
         data = [
@@ -433,6 +466,7 @@ def get_age_distribution(
 
 @router.get("/incident_count_per_month", response_model=List[dict])
 def get_incident_count_per_month(
+    grouping: Optional[str] = Query("monthly", regex="^(monthly|quarterly|yearly)$"),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -440,100 +474,147 @@ def get_incident_count_per_month(
 ):
     try:
         logging.info("Executing Incident count per month query")
-        
+
         if start_date is None:
-            # Set to January 1st of the current year
             start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
-        
         if end_date is None:
-            # Set to today's date
             end_date = datetime.now().strftime("%Y-%m-%d")
-            
-        result = db.execute(text("""
-            SELECT year, company_name, company_id, month_name, month_value, SUM(incident_count) AS incidents
+
+        # Determine grouping
+        if grouping == "monthly":
+            select_group = "year, month_value, month_name"
+            order_by = "year, month_value"
+        elif grouping == "quarterly":
+            select_group = "year, quarter"
+            order_by = "year, quarter"
+        else:  # yearly
+            select_group = "year"
+            order_by = "year"
+
+        sql = f"""
+            SELECT {select_group}, osh.company_name, osh.company_id, comp.color, osh.incident_title, SUM(osh.incident_count) AS incidents
             FROM gold.func_occupational_safety_health_summary(
-            :start_date, :end_date, :company_id, NULL, NULL, NULL
-            )
-            GROUP BY month_value, company_name, company_id, year, month_name
-            ORDER BY month_value, company_name, company_id, year, month_name;
-        """), {
-                'start_date': start_date,
-                'end_date': end_date,
-                'company_id': [company_id] if company_id else None
+                :start_date, :end_date, :company_id, NULL, NULL, NULL, NULL
+            ) osh
+            JOIN ref.company_main comp ON comp.company_id = osh.company_id
+            GROUP BY {select_group}, osh.company_name, osh.company_id, comp.color, osh.incident_title
+            ORDER BY {order_by}, osh.company_name, osh.company_id, osh.incident_title;
+        """
+
+        result = db.execute(text(sql), {
+            'start_date': start_date,
+            'end_date': end_date,
+            'company_id': company_id.split(',') if company_id else None
         })
 
-        data = [
-            {
+        data = []
+        for row in result:
+            item = {
                 "year": row.year,
-                "month_name": row.month_name,
-                "incidents": row.incidents,
-                "company_name": row.company_name
+                "company_name": row.company_name,
+                "company_id": row.company_id,
+                "color": row.color,
+                "incident_title": row.incident_title,
+                "incidents": int(row.incidents)
             }
-            for row in result
-        ]
-        
+            if grouping == "monthly":
+                item["month"] = row.month_value
+                item["month_name"] = row.month_name
+            elif grouping == "quarterly":
+                item["quarter"] = row.quarter
+            data.append(item)
+
         logging.info(f"Query returned {len(data)} rows")
         logging.debug(f"Data: {data}")
-        
+
         if not data:
             logging.warning("No data found")
             return []
 
         return data
+
     except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(f"Error fetching incident count: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/safety_manhours_per_month", response_model=List[dict])
 def get_safety_manhours_per_month(
+    grouping: Optional[str] = Query("monthly", regex="^(monthly|quarterly|yearly)$"),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
-        logging.info("Executing safety manhours per month query")
-        
+        logging.info("Executing safety manhours grouped query")
+
         if start_date is None:
-            # Set to January 1st of the current year
             start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
-        
         if end_date is None:
-            # Set to today's date
             end_date = datetime.now().strftime("%Y-%m-%d")
-            
-        result = db.execute(text("""
-            SELECT year, company_name, company_id, month_name, month_value, SUM(manhours) AS manhours
+
+        # Define grouping
+        if grouping == "monthly":
+            select_group = "year, month_value, month_name"
+            order_by = "year, month_value"
+        elif grouping == "quarterly":
+            select_group = "year, quarter"
+            order_by = "year, quarter"
+        else:  # yearly
+            select_group = "year"
+            order_by = "year"
+
+        # Dynamically build SQL
+        sql = f"""
+            SELECT 
+                {select_group},
+                sw.company_name,
+                sw.company_id,
+                comp.color,
+                SUM(sw.manhours) AS manhours
             FROM gold.func_safety_workdata_summary(
-            :start_date, :end_date, :company_id, NULL
-            )
-            GROUP BY month_value, company_name, company_id, year, month_name, month_name
-            ORDER BY month_value, company_name, company_id, year, month_name;
-        """), {
-                'start_date': start_date,
-                'end_date': end_date,
-                'company_id': [company_id] if company_id else None
+                :start_date, :end_date, :company_id, NULL
+            ) sw
+            JOIN ref.company_main comp ON comp.company_id = sw.company_id
+            GROUP BY {select_group}, sw.company_name, sw.company_id, comp.color
+            ORDER BY {order_by}, sw.company_name, sw.company_id;
+        """
+
+        # Execute with parameters
+        result = db.execute(text(sql), {
+            'start_date': start_date,
+            'end_date': end_date,
+            'company_id': company_id.split(',') if company_id else None
         })
 
-        data = [
-            {
+        # Format response
+        data = []
+        for row in result:
+            item = {
                 "year": row.year,
-                "month_name": row.month_name,
-                "manhours": row.manhours,
-                "company_name": row.company_name
+                "company_name": row.company_name,
+                "company_id": row.company_id,
+                "color":row.color,
+                "manhours": int(row.manhours)
             }
-            for row in result
-        ]
-        
+            if grouping == "monthly":
+                item["month"] = row.month_value
+                item["month_name"] = row.month_name
+            elif grouping == "quarterly":
+                item["quarter"] = row.quarter
+            data.append(item)
+
         logging.info(f"Query returned {len(data)} rows")
         logging.debug(f"Data: {data}")
-        
+
         if not data:
             logging.warning("No data found")
             return []
 
         return data
+
     except Exception as e:
         logging.error(f"Error fetching data: {str(e)}")
         logging.error(traceback.format_exc())
@@ -541,7 +622,8 @@ def get_safety_manhours_per_month(
 
 
 @router.get("/safety_manpower_per_month", response_model=List[dict])
-def get_safety_manhours_per_month(
+def get_safety_manpower_per_month(
+    grouping: Optional[str] = Query("monthly", regex="^(monthly|quarterly|yearly)$"),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -551,52 +633,72 @@ def get_safety_manhours_per_month(
         logging.info("Executing safety manpower per month query")
         
         if start_date is None:
-            # Set to January 1st of the current year
             start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
-        
         if end_date is None:
-            # Set to today's date
             end_date = datetime.now().strftime("%Y-%m-%d")
-            
-        result = db.execute(text("""
-            SELECT
-                year,
-                company_name, 
-                company_id,
-                month_name,
-                month_value,
-                SUM(manpower) AS total_monthly_safety_manpower
+
+        # Handle grouping logic
+        if grouping == "monthly":
+            select_group = "year, month_value, month_name"
+            order_by = "year, month_value"
+        elif grouping == "quarterly":
+            select_group = "year, quarter"
+            order_by = "year, quarter"
+        else:  # yearly
+            select_group = "year"
+            order_by = "year"
+
+        # Build SQL dynamically using f-string
+        sql = f"""
+            SELECT 
+                {select_group},
+                sw.company_name,
+                sw.company_id,
+                comp.color,
+                SUM(sw.manpower) AS total_monthly_safety_manpower
             FROM gold.func_safety_workdata_summary(
-            :start_date, :end_date, :company_id, NULL
-            )
-            GROUP BY month_value, company_name, company_id, year, month_name
-            ORDER BY month_value, company_name, company_id, year, month_name;
-        """), {
-                'start_date': start_date,
-                'end_date': end_date,
-                'company_id': [company_id] if company_id else None
+                :start_date, :end_date, :company_id, NULL
+            ) sw
+            JOIN ref.company_main comp ON comp.company_id = sw.company_id
+            GROUP BY {select_group}, sw.company_name, sw.company_id, comp.color
+            ORDER BY {order_by}, sw.company_name, sw.company_id;
+
+        """
+
+        result = db.execute(text(sql), {
+            'start_date': start_date,
+            'end_date': end_date,
+            'company_id': company_id.split(',') if company_id else None
         })
 
-        data = [
-            {
+        # Process the data based on grouping
+        data = []
+        for row in result:
+            item = {
                 "year": row.year,
-                "month_name": row.month_name,
-                "total_monthly_safety_manpower": row.total_monthly_safety_manpower,
-                "company_name": row.company_name
+                "company_name": row.company_name,
+                "company_id": row.company_id,
+                "color": row.color,
+                "total_monthly_safety_manpower": int(row.total_monthly_safety_manpower)
             }
-            for row in result
-        ]
-        
+            if grouping == "monthly":
+                item["month"] = row.month_value
+                item["month_name"] = row.month_name
+            elif grouping == "quarterly":
+                item["quarter"] = row.quarter
+            data.append(item)
+
         logging.info(f"Query returned {len(data)} rows")
         logging.debug(f"Data: {data}")
-        
+
         if not data:
             logging.warning("No data found")
             return []
 
         return data
+
     except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(f"Error fetching safety manpower: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 

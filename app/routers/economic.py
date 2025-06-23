@@ -36,21 +36,34 @@ def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
 # Helper functions for validation
 def validate_year(year_value):
     """Validate that year is a 4-digit number"""
-    if year_value is None:
-        return False, "Year is required"
+    if year_value is None or year_value == '':
+        return False, "Year is required and cannot be empty"
     
     try:
+        # Handle string inputs that might contain non-numeric characters
+        if isinstance(year_value, str):
+            year_str = str(year_value).strip()
+            if not year_str.isdigit():
+                return False, f"Year must contain only digits, got '{year_value}'"
+        
         year = int(year_value)
-        if year < 1000 or year > 9999:
+        current_year = 2024  # You might want to use datetime.now().year
+        
+        if year < 1900:
+            return False, f"Year seems too old: {year}. Expected a year between 1900 and {current_year + 10}"
+        elif year > current_year + 10:
+            return False, f"Year seems too far in the future: {year}. Expected a year between 1900 and {current_year + 10}"
+        elif year < 1000 or year > 9999:
             return False, f"Year must be a 4-digit number, got {year}"
+            
         return True, None
     except (ValueError, TypeError):
-        return False, f"Year must be a number, got {year_value}"
+        return False, f"Year must be a whole number, got '{year_value}' (type: {type(year_value).__name__})"
 
 def validate_company_id(company_id, db: Session):
     """Validate that company ID exists in company_main table"""
-    if company_id is None:
-        return False, "Company ID is required"
+    if company_id is None or company_id == '':
+        return False, "Company ID is required and cannot be empty"
     
     try:
         # First try as numeric ID
@@ -73,16 +86,23 @@ def validate_company_id(company_id, db: Session):
         
         if result.fetchone() is not None:
             return True, None
-            
-        return False, f"Company ID '{company_id}' does not exist"
+        
+        # Get available companies for better error message
+        available_companies = db.execute(text("""
+            SELECT company_id, company_name FROM ref.company_main 
+            ORDER BY company_id LIMIT 5
+        """)).fetchall()
+        
+        company_list = ", ".join([f"{row.company_id} ({row.company_name})" for row in available_companies])
+        return False, f"Company ID '{company_id}' does not exist. Available companies include: {company_list}"
         
     except Exception as e:
         return False, f"Database error checking Company ID: {str(e)}"
 
 def validate_type_id(type_id, db: Session):
     """Validate that type ID exists in expenditure_type table"""
-    if type_id is None:
-        return False, "Type ID is required"
+    if type_id is None or type_id == '':
+        return False, "Type ID is required and cannot be empty"
     
     try:
         # First try as numeric ID
@@ -105,8 +125,15 @@ def validate_type_id(type_id, db: Session):
         
         if result.fetchone() is not None:
             return True, None
-            
-        return False, f"Type ID '{type_id}' does not exist"
+        
+        # Get available types for better error message
+        available_types = db.execute(text("""
+            SELECT type_id, type_description FROM ref.expenditure_type 
+            ORDER BY type_id
+        """)).fetchall()
+        
+        type_list = ", ".join([f"{row.type_id} ({row.type_description})" for row in available_types])
+        return False, f"Type ID '{type_id}' does not exist. Available types: {type_list}"
         
     except Exception as e:
         return False, f"Database error checking Type ID: {str(e)}"
@@ -140,6 +167,7 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
         # Map actual columns to expected columns
         column_mapping = {}
         df_columns_lower = [col.lower().strip() for col in df.columns]
+        missing_required_columns = []
         
         for expected_col, possible_names in import_config['expected_columns'].items():
             found = False
@@ -151,7 +179,19 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
                     found = True
                     break
             if not found and expected_col in import_config['required_fields']:
-                raise HTTPException(status_code=400, detail=f"Required column '{expected_col}' not found in Excel file")
+                missing_required_columns.append(expected_col)
+        
+        # Provide detailed error message for missing columns
+        if missing_required_columns:
+            error_msg = f"Missing required columns in your Excel file: {', '.join(missing_required_columns)}\n\n"
+            error_msg += "Please ensure your Excel file contains the following columns:\n"
+            for field, possible_names in import_config['expected_columns'].items():
+                if field in import_config['required_fields']:
+                    error_msg += f"• {possible_names[0]} (required)\n"
+                else:
+                    error_msg += f"• {possible_names[0]} (optional)\n"
+            error_msg += "\nColumn names are case-insensitive. Please download the template for the correct format."
+            raise HTTPException(status_code=400, detail=error_msg)
         
         logging.info(f"Column mapping: {column_mapping}")
         
@@ -209,10 +249,36 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
                         try:
                             record_data[field] = int(value)
                         except (ValueError, TypeError):
-                            row_errors.append(f"{field} must be a number, got {value}")
+                            row_errors.append(f"{field} must be a whole number, got '{value}' (type: {type(value).__name__})")
                             continue
                 else:
-                    record_data[field] = float(value or 0) if value is not None else 0
+                    # Handle numeric fields with better error messages
+                    if value is None or value == '':
+                        record_data[field] = 0
+                    else:
+                        try:
+                            # Check for common issues
+                            if isinstance(value, str):
+                                value_str = value.strip()
+                                if value_str == '':
+                                    record_data[field] = 0
+                                elif not value_str.replace('.', '').replace('-', '').replace(',', '').isdigit():
+                                    # Check for common text that shouldn't be in numeric fields
+                                    if any(char.isalpha() for char in value_str):
+                                        row_errors.append(f"{field} contains letters: '{value}' - only numbers allowed")
+                                        continue
+                                    else:
+                                        row_errors.append(f"{field} contains invalid characters: '{value}' - only numbers and decimal points allowed")
+                                        continue
+                                else:
+                                    # Remove commas and convert
+                                    value_str = value_str.replace(',', '')
+                                    record_data[field] = float(value_str)
+                            else:
+                                record_data[field] = float(value)
+                        except (ValueError, TypeError) as e:
+                            row_errors.append(f"{field} must be a number, got '{value}' (error: {str(e)})")
+                            continue
             
             if row_errors:
                 validation_errors.append(f"Row {index + 2}: {'; '.join(row_errors)}")
@@ -241,12 +307,31 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
                 # If there's an insert error after validation passed, rollback and report
                 db.rollback()
                 logging.error(f"Insert error after validation: {str(insert_error)}")
-                raise HTTPException(status_code=500, detail=f"Database insert error: {str(insert_error)}")
+                
+                # Provide user-friendly error message without exposing SQL details
+                error_msg = "Database error occurred during import. "
+                error_str = str(insert_error).lower()
+                
+                if "required for bind parameter" in error_str or "null value" in error_str:
+                    error_msg += "Some required fields appear to be missing or empty in your data. Please check that all required columns are present and have valid values."
+                elif "duplicate" in error_str or "unique" in error_str:
+                    error_msg += "Duplicate records detected. Please check for duplicate entries in your data."
+                elif "foreign key" in error_str or "does not exist" in error_str:
+                    error_msg += "Invalid reference data detected. Please verify that Company IDs and Type IDs exist in the system."
+                else:
+                    error_msg += "Please verify your data format matches the template and try again."
+                
+                raise HTTPException(status_code=400, detail=error_msg)
         
         # Process to silver layer
-        db.execute(text("CALL silver.load_econ_silver()"))
-        db.commit()
-        time.sleep(0.5)
+        try:
+            db.execute(text("CALL silver.load_econ_silver()"))
+            db.commit()
+            time.sleep(0.5)
+        except Exception as silver_error:
+            db.rollback()
+            logging.error(f"Silver layer processing error: {str(silver_error)}")
+            raise HTTPException(status_code=500, detail="Data was imported but processing failed. Please contact system administrator.")
         
         logging.info(f"Import completed successfully: {success_count} records imported")
         
@@ -264,7 +349,19 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
     except Exception as e:
         db.rollback()
         logging.error(f"Error in process_excel_import: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
+        
+        # Provide user-friendly error message without exposing system details
+        error_str = str(e).lower()
+        if "excel" in error_str or "workbook" in error_str or "openpyxl" in error_str:
+            error_msg = "Invalid Excel file format. Please ensure you're uploading a valid .xlsx or .xls file."
+        elif "pandas" in error_str or "dataframe" in error_str:
+            error_msg = "Error reading Excel file. Please check that the file is not corrupted and contains valid data."
+        elif "column" in error_str:
+            error_msg = "Column format error. Please verify that your Excel file matches the expected template format."
+        else:
+            error_msg = "Error processing file. Please verify your file format and data, then try again."
+        
+        raise HTTPException(status_code=400, detail=error_msg)
 
 # Helper functions to convert text identifiers to actual IDs
 def get_company_id(company_identifier, db: Session):
@@ -1519,6 +1616,7 @@ def get_company_distribution(
         data = [
             {
                 'year': row.year,
+                'companyId': row.company_id,
                 'companyName': row.company_name,
                 'totalDistributed': float(row.total_economic_value_distributed_by_company) if row.total_economic_value_distributed_by_company else 0,
                 'percentage': float(row.percentage_of_total_distribution) if row.percentage_of_total_distribution else 0,
