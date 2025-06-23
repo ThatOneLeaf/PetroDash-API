@@ -411,8 +411,8 @@ def get_help_investments(
             FROM silver.csr_activity AS cact
             LEFT JOIN silver.csr_projects AS cproj
             ON cact.project_id = cproj.project_id
-            LEFT JOIN public.record_status csl ON ca.csr_id = csl.record_id
-            ON cact.project_id = csl.record_id
+            LEFT JOIN public.record_status csl 
+            ON cact.csr_id = csl.record_id
             LEFT JOIN ref.company_main AS comp
             ON cact.company_id = comp.company_id
             {where_clause}
@@ -484,8 +484,8 @@ def get_help_investments(
             ON cact.project_id = cproj.project_id
             LEFT JOIN silver.csr_programs AS cprog
             ON cproj.program_id = cprog.program_id
-            LEFT JOIN public.record_status csl ON ca.csr_id = csl.record_id
-            ON cact.project_id = csl.record_id
+            LEFT JOIN public.record_status csl 
+            ON cact.csr_id = csl.record_id
             LEFT JOIN ref.company_main AS ccomp
             ON cact.company_id = ccomp.company_id
             {where_clause}
@@ -554,8 +554,8 @@ def get_help_investments(
             ON cact.project_id = cproj.project_id
             LEFT JOIN silver.csr_programs AS cprog
             ON cproj.program_id = cprog.program_id
-            LEFT JOIN public.record_status csl ON ca.csr_id = csl.record_id
-            ON cact.project_id = csl.record_id
+            LEFT JOIN public.record_status csl 
+            ON cact.csr_id = csl.record_id
             LEFT JOIN ref.company_main AS ccomp
             ON cact.company_id = ccomp.company_id
             {where_clause}
