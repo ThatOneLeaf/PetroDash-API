@@ -1519,6 +1519,7 @@ def get_company_distribution(
         data = [
             {
                 'year': row.year,
+                'companyId': row.company_id,
                 'companyName': row.company_name,
                 'totalDistributed': float(row.total_economic_value_distributed_by_company) if row.total_economic_value_distributed_by_company else 0,
                 'percentage': float(row.percentage_of_total_distribution) if row.percentage_of_total_distribution else 0,
