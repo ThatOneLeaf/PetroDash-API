@@ -4,6 +4,10 @@ import jwt
 from fastapi import HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
+from passlib.context import CryptContext
+
+# Password hashing context
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Configuration
 import os
@@ -56,6 +60,16 @@ class AuthService:
     """
     
     @staticmethod
+    def verify_password(plain_password: str, hashed_password: str) -> bool:
+        """Verify a plain password against its hash."""
+        return pwd_context.verify(plain_password, hashed_password)
+    
+    @staticmethod
+    def get_password_hash(password: str) -> str:
+        """Generate hash for a password."""
+        return pwd_context.hash(password)
+    
+    @staticmethod
     def get_user(email: str, db: Session) -> Optional[UserInDB]:
         """Get user from database by email with all user details."""
         try:
@@ -89,7 +103,7 @@ class AuthService:
                     "username": result.email,
                     "email": result.email,
                     "full_name": result.email,  # You can join with user profile table if needed
-                    "hashed_password": result.hashed_password,  # Keep for now, will be removed in SSO
+                    "hashed_password": result.hashed_password,  # Now properly hashed
                     "disabled": result.account_status != 'active',
                     "roles": [result.roles] if result.roles else ["user"],  # Convert single role to list
                     "account_id": result.account_id,
@@ -114,16 +128,20 @@ class AuthService:
     @staticmethod
     def authenticate_user(email: str, password: str, db: Session) -> Union[UserInDB, bool]:
         """
-        Authenticate a user with email and password.
-        For now, we'll do simple password comparison until SSO migration.
-        In production, passwords should be hashed in the database.
+        Authenticate a user with email and password using secure password hashing.
         """
+        print(f"[AUTH DEBUG] Authenticating user: {email}")
         user = AuthService.get_user(email, db)
         if not user:
+            print(f"[AUTH DEBUG] User not found for authentication: {email}")
             return False
-        # Simple password check - replace with proper hashing in production if needed
-        if password != user.hashed_password:
+        
+        # Verify password using secure hashing
+        if not AuthService.verify_password(password, user.hashed_password):
+            print(f"[AUTH DEBUG] Password verification failed for user: {email}")
             return False
+        
+        print(f"[AUTH DEBUG] User authenticated successfully: {email}")
         return user
     
     @staticmethod
