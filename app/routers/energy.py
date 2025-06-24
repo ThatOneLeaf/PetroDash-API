@@ -812,12 +812,12 @@ def get_fund_allocation(
             );
         """)
         result = db.execute(energy, {
-                "power_plant_ids": power_plant_ids,
-                "company_ids": company_ids,
-                "ff_id": ff_id,
-                "ff_category": ff_category,
-                "months": months,
-                "years": years
+                "power_plant_ids": power_plant_ids if power_plant_ids else None,
+                "company_ids": company_ids if company_ids else None,
+                "ff_id": ff_id if ff_id else None,
+                "ff_category": ff_category if ff_category else None,
+                "months": months if months else None,
+                "years": years if years else None
             })
         rows = result.mappings().all()
         df = pd.DataFrame(rows)
@@ -943,7 +943,7 @@ def get_fund_allocation(
                 total_per_item += total_value  # <-- Add to overall total for this item
                 chart_data["total"] = total_value  # <-- Save category total
                 pie_df = category_df.groupby(x)[item].sum().reset_index()
-                total_value = pie_df[item].sum()
+                total_value = pie_df[item].sum();
 
                 chart_data["pie"] = [
                     {
