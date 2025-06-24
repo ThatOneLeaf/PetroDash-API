@@ -60,9 +60,9 @@ class AuthService:
     """
     
     @staticmethod
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verify a plain password against its hash."""
-        return pwd_context.verify(plain_password, hashed_password)
+    def verify_password(password: str, hashed_password: str) -> bool:
+        """Verify a password against its bcrypt hash."""
+        return pwd_context.verify(password, hashed_password)
     
     @staticmethod
     def get_password_hash(password: str) -> str:
@@ -128,7 +128,7 @@ class AuthService:
     @staticmethod
     def authenticate_user(email: str, password: str, db: Session) -> Union[UserInDB, bool]:
         """
-        Authenticate a user with email and password using secure password hashing.
+        Authenticate a user with email and password using bcrypt password hashing.
         """
         print(f"[AUTH DEBUG] Authenticating user: {email}")
         user = AuthService.get_user(email, db)
@@ -136,7 +136,7 @@ class AuthService:
             print(f"[AUTH DEBUG] User not found for authentication: {email}")
             return False
         
-        # Verify password using secure hashing
+        # Verify password using bcrypt hashing
         if not AuthService.verify_password(password, user.hashed_password):
             print(f"[AUTH DEBUG] Password verification failed for user: {email}")
             return False
