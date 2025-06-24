@@ -1432,7 +1432,7 @@ def get_economic_summary(
     order_by: str = "year", 
     order_direction: str = "ASC",
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_with_roles("R02", "R03"))
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04"))
 ):
     """
     Get economic value summary using gold.func_economic_value_by_year
@@ -1476,7 +1476,7 @@ def get_generated_details(
     order_by: str = "year",
     order_direction: str = "ASC",
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_with_roles("R02", "R03"))
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04"))
 ):
     """
     Get economic value generated details using gold.func_economic_value_generated_details
@@ -1523,7 +1523,7 @@ def get_distributed_details(
     order_by: str = "year",
     order_direction: str = "ASC",
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_with_roles("R02", "R03"))
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04"))
 ):
     """
     Get economic value distributed details using gold.func_economic_value_distributed_details
@@ -1574,7 +1574,7 @@ def get_company_distribution(
     order_by: str = "percentage_of_total_distribution",
     order_direction: str = "DESC",
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_with_roles("R02", "R03"))
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04"))
 ):
     """
     Get economic value distribution by company using gold.func_economic_value_distribution_percentage
@@ -1638,7 +1638,7 @@ def get_expenditure_by_company(
     order_by: str = "year",
     order_direction: str = "ASC",
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_with_roles("R02", "R03"))
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04"))
 ):
     """
     Get expenditure details by company using gold.func_economic_expenditure_by_company
@@ -1700,7 +1700,7 @@ def get_expenditure_by_company(
 @router.get("/dashboard/filter-options", response_model=Dict)
 def get_dashboard_filter_options(
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user_with_roles("R02", "R03"))
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04"))
 ):
     """
     Get available filter options for the dashboard
