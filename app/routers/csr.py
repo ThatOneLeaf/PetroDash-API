@@ -178,6 +178,7 @@ def get_csr_activities(
                 ROUND(ca.csr_report::numeric, 2) as csr_report,
                 ROUND(ca.project_expenses::numeric, 2) as project_expenses,
                 rs.status_id,
+                rs.remarks,
                 ca.project_remarks,
                 ca.date_created,
                 ca.date_updated
@@ -208,6 +209,7 @@ def get_csr_activities(
                 'csrReport': float(row.csr_report) if row.csr_report else 0,
                 'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
                 'projectRemarks': row.project_remarks,
+                'statusRemarks': row.remarks,
                 'statusId': (
                     "Approved" if row.status_id == "APP"
                     else "For Revision (Site)" if row.status_id == "FRS"
@@ -250,6 +252,7 @@ def get_csr_activity_specific(
                 ROUND(ca.csr_report::numeric, 2) as csr_report,
                 ROUND(ca.project_expenses::numeric, 2) as project_expenses,
                 csl.status_id,
+                csl.remarks,
                 ca.project_remarks,
                 ca.date_created,
                 ca.date_updated
@@ -278,6 +281,7 @@ def get_csr_activity_specific(
             'csrReport': float(row.csr_report) if row.csr_report else 0,
             'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
             'projectRemarks': row.project_remarks,
+            'statusRemarks': row.remarks,
             'statusId': (
                 "Approved" if row.status_id == "APP"
                 else "For Revision (Site)" if row.status_id == "FRS"
