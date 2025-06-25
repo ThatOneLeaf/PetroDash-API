@@ -151,7 +151,7 @@ def get_energy_records_by_status(
                     ON pp.power_plant_id = er.power_plant_id
                 JOIN record_status rs on rs.record_id = er.energy_id
                 JOIN public.status st on st.status_id = rs.status_id
-                ORDER BY er.create_at DESC, er.date_generated DESC, er.updated_at DESC;
+                ORDER BY er.create_at DESC, er.updated_at DESC,er.date_generated DESC ;
         """)
 
         result = db.execute(query, {"status_id": status_id})
