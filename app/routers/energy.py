@@ -1183,9 +1183,16 @@ async def read_template(file: UploadFile = File(...), db: Session = Depends(get_
                     detail=f"Invalid or unrecognized date format in row {row}: {date_cell}"
                 )
 
+            if parsed_date > datetime.today().date():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Future date detected in row {row}: {parsed_date}. Upload aborted."
+                )
+
             if parsed_date in seen_dates:
                 raise HTTPException(status_code=400, detail=f"Duplicate date in uploaded file at row {row}: {parsed_date}")
             seen_dates.add(parsed_date)
+
 
             if parsed_date in existing_dates_set:
                 raise HTTPException(status_code=400, detail=f"Duplicate date found in database at row {row}: {parsed_date}")
@@ -1255,10 +1262,17 @@ async def upload_energy_file(file: UploadFile = File(...), db: Session = Depends
             if date_cell is None and value_cell is None:
                 break
             if date_cell and value_cell is not None:
+                parsed_date = date_cell.date() if hasattr(date_cell, "date") else date_cell
+                if parsed_date > datetime.today().date():
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Future date detected in row {row}: {parsed_date}. Upload aborted."
+                    )
                 data.append({
-                    "date": date_cell.date() if hasattr(date_cell, "date") else date_cell,
+                    "date": parsed_date,
                     "power_generated": value_cell
                 })
+
             row += 1
 
         if not data:
