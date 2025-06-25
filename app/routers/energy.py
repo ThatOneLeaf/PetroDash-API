@@ -11,6 +11,7 @@ from app.dependencies import get_db
 from app.crud.base import get_one, get_all, get_many, get_many_filtered, get_one_filtered
 from datetime import datetime
 import pandas as pd
+import math
 import io
 import math
 import logging
@@ -1037,17 +1038,20 @@ def get_overall(db: Session = Depends(get_db)):
         rows = result.mappings().all()
         data = [serialize_row(row) for row in rows]
 
-        # Compute totals
-        total_energy = sum(row['total_energy_generated'] for row in data)
-        total_co2 = sum(row['total_co2_avoided'] for row in data)
-        total_house = sum(row['total_est_house_powered'] for row in data)
 
-        # Append totals row
+        total_energy = int(sum(row['total_energy_generated'] for row in data))
+        total_co2 = int(sum(row['total_co2_avoided'] for row in data))
+        total_house = int(sum(row['total_est_house_powered'] for row in data))
+
+        # Always round up to the nearest 1,000
+        rounded_house_total = math.ceil(total_house / 1000.0) * 1000
+        formatted_house_total = f"{total_house:,} ≈ {rounded_house_total:,}"
+
         data.append({
             "company_id": "TOTAL",
             "total_energy_generated": total_energy,
             "total_co2_avoided": total_co2,
-            "total_est_house_powered": total_house
+            "total_est_house_powered": formatted_house_total
         })
 
         return {"data": data}
