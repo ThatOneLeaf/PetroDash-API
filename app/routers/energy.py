@@ -1015,33 +1015,48 @@ def get_overall(db: Session = Depends(get_db)):
                 fe.total_energy_generated,
                 fe.total_co2_avoided,
                 hp.total_est_house_powered
-                FROM (
+            FROM (
                 SELECT
-                    company_id,company_name,
+                    company_id, company_name,
                     SUM(energy_generated_kwh) AS total_energy_generated,
                     SUM(co2_avoidance_tons) AS total_co2_avoided
                 FROM gold.fact_energy_generated
                 GROUP BY company_id, company_name
-                ) fe
-                JOIN (
+            ) fe
+            JOIN (
                 SELECT
                     company_id,
                     SUM(est_house_powered) AS total_est_house_powered
                 FROM gold.func_household_powered()
                 GROUP BY company_id
-                ) hp
-                ON fe.company_id = hp.company_id;
+            ) hp
+            ON fe.company_id = hp.company_id;
         """)
 
         result = db.execute(energy)
         rows = result.mappings().all()
+        data = [serialize_row(row) for row in rows]
 
-        return {"data": [serialize_row(row) for row in rows]}  # ✅ Wrap in dict
+        # Compute totals
+        total_energy = sum(row['total_energy_generated'] for row in data)
+        total_co2 = sum(row['total_co2_avoided'] for row in data)
+        total_house = sum(row['total_est_house_powered'] for row in data)
+
+        # Append totals row
+        data.append({
+            "company_id": "TOTAL",
+            "total_energy_generated": total_energy,
+            "total_co2_avoided": total_co2,
+            "total_est_house_powered": total_house
+        })
+
+        return {"data": data}
 
     except Exception as e:
         logging.error(f"Error retrieving energy records: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+
 
 # ====================== template ====================== #
 @router.get("/download_template", response_class=StreamingResponse)
