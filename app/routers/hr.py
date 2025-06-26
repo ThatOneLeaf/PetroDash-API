@@ -1086,17 +1086,21 @@ def bulk_upload_employability(file: UploadFile = File(...), db: Session = Depend
             row_number = i + 2  # Excel row number
 
             # INSERT VALIDATION FOR GENDER, POSITION ID, P_NP, COMPANY ID, AND EMPLOYMENT STATUS
-            
+            birthdate_raw = row["birthdate"]
+            start_date_raw = row["start_date"]
+            end_date_raw = row["end_date"]
+         
             # Validate and parse date
             try:
                 birthdate = pd.to_datetime(row["birthdate"]).date()
                 start_date = pd.to_datetime(row["start_date"]).date()
-                if pd.isnull(row["end_date"]) or row["end_date"] in ["", "NaT"]:
+                if pd.isnull(end_date_raw) or str(end_date_raw).strip() in ["", "NaT", "None"]:
                     end_date = None
                 else:
-                    end_date = pd.to_datetime(row["end_date"]).date()
-            except (ValueError, TypeError):
-                validation_errors.append(f"Row {row_number}: Invalid date format.")
+                    end_date = pd.to_datetime(end_date_raw, errors='raise').date()
+            except (ValueError, TypeError) as e:
+                validation_errors.append(f"Row {row_number}: Invalid date format."
+                                         f"birthdate='{birthdate_raw}', start_date='{start_date_raw}', end_date='{end_date_raw}' – Error: {str(e)}")
                 continue
 
             rows.append({
