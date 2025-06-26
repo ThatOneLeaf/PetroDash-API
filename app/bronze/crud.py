@@ -2476,7 +2476,7 @@ def insert_employability_bulk(db: Session, rows) -> int:
         record_log = RecordStatus(
             cs_id=f"CS-{row['employee_id']}",
             record_id=row["employee_id"],
-            status_id="URS",
+            status_id="URH",
             status_timestamp=status_time.date(),
             remarks="real-data inserted"
         )
@@ -2586,7 +2586,7 @@ def insert_safety_workdata_bulk (db:Session, rows) -> int:
         record_log = RecordStatus(
             cs_id=f"CS-{safety_workdata_id}",
             record_id=safety_workdata_id,
-            status_id="URS",
+            status_id="URH",
             status_timestamp=status_time.date(),
             remarks="real-data inserted"
         )
@@ -2691,7 +2691,7 @@ def insert_parental_leave_bulk (db:Session, rows) -> int:
         record_log = RecordStatus(
             cs_id=f"CS-{parental_leave_id}",
             record_id=parental_leave_id,
-            status_id="URS",
+            status_id="URH",
             status_timestamp=status_time.date(),
             remarks="real-data inserted"
         )
@@ -2778,7 +2778,7 @@ def insert_occupational_safety_health_bulk (db:Session, rows) -> int:
         record_log = RecordStatus(
             cs_id=f"CS-{osh_id}",
             record_id=osh_id,
-            status_id="URS",
+            status_id="URH",
             status_timestamp=status_time.date(),
             remarks="real-data inserted"
         )
@@ -2860,7 +2860,7 @@ def insert_training_bulk (db:Session, rows) -> int:
         record_log = RecordStatus(
             cs_id=f"CS-{training_id}",
             record_id=training_id,
-            status_id="URS",
+            status_id="URH",
             status_timestamp=status_time.date(),
             remarks="real-data inserted"
         )
