@@ -553,7 +553,7 @@ def get_age_distribution(
 
 @router.get("/incident_count_per_month", response_model=List[dict])
 def get_incident_count_per_month(
-    grouping: Optional[str] = Query("monthly", regex="^(monthly|quarterly|yearly)$"),
+    grouping: Optional[str] = Query("yearly", regex="^(monthly|quarterly|yearly)$"),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -563,7 +563,7 @@ def get_incident_count_per_month(
         logging.info("Executing Incident count per month query")
 
         if start_date is None:
-            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+            start_date = None
         if end_date is None:
             end_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -628,7 +628,7 @@ def get_incident_count_per_month(
 
 @router.get("/safety_manhours_per_month", response_model=List[dict])
 def get_safety_manhours_per_month(
-    grouping: Optional[str] = Query("monthly", regex="^(monthly|quarterly|yearly)$"),
+    grouping: Optional[str] = Query("yearly", regex="^(monthly|quarterly|yearly)$"),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -638,7 +638,7 @@ def get_safety_manhours_per_month(
         logging.info("Executing safety manhours grouped query")
 
         if start_date is None:
-            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+            start_date = None
         if end_date is None:
             end_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -710,7 +710,7 @@ def get_safety_manhours_per_month(
 
 @router.get("/safety_manpower_per_month", response_model=List[dict])
 def get_safety_manpower_per_month(
-    grouping: Optional[str] = Query("monthly", regex="^(monthly|quarterly|yearly)$"),
+    grouping: Optional[str] = Query("yearly", regex="^(monthly|quarterly|yearly)$"),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     company_id: Optional[str] = Query(None),
@@ -720,7 +720,7 @@ def get_safety_manpower_per_month(
         logging.info("Executing safety manpower per month query")
         
         if start_date is None:
-            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+            start_date = None
         if end_date is None:
             end_date = datetime.now().strftime("%Y-%m-%d")
 
