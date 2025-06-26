@@ -67,6 +67,93 @@ def create_excel_template(headers: List[str], filename: str) -> io.BytesIO:
     output.seek(0)
     return output
 
+# ====================== DASHBOARD OVERVIEW ======================
+@router.get("/overview_safety_manhours", response_model=List[dict])
+def get_overview_safety_manhours(
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Overview Safety Manhours query")
+            
+        result = db.execute(text("""
+            SELECT SUM(manhours) AS total_safety_manhours
+            FROM gold.func_safety_workdata_summary();
+        """))
+        data = [{ "total_safety_manhours": row.total_safety_manhours } 
+                for row in result
+                ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/overview_safety_manpower", response_model=List[dict])
+def get_overview_safety_manpower(
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Overview Safety Manhours query")
+            
+        result = db.execute(text("""
+            SELECT SUM(manpower) AS total_safety_manpower
+            FROM gold.func_safety_workdata_summary();
+    
+        """))
+        data = [{ "total_safety_manpower": row.total_safety_manpower } 
+                for row in result
+                ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/overview_training", response_model=List[dict])
+def get_overview_training(
+    db: Session = Depends(get_db)
+):
+    try:
+        logging.info("Executing Overview Safety Manhours query")
+            
+        result = db.execute(text("""
+            SELECT SUM(training_hours) AS total_training_hours
+            FROM gold.func_training_summary();
+            
+        """))
+        data = [{ "total_training_hours": row.total_training_hours } 
+                for row in result
+                ]
+        
+        logging.info(f"Query returned {len(data)} rows")
+        logging.debug(f"Data: {data}")
+        
+        if not data:
+            logging.warning("No data found")
+            return []
+
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ====================== DASHBOARD ======================
 # ===== KPIs =====
 @router.get("/total_safety_manhours", response_model=List[dict])
