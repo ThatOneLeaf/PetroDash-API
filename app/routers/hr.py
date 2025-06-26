@@ -799,12 +799,12 @@ def get_employability_records_by_status(
         logging.info(f"Fetching employability records. Filter status_id: {status_id}")
      
         query = text("""
-            SELECT demo.*, tenure.*, cm.company_name, csl.status_id
+            SELECT demo.*, tenure.*, cm.company_name, csl.status_id, csl.remarks
             FROM silver.hr_demographics demo
             JOIN silver.hr_tenure tenure 
                 ON tenure.employee_id = demo.employee_id
             JOIN (
-                SELECT DISTINCT ON (record_id) record_id, status_id
+                SELECT DISTINCT ON (record_id) record_id, status_id, remarks
                 FROM public.record_status
                 ORDER BY record_id, status_timestamp DESC
             ) csl
@@ -837,7 +837,7 @@ def get_parental_leave_records_by_status(
         logging.info(f"Fetching parental leave records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT pl.*, demo.company_id, cm.company_name, csl.status_id
+            SELECT pl.*, demo.company_id, cm.company_name, csl.status_id, csl.remarks
             FROM silver.hr_parental_leave pl
             JOIN public.record_status csl
                 ON pl.parental_leave_id = csl.record_id
@@ -869,7 +869,7 @@ def get_safety_workdata_records_by_status(
         logging.info(f"Fetching safety workdata records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT swd.*, cm.company_name, csl.status_id
+            SELECT swd.*, cm.company_name, csl.status_id, csl.remarks
             FROM silver.hr_safety_workdata swd
             JOIN public.record_status csl
                 ON swd.safety_workdata_id = csl.record_id
@@ -898,7 +898,7 @@ def get_occupational_safety_health_records_by_status(
         logging.info(f"Fetching occupational safety health records. Filter status_id: {status_id}")
 
         query = text("""
-            SELECT osh.*, cm.company_name, csl.status_id
+            SELECT osh.*, cm.company_name, csl.status_id, csl.remarks
             FROM silver.hr_occupational_safety_health osh
             JOIN public.record_status csl
                 ON osh.osh_id = csl.record_id
@@ -928,7 +928,7 @@ def get_training_records_by_status(
         logging.info(f"Fetching training records Filter status_id: {status_id}")
 
         query = text("""
-            SELECT tr.*, cm.company_name, csl.status_id
+            SELECT tr.*, cm.company_name, csl.status_id, csl.remarks
             FROM silver.hr_training tr
             JOIN public.record_status csl
                 ON tr.training_id = csl.record_id
