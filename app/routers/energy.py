@@ -1098,7 +1098,7 @@ def download_template(
     ws["I6"] = metric
 
     # Headers
-    ws["C8"] = "Date (MM-DD-YYYY)"
+    ws["C8"] = "Date (MM/DD/YYYY)"
     ws["D8"] = f"Power Generated ({metric})"
     ws["C8"].font = Font(bold=True)
     ws["D8"].font = Font(bold=True)
@@ -1115,11 +1115,17 @@ def download_template(
     buffer = io.BytesIO()
     wb.save(buffer)
     buffer.seek(0)
+    now = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    filename = f"{company_id}_{powerplant_id}_power_template_{now}.xlsx"
+
 
     return StreamingResponse(
         buffer,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=power_report_template.xlsx"}
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
     )
 
 
