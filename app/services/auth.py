@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from passlib.context import CryptContext
+import time
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -17,21 +18,26 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = float(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-#ACCESS_TOKEN_EXPIRE_MINUTES = float(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "0.5"))  # 30 seconds for testing
+ACCESS_TOKEN_EXPIRE_HOURS = 24  # Absolute expiration time in hours
+INACTIVITY_TIMEOUT_MINUTES = 60  # Sliding window timeout in minutes (1 hour)
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
+
+# In-memory session store (replace with Redis in production)
+active_sessions = {}
 
 # Models
 class Token(BaseModel):
     access_token: str
     token_type: str
     expires_in: int
+    absolute_expiry: int
 
 class TokenData(BaseModel):
     username: Optional[str] = None
     scopes: list[str] = []
+    last_activity: float = None
 
 class User(BaseModel):
     username: str
@@ -73,8 +79,6 @@ class AuthService:
     def get_user(email: str, db: Session) -> Optional[UserInDB]:
         """Get user from database by email with all user details."""
         try:
-            print(f"[AUTH DEBUG] Looking up user: {email}")
-            # Query accounts table to get all user details
             query = text("""
                 SELECT 
                     email as username,
@@ -95,17 +99,13 @@ class AuthService:
             result = db.execute(query, {"email": email}).fetchone()
             
             if result:
-                print(f"[AUTH DEBUG] User found - Email: {result.email}, Role: {result.roles}, Status: {result.account_status}")
-                print(f"[AUTH DEBUG] Additional details - Account ID: {result.account_id}, Power Plant ID: {result.power_plant_id}, Company ID: {result.company_id}")
-                
-                # Convert result to dict and create UserInDB object with all details
                 user_data = {
                     "username": result.email,
                     "email": result.email,
-                    "full_name": result.email,  # You can join with user profile table if needed
-                    "hashed_password": result.hashed_password,  # Now properly hashed
+                    "full_name": result.email,
+                    "hashed_password": result.hashed_password,
                     "disabled": result.account_status != 'active',
-                    "roles": [result.roles] if result.roles else ["user"],  # Convert single role to list
+                    "roles": [result.roles] if result.roles else ["user"],
                     "account_id": result.account_id,
                     "power_plant_id": result.power_plant_id,
                     "company_id": result.company_id,
@@ -113,16 +113,12 @@ class AuthService:
                     "date_created": result.date_created,
                     "date_updated": result.date_updated
                 }
-                print(f"[AUTH DEBUG] User data created - Roles: {user_data['roles']}, Disabled: {user_data['disabled']}")
-                print(f"[AUTH DEBUG] Full user data: Account ID: {user_data['account_id']}, Power Plant: {user_data['power_plant_id']}, Company: {user_data['company_id']}")
                 return UserInDB(**user_data)
-            else:
-                print(f"[AUTH DEBUG] User not found: {email}")
             
             return None
             
         except Exception as e:
-            print(f"[AUTH DEBUG] Database error in get_user: {str(e)}")
+            print(f"Database error in get_user: {str(e)}")
             return None
     
     @staticmethod
@@ -130,68 +126,103 @@ class AuthService:
         """
         Authenticate a user with email and password using bcrypt password hashing.
         """
-        print(f"[AUTH DEBUG] Authenticating user: {email}")
         user = AuthService.get_user(email, db)
         if not user:
-            print(f"[AUTH DEBUG] User not found for authentication: {email}")
             return False
         
-        # Verify password using bcrypt hashing
         if not AuthService.verify_password(password, user.hashed_password):
-            print(f"[AUTH DEBUG] Password verification failed for user: {email}")
             return False
         
-        print(f"[AUTH DEBUG] User authenticated successfully: {email}")
         return user
     
     @staticmethod
     def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-        """Create a JWT access token."""
+        """Create a JWT access token with both absolute and sliding expiration."""
         to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.utcnow() + timedelta(minutes=15)
-        to_encode.update({"exp": expire})
+        
+        # Set absolute expiration (24 hours)
+        absolute_expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+        
+        # Set last activity timestamp
+        last_activity = time.time()
+        
+        to_encode.update({
+            "exp": absolute_expire,
+            "last_activity": last_activity
+        })
+        
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        
+        # Store session info
+        active_sessions[encoded_jwt] = {
+            "last_activity": last_activity,
+            "username": data.get("sub")
+        }
+        
         return encoded_jwt
     
     @staticmethod
     def verify_token(token: str) -> TokenData:
-        """Verify and decode a JWT token."""
-        print(f"[AUTH DEBUG] Verifying token type: {type(token)}")
+        """Verify and decode a JWT token with activity check."""
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
+        inactivity_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired due to inactivity",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
         try:
+            # Verify the token exists in active sessions
+            session = active_sessions.get(token)
+            if not session:
+                raise credentials_exception
+            
+            # Check for inactivity timeout
+            current_time = time.time()
+            last_activity = session["last_activity"]
+            if current_time - last_activity > INACTIVITY_TIMEOUT_MINUTES * 60:
+                # Remove expired session
+                active_sessions.pop(token, None)
+                raise inactivity_exception
+            
+            # Update last activity time
+            active_sessions[token]["last_activity"] = current_time
+            
+            # Decode and verify the token
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             username: str = payload.get("sub")
             if username is None:
                 raise credentials_exception
-            token_data = TokenData(username=username)
-            print(f"[AUTH DEBUG] Token decoded successfully, username: {username}")
-        except jwt.PyJWTError as e:
-            print(f"[AUTH DEBUG] JWT decode error: {str(e)}")
+                
+            token_data = TokenData(
+                username=username,
+                last_activity=current_time
+            )
+            return token_data
+            
+        except jwt.ExpiredSignatureError:
+            # Remove expired session
+            active_sessions.pop(token, None)
             raise credentials_exception
-        return token_data
+        except jwt.PyJWTError as e:
+            raise credentials_exception
     
     @staticmethod
     def get_current_user(token: str, db: Session) -> User:
         """Get the current user from a JWT token."""
-        print(f"[AUTH DEBUG] Getting current user from token")
         token_data = AuthService.verify_token(token)
-        print(f"[AUTH DEBUG] Token verified, username: {token_data.username}")
         user = AuthService.get_user(email=token_data.username, db=db)
         if user is None:
-            print(f"[AUTH DEBUG] User not found for token username: {token_data.username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        print(f"[AUTH DEBUG] Current user retrieved: {user.email}, roles: {user.roles}")
         return User(**user.dict())
     
     @staticmethod

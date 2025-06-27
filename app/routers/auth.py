@@ -6,10 +6,12 @@ from app.services.auth import (
     AuthService, 
     Token, 
     User, 
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    oauth2_scheme
+    ACCESS_TOKEN_EXPIRE_HOURS,
+    oauth2_scheme,
+    active_sessions
 )
 from app.dependencies import get_db
+import time
 
 router = APIRouter()
 
@@ -28,15 +30,64 @@ async def login_for_access_token(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    # Create token with absolute expiration (24 hours)
     access_token = AuthService.create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.username}
     )
+    
+    # Calculate expiration timestamps
+    current_time = int(time.time())
+    absolute_expiry = current_time + (ACCESS_TOKEN_EXPIRE_HOURS * 3600)
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "expires_in": int(ACCESS_TOKEN_EXPIRE_MINUTES * 60)  # in seconds
+        "expires_in": ACCESS_TOKEN_EXPIRE_HOURS * 3600,  # in seconds
+        "absolute_expiry": absolute_expiry
     }
+
+@router.post("/update-activity")
+async def update_session_activity(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    """
+    Update the last activity timestamp for the current session.
+    This keeps the session alive if the user is active.
+    """
+    try:
+        # This will automatically update the last_activity timestamp
+        token_data = AuthService.verify_token(token)
+        session = active_sessions.get(token)
+        
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired session",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return {
+            "valid": True,
+            "last_activity": session["last_activity"],
+            "message": "Session activity updated successfully"
+        }
+        
+    except HTTPException as e:
+        return {
+            "valid": False,
+            "message": str(e.detail)
+        }
+
+@router.post("/logout")
+async def logout(token: str = Depends(oauth2_scheme)):
+    """
+    Invalidate the current session token.
+    """
+    # Remove session from active sessions
+    active_sessions.pop(token, None)
+    return {"message": "Successfully logged out"}
 
 @router.get("/me", response_model=User)
 async def read_users_me(
