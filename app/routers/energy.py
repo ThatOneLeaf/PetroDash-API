@@ -96,6 +96,14 @@ def process_status_change(
     db.commit()
     db.refresh(latest_status)
 
+    try:
+        db.execute(text("CALL silver.load_csv_silver();"))
+        db.commit()
+    except Exception as proc_err:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Stored procedure error: {str(proc_err)}")
+
+
     return {
         "message": f"Status updated to '{next_status}' via '{action}'.",
         "data": {
@@ -1669,6 +1677,7 @@ def edit_energy_record(
         )
     )
 
+
     try:
         db.execute(update_stmt)
 
@@ -1677,6 +1686,8 @@ def edit_energy_record(
         latest_status.status_timestamp = datetime.now()
         latest_status.remarks = remarks
 
+        db.commit()
+        db.execute(text("CALL silver.load_csv_silver();"))
         db.commit()
         return {"message": "Energy record updated successfully."}
     except Exception as e:
