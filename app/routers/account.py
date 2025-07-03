@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 import csv
 from io import StringIO, BytesIO
 
-from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..public import models
@@ -167,12 +167,9 @@ def deactivate_account(account_id: str, db: Session = Depends(get_db)):
         "gender": prof.gender
     }
 
-
-
-from typing import Optional
-
-@router.post("/bulk", response_model=List[AccountProfileOut], status_code=status.HTTP_201_CREATED)
-async def bulk_create_accounts_from_file(
+# API to preview CSV data and validate all rows (no DB insert)
+@router.post("/bulk/preview", status_code=200)
+async def preview_bulk_accounts(
     file: UploadFile = File(...),
     power_plant_id: Optional[str] = Form(None),
     company_id: Optional[str] = Form(None),
@@ -181,41 +178,187 @@ async def bulk_create_accounts_from_file(
 ):
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are supported.")
-
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded CSV file is empty.")
     s = StringIO(content.decode('utf-8'))
     reader = csv.DictReader(s)
-    created = []
+    required_headers = {"email", "first_name", "last_name"}
+    if not required_headers.issubset(set(reader.fieldnames or [])):
+        raise HTTPException(status_code=400, detail=f"Missing required headers: {required_headers - set(reader.fieldnames or [])}")
 
-    for row in reader:
-        if not all([row.get('email'), row.get('first_name'), row.get('last_name')]):
-            continue  # Skip if required fields are missing
+    all_rows = list(reader)
+    template_row_indices = []
+    errors = []
+    seen_emails = set()
+    valid_rows = []
+
+    # Identify template/sample rows
+    for i, row in enumerate(all_rows, start=2):
+        email = row.get('email', '').strip().lower()
+        birthdate_raw = row.get('birthdate', '').strip()
+        if (
+            email == "user@example.com" or
+            row.get('emp_id', '').strip() == "EMP001" or
+            row.get('first_name', '').strip() == "John" or
+            row.get('last_name', '').strip() == "Doe" or
+            row.get('middle_name', '').strip() == "A." or
+            row.get('suffix', '').strip() == "Jr." or
+            row.get('contact_number', '').strip() == "09123456789" or
+            row.get('address', '').strip() == "123 Main St" or
+            birthdate_raw == "MM/DD/YYYY" or
+            row.get('gender', '').strip() == "Male, Female, Other"
+        ):
+            template_row_indices.append(i)
+
+    # If all rows are template/sample rows, treat as empty
+    if len(template_row_indices) == len(all_rows):
+        raise HTTPException(status_code=400, detail="Uploaded CSV file is empty.")
+
+    # Validate all non-template rows
+    for i, row in enumerate(all_rows, start=2):
+        if i in template_row_indices:
+            continue
+        email = row.get('email', '').strip().lower()
+        birthdate_raw = row.get('birthdate', '').strip()
+
+        # Validate required fields
+        if not email or not row.get('first_name') or not row.get('last_name'):
+            errors.append(f"Row {i}: Missing required fields (email, first_name, last_name).")
+            continue
+
+        # Check for duplicate emails within the file
+        if email in seen_emails:
+            errors.append(f"Row {i}: Duplicate email '{email}' found in the uploaded file.")
+            continue
+        seen_emails.add(email)
+
+        # Validate birthdate format if present
+        birthdate = None
+        if birthdate_raw:
+            try:
+                birthdate = datetime.strptime(birthdate_raw, "%m/%d/%Y").date()
+            except ValueError:
+                errors.append(f"Row {i}: Invalid birthdate format '{birthdate_raw}' for email '{email}'. Expected MM/DD/YYYY.")
+                continue
+
+        # Normalize and validate contact number
+        contact_number = row.get('contact_number', '').strip()
+        if contact_number and not contact_number.startswith('0'):
+            contact_number = f'0{contact_number}'
+
+        # Add row to valid_rows (include all fields)
+        valid_rows.append({
+            **row,
+            "email": email,
+            "birthdate": birthdate.strftime("%Y-%m-%d") if birthdate else row.get('birthdate', ''),
+        })
+
+    if errors:
+        return {"valid": False, "errors": errors}
+    return {"valid": True, "rows": valid_rows}
+
+# Bulk create accounts from CSV file
+@router.post("/bulk", response_model=List[AccountProfileOut], status_code=status.HTTP_201_CREATED)
+async def bulk_create_accounts_from_file(
+    file: UploadFile = File(...),
+    power_plant_id: Optional[str] = Form(None),
+    company_id: Optional[str] = Form(None),
+    account_role: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Check file type
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files are supported.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded CSV file is empty.")
+
+    s = StringIO(content.decode('utf-8'))
+    reader = csv.DictReader(s)
+
+    required_headers = {"email", "first_name", "last_name"}
+    if not required_headers.issubset(set(reader.fieldnames or [])):
+        raise HTTPException(status_code=400, detail=f"Missing required headers: {required_headers - set(reader.fieldnames or [])}")
+
+    created = []
+    errors = []
+    seen_emails = set()
+    template_row_indices = []
+    all_rows = list(reader)
+
+    # Identify template/sample rows
+    for i, row in enumerate(all_rows, start=2):
+        email = row.get('email', '').strip().lower()
+        birthdate_raw = row.get('birthdate', '').strip()
+        if (
+            email == "user@example.com" or
+            row.get('emp_id', '').strip() == "EMP001" or
+            row.get('first_name', '').strip() == "John" or
+            row.get('last_name', '').strip() == "Doe" or
+            row.get('middle_name', '').strip() == "A." or
+            row.get('suffix', '').strip() == "Jr." or
+            row.get('contact_number', '').strip() == "09123456789" or
+            row.get('address', '').strip() == "123 Main St" or
+            birthdate_raw == "MM/DD/YYYY" or
+            row.get('gender', '').strip() == "Male, Female, Other"
+        ):
+            template_row_indices.append(i)
+
+    # If all rows are template/sample rows, treat as empty
+    if len(template_row_indices) == len(all_rows):
+        raise HTTPException(status_code=400, detail="Uploaded CSV file is empty.")
+
+    # Now process only non-template rows
+    for i, row in enumerate(all_rows, start=2):
+        if i in template_row_indices:
+            continue
+        email = row.get('email', '').strip().lower()
+        birthdate_raw = row.get('birthdate', '').strip()
+
+        # 3. Validate required fields
+        if not email or not row.get('first_name') or not row.get('last_name'):
+            errors.append(f"Row {i}: Missing required fields (email, first_name, last_name).")
+            continue
+
+        # 4. Check for duplicate emails within the file
+        if email in seen_emails:
+            errors.append(f"Row {i}: Duplicate email '{email}' found in the uploaded file.")
+            continue
+        seen_emails.add(email)
+
+        # 5. Validate birthdate format if present
+        birthdate = None
+        if birthdate_raw:
+            try:
+                birthdate = datetime.strptime(birthdate_raw, "%m/%d/%Y").date()
+            except ValueError:
+                errors.append(f"Row {i}: Invalid birthdate format '{birthdate_raw}' for email '{email}'. Expected MM/DD/YYYY.")
+                continue
+
+        # Normalize and validate contact number
+        contact_number = row.get('contact_number', '').strip()
+        if contact_number and not contact_number.startswith('0'):
+            contact_number = f'0{contact_number}'
 
         account_id = generate_ulid()
 
-        # Create and add Account
+        # Create Account model
         db_account = models.Account(
             account_id=account_id,
-            email=row['email'],
-            password=bcrypt.hash("changeme"),  # Default password, should be changed later
+            email=email,
+            password=bcrypt.hash("changeme"),
             account_role=account_role,
-            power_plant_id=power_plant_id,     # Optional
-            company_id=company_id,             # Optional
+            power_plant_id=power_plant_id,
+            company_id=company_id,
             account_status='active',
             date_created=datetime.now(),
             date_updated=datetime.now()
         )
         db.add(db_account)
 
-        # Parse birthdate
-        birthdate = None
-        if row.get('birthdate'):
-            try:
-                birthdate = datetime.strptime(row['birthdate'], "%m/%d/%Y").date()
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid date format for {row['email']}")
-
-        # Create and add UserProfile
+        # Create UserProfile model
         db_profile = models.UserProfile(
             account_id=account_id,
             emp_id=row.get('emp_id'),
@@ -223,7 +366,7 @@ async def bulk_create_accounts_from_file(
             last_name=row['last_name'],
             middle_name=row.get('middle_name'),
             suffix=row.get('suffix'),
-            contact_number=row.get('contact_number'),
+            contact_number=contact_number,
             address=row.get('address'),
             birthdate=birthdate,
             gender=row.get('gender'),
@@ -234,8 +377,8 @@ async def bulk_create_accounts_from_file(
 
         created.append({
             "account_id": account_id,
-            "email": db_account.email,
-            "password": db_account.password,  # Password is hashed, not returned
+            "email": email,
+            "password": db_account.password,
             "account_role": db_account.account_role,
             "power_plant_id": db_account.power_plant_id,
             "company_id": db_account.company_id,
@@ -250,8 +393,13 @@ async def bulk_create_accounts_from_file(
             "gender": db_profile.gender
         })
 
+    # 6. If there are validation errors, return them without committing to DB
+    if errors:
+        raise HTTPException(status_code=400, detail={"errors": errors})
+
     db.commit()
     return created
+
 
 
 # Route to download CSV template for bulk account upload
@@ -272,10 +420,10 @@ def download_bulk_template():
         "last_name": "Doe",
         "middle_name": "A.",
         "suffix": "Jr.",
-        "contact_number": "1234567890",
+        "contact_number": "09123456789",
         "address": "123 Main St",
-        "birthdate": "01/01/1990",
-        "gender": "Male"
+        "birthdate": "MM/DD/YYYY",
+        "gender": "Male, Female, Other"
     })
     output.seek(0)
     return StreamingResponse(
