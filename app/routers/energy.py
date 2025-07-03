@@ -30,6 +30,9 @@ import openpyxl
 from openpyxl.styles import Font, Alignment
 import io
 from datetime import datetime
+from ..auth_decorators import get_current_user_with_roles, allow_roles, get_user_info
+from ..services.audit_trail import append_audit_trail
+from ..services.auth import User
 
 
 router = APIRouter()
@@ -39,7 +42,9 @@ def process_status_change(
     energy_id: str,
     checker_id: str,
     remarks: str,
-    action: str
+    action: str,
+    current_user: str = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     # Step 1: Validate action
     action = action.lower()
@@ -103,7 +108,16 @@ def process_status_change(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Stored procedure error: {str(proc_err)}")
 
-
+    append_audit_trail(
+        db=db,
+        account_id=str(user_info.account_id),
+        target_table="record_status",
+        record_id=latest_status.cs_id,
+        action_type="update",
+        old_value=current_status,
+        new_value=next_status,
+        description=f"Status updated to '{next_status}' via '{action}'."
+    )
     return {
         "message": f"Status updated to '{next_status}' via '{action}'.",
         "data": {
@@ -139,6 +153,7 @@ def get_energy_record(
 
 # ====================== energy records by status ====================== #
 @router.get("/energy_records_by_status", response_model=List[dict])
+@allow_roles("R03", "R04", "R05")
 def get_energy_records_by_status(
     status_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
@@ -599,6 +614,7 @@ def normalize_list(lst):
     return lst
 
 @router.get("/energy_dashboard", response_model=Dict[str, Any])
+@allow_roles("R02","R03", "R04")
 def get_energy_dashboard(
     p_company_id: Optional[str] = Query(None),
     p_power_plant_id: Optional[str] = Query(None),
@@ -784,6 +800,7 @@ def get_energy_dashboard(
 
 
 @router.get("/fund_allocation_dashboard", response_model=Dict[str, Any])
+@allow_roles("R02","R03", "R04")
 def get_fund_allocation(
     p_company_id: Optional[str] = Query(None),
     p_power_plant_id: Optional[str] = Query(None),
@@ -1016,6 +1033,7 @@ def serialize_row(row):
     }
 
 @router.get("/overall_energy", response_model=Dict[str, Any])
+@allow_roles("R02","R03", "R04", "R05")
 def get_overall(db: Session = Depends(get_db)):
     try:
         energy = text("""
@@ -1072,10 +1090,13 @@ def get_overall(db: Session = Depends(get_db)):
 
 # ====================== template ====================== #
 @router.get("/download_template", response_class=StreamingResponse)
+@allow_roles("R05")
 def download_template(
     company_id: str = Query(..., description="Company ID"),
     powerplant_id: str = Query(..., description="Power Plant ID"),
     metric: Literal["kWh", "MWh", "GWh"] = Query(..., description="Metric unit (kWh, MWh, GWh)"),
+    current_user = Depends(get_current_user_with_roles("R05")),
+    user_info: User = Depends(get_user_info)
 ):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1126,6 +1147,15 @@ def download_template(
     now = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     filename = f"{company_id}_{powerplant_id}_power_template_{now}.xlsx"
+    append_audit_trail(
+        account_id=str(user_info.account_id),
+        target_table="energy_template",
+        record_id=filename,
+        action_type="download",
+        old_value="",
+        new_value="",
+        description="Downloaded energy template"
+    )
 
 
     return StreamingResponse(
@@ -1138,6 +1168,7 @@ def download_template(
 
 
 @router.post("/read_template", response_model=Dict[str, Any])
+@allow_roles("R05")
 async def read_template(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if file is None:
         raise HTTPException(status_code=400, detail="No file uploaded.")
@@ -1247,7 +1278,12 @@ async def read_template(file: UploadFile = File(...), db: Session = Depends(get_
 
 
 @router.post("/upload_energy_file")
-async def upload_energy_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
+@allow_roles("R05")
+async def upload_energy_file(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db), 
+    current_user = Depends(get_current_user_with_roles("R05")),
+    user_info: User = Depends(get_user_info)):
     if file is None:
         raise HTTPException(status_code=400, detail="No file uploaded.")
     if not file.filename.lower().endswith(".xlsx"):
@@ -1343,7 +1379,10 @@ async def upload_energy_file(file: UploadFile = File(...), db: Session = Depends
             )
             db.add(new_log)
             db.add(record)
+
+            
             records_to_add.append(energy_id)
+
 
         if not records_to_add:
             raise HTTPException(
@@ -1359,6 +1398,19 @@ async def upload_energy_file(file: UploadFile = File(...), db: Session = Depends
         except Exception as proc_err:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Stored procedure error: {str(proc_err)}")
+        
+        for record_id in records_to_add:
+            append_audit_trail(
+                db=db,
+                account_id=str(user_info.account_id),
+                target_table="energy_records",
+                record_id=record_id,
+                action_type="insert",
+                old_value="",
+                new_value=record.energy_generated,
+                description="Inserted new energy record from template upload"
+            )
+        
 
         return {
             "message": "Energy data uploaded successfully",
@@ -1405,7 +1457,9 @@ def generate_cs_id(db: Session) -> str:
 
 # ====================== single add energy record ====================== #
 
+
 @router.post("/add")
+@allow_roles("R05")
 def add_energy_record(
     powerPlant: str = Form(...),
     date: str = Form(...),
@@ -1414,6 +1468,8 @@ def add_energy_record(
     metric: str = Form(...),
     remarks: str = Form(...),
     db: Session = Depends(get_db),
+    current_user = Depends( get_current_user_with_roles("R05")),
+    user_info: User = Depends(get_user_info)
 ):
     
     try:
@@ -1478,6 +1534,17 @@ def add_energy_record(
         except Exception as proc_err:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Stored procedure error: {str(proc_err)}")
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="energy_records",
+            record_id=new_record.energy_id,
+            action_type="insert",
+            old_value="",
+            new_value=new_record.energy_generated,
+            description="Inserted new energy record"
+        )
 
         return {
             "message": "Energy record successfully added.",
@@ -1505,6 +1572,7 @@ def add_energy_record(
 
 # ====================== bulk add energy record ====================== #
 @router.post("/bulk_add")
+@allow_roles("R05")
 def bulk_add_energy_record(
     # powerPlant: str = Form(...),
     # checker: str = Form(...),
@@ -1614,12 +1682,14 @@ def bulk_add_energy_record(
 
 # ====================== update status ====================== #
 @router.post("/update_status")
+@allow_roles("R02", "R03", "R04", "R05")
 def change_status(
     energy_id: str = Form(...),
     checker_id: str = Form(...),
     remarks: str = Form(...),
     action: str = Form(...),
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
 ):
     try:
         return process_status_change(
@@ -1627,7 +1697,8 @@ def change_status(
             energy_id=energy_id,
             checker_id=checker_id,
             remarks=remarks,
-            action=action
+            action=action,
+            current_user=current_user
         )
     except HTTPException as http_err:
         raise http_err
@@ -1638,6 +1709,7 @@ def change_status(
 # ====================== edit energy record ====================== #
 
 @router.post("/edit")
+@allow_roles("R03", "R04", "R05")
 def edit_energy_record(
     energy_id: str = Form(...),
     powerPlant: str = Form(...),
@@ -1645,53 +1717,76 @@ def edit_energy_record(
     energyGenerated: float = Form(...),
     checker: str = Form(...),
     metric: str = Form(...),
-    remarks:str=Form(...),
+    remarks: str = Form(...),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user_with_roles("R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     try:
         parsed_date = datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
-    
-    
-    # Step 3: Get latest status
+
+    # Step 1: Fetch existing energy record
+    energy_record = db.query(EnergyRecords).filter(EnergyRecords.energy_id == energy_id).first()
+    if not energy_record:
+        raise HTTPException(status_code=404, detail="Energy record not found.")
+
+    old_value = f"{energy_record.energy_generated}, {energy_record.unit_of_measurement}, {energy_record.updated_at}, {energy_record.power_plant_id}, {remarks}"
+
+    # Step 2: Get latest status
     latest_status = (
         db.query(RecordStatus)
         .filter(RecordStatus.record_id == energy_id)
         .order_by(RecordStatus.status_timestamp.desc())
         .first()
     )
-    current_status = latest_status.status_id if latest_status else None
-    new_status = "URH" if current_status in ['FRH', 'URH'] else "URS"
 
+    if not latest_status:
+        raise HTTPException(status_code=404, detail="Record status not found.")
 
-    # update
+    current_status = latest_status.status_id
+    new_status = "URH" if current_status in ["FRH", "URH"] else "URS"
+
     update_stmt = (
         update(EnergyRecords)
         .where(EnergyRecords.energy_id == energy_id)
         .values(
-            energy_generated = energyGenerated,
-            unit_of_measurement = metric,
-            updated_at = parsed_date,
-            power_plant_id = powerPlant
+            energy_generated=energyGenerated,
+            unit_of_measurement=metric,
+            updated_at=parsed_date,
+            power_plant_id=powerPlant
         )
     )
-
 
     try:
         db.execute(update_stmt)
 
-        # Step 4: Update the existing RecordStatus
         latest_status.status_id = new_status
         latest_status.status_timestamp = datetime.now()
         latest_status.remarks = remarks
 
         db.commit()
+
         db.execute(text("CALL silver.load_csv_silver();"))
         db.commit()
+
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="energy_records",
+            record_id=energy_id,
+            action_type="edit",
+            old_value=old_value,
+            new_value=f"{energyGenerated}, {metric}, {parsed_date}, {powerPlant}, {remarks}",
+            description=f"Edited energy record {energy_id} with new values."
+        )
+
         return {"message": "Energy record updated successfully."}
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
 
 

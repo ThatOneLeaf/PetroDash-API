@@ -5,6 +5,17 @@ from sqlalchemy.orm import Session
 from .dependencies import get_db
 from .services.auth import AuthService, User, oauth2_scheme
 
+def get_user_info(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    """
+    Dependency that gets current user information.
+    """
+    current_user = AuthService.get_current_user(token, db)
+    current_user = AuthService.get_current_active_user(current_user)
+    return current_user
+
 def get_current_user_with_roles(*required_roles):
     """
     Dependency that gets current user and checks for required roles.
@@ -63,6 +74,21 @@ def create_role_decorator(role_id: str):
             # Handle sync functions
             @wraps(func)
             def sync_wrapper(*args, current_user: User = Depends(get_current_user_with_roles(role_id)), **kwargs):
+                return func(*args, **kwargs)
+            return sync_wrapper
+    return decorator
+
+def allow_roles(*role_ids):
+    """Decorator for allowing multiple roles access"""
+    def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, current_user: User = Depends(get_current_user_with_roles(*role_ids)), **kwargs):
+                return await func(*args, **kwargs)
+            return async_wrapper
+        else:
+            @wraps(func)
+            def sync_wrapper(*args, current_user: User = Depends(get_current_user_with_roles(*role_ids)), **kwargs):
                 return func(*args, **kwargs)
             return sync_wrapper
     return decorator
