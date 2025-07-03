@@ -69,6 +69,9 @@ from app.reference.models import CompanyMain
 from ..bronze.models import TableType
 from ..template.envi_template_config import TEMPLATE_DEFINITIONS
 from ..utils.envi_template_utils import create_excel_template, create_all_templates, get_table_mapping
+from ..auth_decorators import get_user_info
+from ..services.audit_trail import append_audit_trail
+from ..services.auth import User
 
 router = APIRouter()
 
@@ -872,7 +875,7 @@ def get_hazard_waste_disposed_by_id(hwd_id: str, db: Session = Depends(get_db)):
 #====================================SINGLE ADD RECORDS (ENVI)====================================
 #---WATER ABSTRACTION---
 @router.post("/single_upload_water_abstraction")
-def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
+def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single water abstraction record")
         CURRENT_YEAR = datetime.now().year
@@ -919,7 +922,7 @@ def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
         if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
-        record = {
+        record_data = {
             "company_id": data["company_id"].strip(),
             "year": int(data["year"]),
             "month": data["month"],
@@ -928,7 +931,30 @@ def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
             "unit_of_measurement": data["unit_of_measurement"].strip(),
         }
 
-        insert_create_water_abstraction(db, record)
+        record = insert_create_water_abstraction(db, record_data)
+        
+        # Add audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="water_abstraction",
+            record_id=record.wa_id,
+            action_type="insert",
+            old_value="",
+            new_value=record.volume,
+            description="Inserted single water abstraction record"
+        )
+
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=record.wa_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
 
         return {"message": "1 record successfully inserted."}
 
@@ -940,7 +966,7 @@ def single_upload_water_abstraction(data: dict, db: Session = Depends(get_db)):
 
 #---WATER-DISCHARGE---
 @router.post("/single_upload_water_discharge")
-def single_upload_water_discharge(data: dict, db: Session = Depends(get_db)):
+def single_upload_water_discharge(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single water discharge record")
         CURRENT_YEAR = datetime.now().year
@@ -964,7 +990,7 @@ def single_upload_water_discharge(data: dict, db: Session = Depends(get_db)):
         if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
-        record = {
+        record_data = {
             "company_id": data["company_id"].strip(),
             "year": int(data["year"]),
             "quarter": data["quarter"],
@@ -972,7 +998,30 @@ def single_upload_water_discharge(data: dict, db: Session = Depends(get_db)):
             "unit_of_measurement": data["unit_of_measurement"].strip()
         }
 
-        insert_create_water_discharge(db, record)
+        record = insert_create_water_discharge(db, record_data)
+        
+        # Add audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="water_discharge",
+            record_id=record.wd_id,
+            action_type="insert",
+            old_value="",
+            new_value=record.volume,
+            description="Inserted single water discharge record"
+        )
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=record.wd_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
+        
         return {"message": "1 water discharge record successfully inserted."}
 
     except HTTPException:
@@ -983,7 +1032,7 @@ def single_upload_water_discharge(data: dict, db: Session = Depends(get_db)):
 
 #---WATER-CONSUMPTION---
 @router.post("/single_upload_water_consumption")
-def single_upload_water_consumption(data: dict, db: Session = Depends(get_db)):
+def single_upload_water_consumption(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single water consumption record")
         CURRENT_YEAR = datetime.now().year
@@ -1007,7 +1056,7 @@ def single_upload_water_consumption(data: dict, db: Session = Depends(get_db)):
         if not isinstance(data["unit_of_measurement"], str) or not data["unit_of_measurement"].strip():
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
-        record = {
+        record_data = {
             "company_id": data["company_id"].strip(),
             "year": int(data["year"]),
             "quarter": data["quarter"],
@@ -1015,7 +1064,30 @@ def single_upload_water_consumption(data: dict, db: Session = Depends(get_db)):
             "unit_of_measurement": data["unit_of_measurement"].strip()
         }
 
-        insert_create_water_consumption(db, record)
+        record = insert_create_water_consumption(db, record_data)
+        
+        # Add audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="water_consumption",
+            record_id=record.wc_id,
+            action_type="insert",
+            old_value="",
+            new_value=record.volume,
+            description="Inserted single water consumption record"
+        )
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=record.wc_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
+        
         return {"message": "1 water consumption record successfully inserted."}
 
     except HTTPException:
@@ -1026,7 +1098,7 @@ def single_upload_water_consumption(data: dict, db: Session = Depends(get_db)):
 
 #---ELECTRIC-CONSUMPTION---
 @router.post("/single_upload_electric_consumption")
-def single_upload_electric_consumption(data: dict, db: Session = Depends(get_db)):
+def single_upload_electric_consumption(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single electric consumption record")
         CURRENT_YEAR = datetime.now().year
@@ -1053,7 +1125,7 @@ def single_upload_electric_consumption(data: dict, db: Session = Depends(get_db)
         if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
             raise HTTPException(status_code=422, detail="Invalid year")
 
-        record = {
+        record_data = {
             "company_id": data["company_id"].strip(),
             "source": data["source"].strip(),
             "unit_of_measurement": data["unit_of_measurement"].strip(),
@@ -1062,7 +1134,30 @@ def single_upload_electric_consumption(data: dict, db: Session = Depends(get_db)
             "year": int(data["year"]),
         }
 
-        insert_create_electric_consumption(db, record)
+        record = insert_create_electric_consumption(db, record_data)
+        
+        # Add audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="electric_consumption",
+            record_id=record.ec_id,
+            action_type="insert",
+            old_value="",
+            new_value=record.consumption,
+            description="Inserted single electric consumption record"
+        )
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=record.ec_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
+        
         return {"message": "1 electric consumption record successfully inserted."}
 
     except HTTPException:
@@ -1073,7 +1168,7 @@ def single_upload_electric_consumption(data: dict, db: Session = Depends(get_db)
 
 #---DIESEL-CONSUMPTION---
 @router.post("/single_upload_diesel_consumption")
-def single_upload_diesel_consumption(data: dict, db: Session = Depends(get_db)):
+def single_upload_diesel_consumption(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single diesel consumption record")
         required_fields = ['company_id', 'cp_id', 'unit_of_measurement', 'consumption', 'date']
@@ -1098,7 +1193,7 @@ def single_upload_diesel_consumption(data: dict, db: Session = Depends(get_db)):
         except ValueError:
             raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
 
-        record = {
+        record_data = {
             "company_id": data["company_id"].strip(),
             "cp_id": data["cp_id"].strip(),
             "unit_of_measurement": data["unit_of_measurement"].strip(),
@@ -1106,7 +1201,30 @@ def single_upload_diesel_consumption(data: dict, db: Session = Depends(get_db)):
             "date": date_parsed
         }
 
-        insert_create_diesel_consumption(db, record)
+        record = insert_create_diesel_consumption(db, record_data)
+        
+        # Add audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="diesel_consumption",
+            record_id=record.dc_id,
+            action_type="insert",
+            old_value="",
+            new_value=record.consumption,
+            description="Inserted single diesel consumption record"
+        )
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=record.dc_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
+        
         return {"message": "1 diesel consumption record successfully inserted."}
 
     except HTTPException:
@@ -1117,7 +1235,7 @@ def single_upload_diesel_consumption(data: dict, db: Session = Depends(get_db)):
 
 #---NON-HAZARD-WASTE---
 @router.post("/single_upload_non_hazard_waste")
-def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
+def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single non-hazard waste record")
         CURRENT_YEAR = datetime.now().year
@@ -1166,7 +1284,7 @@ def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
                        f"Expected quarter is '{expected_quarter}'."
             )
 
-        record = {
+        record_data = {
             "company_id": data["company_id"].strip(),
             "metrics": data["metrics"].strip(),
             "unit_of_measurement": data["unit_of_measurement"].strip(),
@@ -1176,7 +1294,30 @@ def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
             "year": int(data["year"]),
         }
 
-        insert_create_non_hazard_waste(db, record)
+        record = insert_create_non_hazard_waste(db, record_data)
+        
+        # Add audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="non_hazard_waste",
+            record_id=record.nhw_id,
+            action_type="insert",
+            old_value="",
+            new_value=record.waste,
+            description="Inserted single non-hazard waste record"
+        )
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=record.nhw_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
+        
         return {"message": "1 non-hazard waste record successfully inserted."}
 
     except HTTPException:
@@ -1187,7 +1328,7 @@ def single_upload_non_hazard_waste(data: dict, db: Session = Depends(get_db)):
 
 #---HAZARD-WASTE-GENERATED---
 @router.post("/single_upload_hazard_waste_generated")
-def single_upload_hazard_waste_generated(data: dict, db: Session = Depends(get_db)):
+def single_upload_hazard_waste_generated(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single hazard waste generated record")
         CURRENT_YEAR = datetime.now().year
@@ -1214,7 +1355,7 @@ def single_upload_hazard_waste_generated(data: dict, db: Session = Depends(get_d
         if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
             raise HTTPException(status_code=422, detail="Invalid year")
 
-        record = {
+        record_data = {
             "company_id": data["company_id"].strip(),
             "metrics": data["metrics"].strip(),
             "unit_of_measurement": data["unit_of_measurement"].strip(),
@@ -1223,7 +1364,30 @@ def single_upload_hazard_waste_generated(data: dict, db: Session = Depends(get_d
             "year": int(data["year"]),
         }
 
-        insert_create_hazard_waste_generated(db, record)
+        record = insert_create_hazard_waste_generated(db, record_data)
+        
+        # Add audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hazard_generated",
+            record_id=record.hwg_id,
+            action_type="insert",
+            old_value="",
+            new_value=record.waste_generated,
+            description="Inserted single hazard waste generated record"
+        )
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=record.hwg_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
+        
         return {"message": "1 hazard waste generated record successfully inserted."}
 
     except HTTPException:
@@ -1234,7 +1398,7 @@ def single_upload_hazard_waste_generated(data: dict, db: Session = Depends(get_d
 
 #---HAZARD-WASTE-DISPOSED---
 @router.post("/single_upload_hazard_waste_disposed")
-def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db)):
+def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single hazard waste disposed record")
         CURRENT_YEAR = datetime.now().year
@@ -1258,7 +1422,7 @@ def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db
         if not isinstance(data["year"], (int, float)) or not (1900 <= int(data["year"]) <= CURRENT_YEAR + 1):
             raise HTTPException(status_code=422, detail="Invalid year")
 
-        record = {
+        record_data = {
             "company_id": data["company_id"].strip(),
             "metrics": data["metrics"].strip(),
             "unit_of_measurement": data["unit_of_measurement"].strip(),
@@ -1266,7 +1430,30 @@ def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db
             "year": int(data["year"]),
         }
 
-        insert_create_hazard_waste_disposed(db, record)
+        record = insert_create_hazard_waste_disposed(db, record_data)
+        
+        # Add audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hazard_disposed",
+            record_id=record.hwd_id,
+            action_type="insert",
+            old_value="",
+            new_value=record.waste_disposed,
+            description="Inserted single hazard waste disposed record"
+        )
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=record.hwd_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
+        
         return {"message": "1 hazard waste disposed record successfully inserted."}
 
     except HTTPException:
@@ -1279,7 +1466,7 @@ def single_upload_hazard_waste_disposed(data: dict, db: Session = Depends(get_db
 #====================================BULK ADD RECORDS (ENVI)====================================
 # WATER ABSTRACTION BULK UPLOAD
 @router.post("/bulk_upload_water_abstraction")
-def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1379,8 +1566,42 @@ def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = De
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_water_abstractions(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        records = bulk_create_water_abstractions(db, rows)
+        
+        # Prepare bulk audit entries
+        def get_water_abstraction_audit_data(record):
+            return [
+                {
+                    "target_table": "water_abstraction",
+                    "record_id": record.wa_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": str(record.volume),
+                    "description": "Inserted bulk water abstraction record"
+                },
+                {
+                    "target_table": "record_status",
+                    "record_id": record.wa_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": "URS",
+                    "description": "Newly inserted record"
+                }
+            ]
+        
+        # Collect all audit entries
+        audit_entries = []
+        for record in records:
+            record_audits = get_water_abstraction_audit_data(record)
+            for audit_data in record_audits:
+                audit_data["account_id"] = str(user_info.account_id)
+                audit_entries.append(audit_data)
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+        
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -1390,7 +1611,7 @@ def bulk_upload_water_abstraction(file: UploadFile = File(...), db: Session = De
     
 # DIESEL CONSUMPTION BULK UPLOAD
 @router.post("/bulk_upload_diesel_consumption")
-def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1506,100 +1727,37 @@ def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = D
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_diesel_consumption(db, rows)
-        return {"message": f"{count} records successfully inserted."}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-        valid_company_ids = db.query(CompanyMain.company_id).all()
-        valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
-
-        # Get valid units of measurement from database
-        valid_units = db.query(EnviWaterAbstraction.unit_of_measurement).all()  # Adjust table/column names as needed
-        valid_units_set = {unit[0] for unit in valid_units}
+        records = bulk_create_diesel_consumption(db, rows)
         
-        # Define month to quarter mapping
-        month_to_quarter = {
-            "January": "Q1", "February": "Q1", "March": "Q1",
-            "April": "Q2", "May": "Q2", "June": "Q2",
-            "July": "Q3", "August": "Q3", "September": "Q3",
-            "October": "Q4", "November": "Q4", "December": "Q4"
-        }
-
-        # data cleaning & row-level validation
-        rows = []
-        validation_errors = []
-        CURRENT_YEAR = datetime.now().year
-        
-        for i, row in df.iterrows():
-            row_number = i + 2  # Excel row number (accounting for header)
-            
-            # Company ID validation
-            if not isinstance(row["company_id"], str) or not row["company_id"].strip():
-                validation_errors.append(f"Row {row_number}: Invalid company_id")
-                continue
-
-            company_id_stripped = row["company_id"].strip()
-            if company_id_stripped not in valid_company_ids_set:
-                validation_errors.append(f"Row {row_number}: Company ID '{company_id_stripped}' does not exist in CompanyMain. Valid company IDs: {', '.join(sorted(valid_company_ids_set))}")
-                continue
-
-            if not isinstance(row["year"], (int, float)) or not (1900 <= int(row["year"]) <= CURRENT_YEAR + 1):
-                validation_errors.append(f"Row {row_number}: Invalid year")
-                continue
-
-            if row["month"] not in month_to_quarter.keys():
-                validation_errors.append(f"Row {row_number}: Invalid month '{row['month']}'")
-                continue
-
-            if row["quarter"] not in {"Q1", "Q2", "Q3", "Q4"}:
-                validation_errors.append(f"Row {row_number}: Invalid quarter '{row['quarter']}'")
-                continue
-
-            if not isinstance(row["volume"], (int, float)) or row["volume"] < 0:
-                validation_errors.append(f"Row {row_number}: Invalid volume")
-                continue
-
-            if not isinstance(row["unit_of_measurement"], str) or not row["unit_of_measurement"].strip():
-                validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
-                continue
-
-            # NEW VALIDATION 1: Check if unit_of_measurement exists in database
-            unit_stripped = row["unit_of_measurement"].strip()
-            if unit_stripped not in valid_units_set:
-                validation_errors.append(f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}")
-                continue
-
-            # NEW VALIDATION 2: Check if month and quarter match
-            expected_quarter = month_to_quarter[row["month"]]
-            if row["quarter"] != expected_quarter:
-                validation_errors.append(f"Row {row_number}: Month '{row['month']}' should be in quarter '{expected_quarter}', but '{row['quarter']}' was provided")
-                continue
-
-            # If all validations pass, add to rows
-            rows.append({
-                "company_id": company_id_stripped,
-                "year": int(row["year"]),
-                "month": row["month"],
-                "quarter": row["quarter"],
-                "volume": float(row["volume"]),
-                "unit_of_measurement": unit_stripped,
+        # Prepare bulk audit entries
+        audit_entries = []
+        for record in records:
+            # Main record audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "diesel_consumption",
+                "record_id": record.dc_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": str(record.consumption),
+                "description": "Inserted bulk diesel consumption record"
             })
-
-        # If there are validation errors, return them
-        if validation_errors:
-            error_message = "Data validation failed:\n" + "\n".join(validation_errors)
-            raise HTTPException(status_code=422, detail=error_message)
-
-        # If no validation errors, proceed with bulk insert
-        if not rows:
-            raise HTTPException(status_code=400, detail="No valid data rows found to insert")
-
-        count = bulk_create_water_abstractions(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+            # Record status audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "record_status",
+                "record_id": record.dc_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": "URS",
+                "description": "Newly inserted record"
+            })
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+        
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -1609,7 +1767,7 @@ def bulk_upload_diesel_consumption(file: UploadFile = File(...), db: Session = D
 
 # WATER DISCHARGE BULK UPLOAD
 @router.post("/bulk_upload_water_discharge")
-def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1629,7 +1787,7 @@ def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depe
         valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
 
         # Get valid units of measurement from database
-        valid_units = db.query(EnviWaterDischarge.unit_of_measurement).all()  # Adjust table/column names as needed
+        valid_units = db.query(EnviWaterDischarge.unit_of_measurement).all()
         valid_units_set = {unit[0] for unit in valid_units}
 
         # data cleaning & row-level validation
@@ -1666,7 +1824,7 @@ def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depe
                 validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
                 continue
 
-            # NEW VALIDATION: Check if unit_of_measurement exists in database
+            # Unit validation
             unit_stripped = row["unit_of_measurement"].strip()
             if unit_stripped not in valid_units_set:
                 validation_errors.append(f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}")
@@ -1690,8 +1848,37 @@ def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depe
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_water_discharge(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        records = bulk_create_water_discharge(db, rows)
+        
+        # Prepare bulk audit entries
+        audit_entries = []
+        for record in records:
+            # Main record audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "water_discharge",
+                "record_id": record.wd_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": str(record.volume),
+                "description": "Inserted bulk water discharge record"
+            })
+            # Record status audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "record_status",
+                "record_id": record.wd_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": "URS",
+                "description": "Newly inserted record"
+            })
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+        
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -1701,7 +1888,7 @@ def bulk_upload_water_discharge(file: UploadFile = File(...), db: Session = Depe
 
 # WATER CONSUMPTION BULK UPLOAD
 @router.post("/bulk_upload_water_consumption")
-def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1721,7 +1908,7 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
         valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
 
         # Get valid units of measurement from database
-        valid_units = db.query(EnviWaterConsumption.unit_of_measurement).all()  # Adjust table/column names as needed
+        valid_units = db.query(EnviWaterConsumption.unit_of_measurement).all()
         valid_units_set = {unit[0] for unit in valid_units}
 
         # data cleaning & row-level validation
@@ -1758,7 +1945,7 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
                 validation_errors.append(f"Row {row_number}: Invalid unit_of_measurement")
                 continue
 
-            # NEW VALIDATION: Check if unit_of_measurement exists in database
+            # Unit validation
             unit_stripped = row["unit_of_measurement"].strip()
             if unit_stripped not in valid_units_set:
                 validation_errors.append(f"Row {row_number}: Unit of measurement '{unit_stripped}' does not exist in database. Valid units: {', '.join(sorted(valid_units_set))}")
@@ -1782,8 +1969,37 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_water_consumption(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        records = bulk_create_water_consumption(db, rows)
+        
+        # Prepare bulk audit entries
+        audit_entries = []
+        for record in records:
+            # Main record audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "water_consumption",
+                "record_id": record.wc_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": str(record.volume),
+                "description": "Inserted bulk water consumption record"
+            })
+            # Record status audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "record_status",
+                "record_id": record.wc_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": "URS",
+                "description": "Newly inserted record"
+            })
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+        
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -1793,7 +2009,7 @@ def bulk_upload_water_consumption(file: UploadFile = File(...), db: Session = De
 
 # ELECTRIC CONSUMPTION BULK UPLOAD
 @router.post("/bulk_upload_electric_consumption")
-def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1813,11 +2029,11 @@ def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session =
         valid_company_ids_set = {company_id[0] for company_id in valid_company_ids}
 
         # Get valid units of measurement from database
-        valid_units = db.query(EnviElectricConsumption.unit_of_measurement).all()  # Adjust table/column names as needed
+        valid_units = db.query(EnviElectricConsumption.unit_of_measurement).all()
         valid_units_set = {unit[0] for unit in valid_units}
         
         # Get valid sources from database
-        valid_sources = db.query(EnviElectricConsumption.source).all()  # Adjust table/column names as needed
+        valid_sources = db.query(EnviElectricConsumption.source).all()
         valid_sources_set = {source[0] for source in valid_sources}
 
         # data cleaning & row-level validation
@@ -1894,18 +2110,47 @@ def bulk_upload_electric_consumption(file: UploadFile = File(...), db: Session =
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_electric_consumption(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        records = bulk_create_electric_consumption(db, rows)
+        
+        # Prepare bulk audit entries
+        audit_entries = []
+        for record in records:
+            # Main record audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "electric_consumption",
+                "record_id": record.ec_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": str(record.consumption),
+                "description": "Inserted bulk electric consumption record"
+            })
+            # Record status audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "record_status",
+                "record_id": record.ec_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": "URS",
+                "description": "Newly inserted record"
+            })
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+        
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-
+    
 # NON-HAZARD WASTE BULK UPLOAD
 @router.post("/bulk_upload_non_hazard_waste")
-def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
 
@@ -2015,8 +2260,37 @@ def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Dep
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_non_hazard_waste(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        records = bulk_create_non_hazard_waste(db, rows)
+        
+        # Prepare bulk audit entries
+        audit_entries = []
+        for record in records:
+            # Main record audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "non_hazard_waste",
+                "record_id": record.nhw_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": str(record.waste),
+                "description": "Inserted bulk non-hazard waste record"
+            })
+            # Record status audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "record_status",
+                "record_id": record.nhw_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": "URS",
+                "description": "Newly inserted record"
+            })
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+        
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -2026,7 +2300,7 @@ def bulk_upload_non_hazard_waste(file: UploadFile = File(...), db: Session = Dep
 
 # HAZARD WASTE GENERATED BULK UPLOAD
 @router.post("/bulk_upload_hazard_waste_generated")
-def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -2116,8 +2390,37 @@ def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_hazard_waste_generated(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        records = bulk_create_hazard_waste_generated(db, rows)
+        
+        # Prepare bulk audit entries
+        audit_entries = []
+        for record in records:
+            # Main record audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "hazard_generated",
+                "record_id": record.hwg_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": str(record.waste_generated),
+                "description": "Inserted bulk hazard waste generated record"
+            })
+            # Record status audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "record_status",
+                "record_id": record.hwg_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": "URS",
+                "description": "Newly inserted record"
+            })
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+        
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -2126,7 +2429,7 @@ def bulk_upload_hazard_waste_generated(file: UploadFile = File(...), db: Session
         raise HTTPException(status_code=500, detail=str(e))
     
 @router.post("/bulk_upload_hazard_waste_disposed")
-def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -2213,8 +2516,37 @@ def bulk_upload_hazard_waste_disposed(file: UploadFile = File(...), db: Session 
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = bulk_create_hazard_waste_disposed(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        records = bulk_create_hazard_waste_disposed(db, rows)
+        
+        # Prepare bulk audit entries
+        audit_entries = []
+        for record in records:
+            # Main record audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "hazard_disposed",
+                "record_id": record.hwd_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": str(record.waste_disposed),
+                "description": "Inserted bulk hazard waste disposed record"
+            })
+            # Record status audit
+            audit_entries.append({
+                "account_id": str(user_info.account_id),
+                "target_table": "record_status",
+                "record_id": record.hwd_id,
+                "action_type": "insert",
+                "old_value": "",
+                "new_value": "URS",
+                "description": "Newly inserted record"
+            })
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+        
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise

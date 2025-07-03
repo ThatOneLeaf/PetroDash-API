@@ -945,7 +945,7 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
 
-    return len(records)
+    return records
 
 def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1045,7 +1045,7 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return len(records)
+    return records
 
 def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1145,7 +1145,7 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return len(records)
+    return records
 
 def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1246,7 +1246,7 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return len(records)
+    return records
 
 def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1348,7 +1348,7 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return len(records)
+    return records
 
 def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1449,7 +1449,7 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return len(records)
+    return records
 
 def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1549,7 +1549,7 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return len(records)
+    return records
 
 def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1649,7 +1649,7 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return len(records)
+    return records
 
 # ====================================== EDIT ENVI RECORD ======================================
 def update_water_abstraction(db: Session, wa_id: str, data: dict):
