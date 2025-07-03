@@ -1690,6 +1690,7 @@ def change_status(
     action: str = Form(...),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     try:
         return process_status_change(
@@ -1698,7 +1699,8 @@ def change_status(
             checker_id=checker_id,
             remarks=remarks,
             action=action,
-            current_user=current_user
+            current_user=current_user,
+            user_info=user_info
         )
     except HTTPException as http_err:
         raise http_err
