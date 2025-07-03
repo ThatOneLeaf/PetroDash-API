@@ -476,12 +476,12 @@ def get_help_investments(
         if where_conditions:
             where_clause = "WHERE " + " AND ".join(where_conditions) + " AND (cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%')"
         else:
-            where_clause = "WHERE cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%' AND csl.status_id = 'APP'"
+            where_clause = "WHERE (cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%') AND csl.status_id = 'APP'"
 
         result = db.execute(text(f"""
             SELECT 
                 cprog.program_name,
-                SUM(project_expenses) AS "project_investments",
+                SUM(project_expenses) AS "program_investments",
                 cact.date_updated
             FROM silver.csr_activity AS cact
             LEFT JOIN silver.csr_projects AS cproj
@@ -547,7 +547,7 @@ def get_help_investments(
         if where_conditions:
             where_clause = "WHERE " + " AND ".join(where_conditions) + " AND (cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%')"
         else:
-            where_clause = "WHERE cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%' AND csl.status_id = 'APP'"
+            where_clause = "WHERE (cact.project_id LIKE 'HE%' OR cact.project_id LIKE 'ED%' OR cact.project_id LIKE 'LI%') AND csl.status_id = 'APP'"
 
         result = db.execute(text(f"""
             SELECT 
