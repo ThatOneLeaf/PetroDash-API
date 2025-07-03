@@ -301,7 +301,7 @@ def get_csr_activity_specific(
 def get_csr_activities(
     year: Optional[int] = None,
     company_id: Optional[str] = None,
-    program_id: Optional[str] = None,
+    # program_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -311,58 +311,100 @@ def get_csr_activities(
     try:
         logging.info(f"Executing CSR activities query with filters - year: {year}, company_id: {company_id}")
         
-        where_conditions = []
-        params = {}
-        
-        if year:
-            where_conditions.append("ca.project_year = :year")
-            params['year'] = year
+        if not year and not company_id:
+            where_conditions = []
+            params = {}
+                
+            if company_id:
+                where_conditions.append("ca.company_id = :company_id")
+                params['company_id'] = company_id
             
-        if company_id:
-            where_conditions.append("ca.company_id = :company_id")
-            params['company_id'] = company_id
-        
-        where_clause = ""
-        if where_conditions:
-            where_clause = "WHERE " + " AND ".join(where_conditions) + " AND (ca.project_id LIKE 'HE%' OR ca.project_id LIKE 'ED%' OR ca.project_id LIKE 'LI%')"
+            where_clause = ""
+            if where_conditions:
+                where_clause = "WHERE " + " AND ".join(where_conditions) + " AND (ca.project_id LIKE 'HE%' OR ca.project_id LIKE 'ED%' OR ca.project_id LIKE 'LI%') AND rs.status_id = 'APP'"
+            else:
+                where_clause = "WHERE (ca.project_id LIKE 'HE%' OR ca.project_id LIKE 'ED%' OR ca.project_id LIKE 'LI%') AND rs.status_id = 'APP'"
+
+            result = db.execute(text(f"""
+                SELECT 
+                    ca.project_id,
+                    cp.project_name,
+                    SUM(csr_report) AS total_csr_report
+                FROM silver.csr_activity ca
+                JOIN ref.company_main cm ON ca.company_id = cm.company_id
+                JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
+                JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
+                JOIN public.record_status rs ON ca.csr_id = rs.record_id
+                WHERE project_year >= 2024
+                AND (ca.project_id LIKE 'HE%' OR ca.project_id LIKE 'ED%' OR ca.project_id LIKE 'LI%')
+                AND rs.status_id = 'APP'
+                GROUP BY ca.project_id, cp.project_name
+            """), params)
+
+            data = [
+                {
+                    'projectId': row.project_id,
+                    'projectName': row.project_name,
+                    'csrReport': float(row.total_csr_report) if row.total_csr_report else 0,
+                }
+                for row in result
+            ]
+
         else:
-            where_clause = "WHERE (ca.project_id LIKE 'HE%' OR ca.project_id LIKE 'ED%' OR ca.project_id LIKE 'LI%') AND rs.status_id = 'APP'"
+            where_conditions = []
+            params = {}
+            
+            if year:
+                where_conditions.append("ca.project_year = :year")
+                params['year'] = year
+                
+            if company_id:
+                where_conditions.append("ca.company_id = :company_id")
+                params['company_id'] = company_id
+            
+            where_clause = ""
+            if where_conditions:
+                where_clause = "WHERE " + " AND ".join(where_conditions) + " AND (ca.project_id LIKE 'HE%' OR ca.project_id LIKE 'ED%' OR ca.project_id LIKE 'LI%') AND rs.status_id = 'APP'"
+            else:
+                where_clause = "WHERE (ca.project_id LIKE 'HE%' OR ca.project_id LIKE 'ED%' OR ca.project_id LIKE 'LI%') AND rs.status_id = 'APP'"
+            
+            print(where_clause)
+            result = db.execute(text(f"""
+                SELECT 
+                    ca.company_id,
+                    cm.company_name,
+                    ca.project_id,
+                    cp.project_name,
+                    cp.program_id,
+                    pr.program_name,
+                    ca.project_year,
+                    SUM(csr_report) AS csr_report,
+                    ROUND(ca.project_expenses::numeric, 2) as project_expenses
+                FROM silver.csr_activity ca
+                JOIN ref.company_main cm ON ca.company_id = cm.company_id
+                JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
+                JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
+                JOIN public.record_status rs ON ca.csr_id = rs.record_id
+                {where_clause}
+                GROUP BY ca.company_id, cm.company_name, ca.project_id, cp.project_name, cp.program_id, pr.program_name, project_year, ca.project_expenses
+                ORDER BY project_year
+            """), params)
 
-        result = db.execute(text(f"""
-            SELECT 
-                ca.csr_id,
-                ca.company_id,
-                cm.company_name,
-                ca.project_id,
-                cp.project_name,
-                cp.program_id,
-                pr.program_name,
-                ca.project_year,
-                ROUND(ca.csr_report::numeric, 2) as csr_report,
-                ROUND(ca.project_expenses::numeric, 2) as project_expenses
-            FROM silver.csr_activity ca
-            JOIN ref.company_main cm ON ca.company_id = cm.company_id
-            JOIN silver.csr_projects cp ON ca.project_id = cp.project_id
-            JOIN silver.csr_programs pr ON cp.program_id = pr.program_id
-            JOIN public.record_status rs ON ca.csr_id = rs.record_id
-            {where_clause}
-        """), params)
-
-        data = [
-            {
-                'csrId': row.csr_id,
-                'companyId': row.company_id,
-                'companyName': row.company_name,
-                'programId': row.program_id,
-                'programName': row.program_name,
-                'projectId': row.project_id,
-                'projectName': row.project_name,
-                'projectYear': row.project_year,
-                'csrReport': float(row.csr_report) if row.csr_report else 0,
-                'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
-            }
-            for row in result
-        ]
+            data = [
+                {
+                    'companyId': row.company_id,
+                    'companyName': row.company_name,
+                    'programId': row.program_id,
+                    'programName': row.program_name,
+                    'projectId': row.project_id,
+                    'projectName': row.project_name,
+                    'projectYear': row.project_year,
+                    'csrReport': float(row.csr_report) if row.csr_report else 0,
+                    'projectExpenses': float(row.project_expenses) if row.project_expenses else 0,
+                }
+                for row in result
+            ]
+            print(data)
 
         logging.info(f"Query returned {len(data)} CSR activities")
         return data
