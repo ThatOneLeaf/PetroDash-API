@@ -209,3 +209,29 @@ def get_sources(
         logging.error(f"Error calling powerplant: {str(e)}")
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@router.get("/audit-trail", response_model=List[dict])
+def get_audit_trail(db: Session = Depends(get_db)):
+    """
+    Get all records from audit_trail table
+    """
+    try:
+        sql = text("""select
+                audit_id,
+                account.email,
+                target_table,
+                record_id,
+                action_type,
+                old_value,
+                new_value,
+                audit_timestamp,
+                description
+                from audit_trail
+                left join account on account.account_id = audit_trail.account_id""")
+        result = db.execute(sql)
+        data = [dict(row._mapping) for row in result]
+        return data
+    except Exception as e:
+        logging.error(f"Error fetching audit trail: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
