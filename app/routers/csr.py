@@ -770,7 +770,8 @@ def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_d
 
         required_columns = {'company_id', 'project_id', 'project_year', 'csr_report', 'project_expenses'}
         if not required_columns.issubset(df.columns):
-            return {"success": False, "message": f"Missing required fields: {required_columns - set(df.columns)}"}
+            # return {"success": False, "message": f"Missing required fields: {required_columns - set(df.columns)}"}
+            raise HTTPException(status_code=422, detail=f"Missing required fields: {required_columns - set(df.columns)}")
 
         rows = []
         validation_errors = []
