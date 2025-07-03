@@ -690,6 +690,70 @@ def get_capital_provider_payments(db: Session = Depends(get_db)):
         logging.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/check-value-generated/{year}")
+@office_checker_only
+def check_value_generated_exists(year: int, db: Session = Depends(get_db)):
+    """
+    Check if a value generated record exists for the given year
+    """
+    try:
+        result = db.execute(text("""
+            SELECT 1 FROM bronze.econ_value 
+            WHERE year = :year
+        """), {'year': year})
+        
+        exists = result.fetchone() is not None
+        
+        return {"exists": exists, "year": year}
+        
+    except Exception as e:
+        logging.error(f"Error checking value generated record: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/check-expenditure/{comp}/{year}/{type}")
+@office_checker_only
+def check_expenditure_exists(comp: str, year: int, type: str, db: Session = Depends(get_db)):
+    """
+    Check if an expenditure record exists for the given company, year, and type
+    """
+    try:
+        result = db.execute(text("""
+            SELECT 1 FROM bronze.econ_expenditures 
+            WHERE company_id = :company_id AND year = :year AND type_id = :type_id
+        """), {
+            'company_id': comp,
+            'year': year,
+            'type_id': type
+        })
+        
+        exists = result.fetchone() is not None
+        
+        return {"exists": exists, "company": comp, "year": year, "type": type}
+        
+    except Exception as e:
+        logging.error(f"Error checking expenditure record: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/check-capital-provider/{year}")
+@office_checker_only
+def check_capital_provider_exists(year: int, db: Session = Depends(get_db)):
+    """
+    Check if a capital provider payment record exists for the given year
+    """
+    try:
+        result = db.execute(text("""
+            SELECT 1 FROM bronze.econ_capital_provider_payment 
+            WHERE year = :year
+        """), {'year': year})
+        
+        exists = result.fetchone() is not None
+        
+        return {"exists": exists, "year": year}
+        
+    except Exception as e:
+        logging.error(f"Error checking capital provider record: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/value-generated")
 @office_checker_only
 def create_value_generated(
