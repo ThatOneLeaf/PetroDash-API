@@ -3026,7 +3026,7 @@ async def export_excel(request: Request):
 
 @router.post("/edit_water_abstraction")
 def edit_water_abstraction(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         logging.info("Edit water abstraction record")
@@ -3084,6 +3084,11 @@ def edit_water_abstraction(
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
         wa_id = data["wa_id"]
+        
+        # Get old values before updating
+        old_record = db.query(EnviWaterAbstraction).filter(EnviWaterAbstraction.wa_id == wa_id).first()
+        old_value = f"company_id: {old_record.company_id}, year: {old_record.year}, month: {old_record.month}, quarter: {old_record.quarter}, volume: {old_record.volume}, unit: {old_record.unit_of_measurement}" if old_record else ""
+        
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
@@ -3094,6 +3099,20 @@ def edit_water_abstraction(
         }
 
         update_water_abstraction(db, wa_id, record_data)
+        
+        # Add audit trail
+        new_value = f"company_id: {company_id}, year: {data['year']}, month: {data['month']}, quarter: {data['quarter']}, volume: {data['volume']}, unit: {data['unit']}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="water_abstraction",
+            record_id=wa_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated water abstraction record"
+        )
+        
         return {"message": "Water abstraction record successfully updated."}
     except HTTPException:
         raise
@@ -3103,7 +3122,7 @@ def edit_water_abstraction(
 
 @router.post("/edit_water_discharge")
 def edit_water_discharge(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         logging.info("Edit water discharge record")
@@ -3140,6 +3159,11 @@ def edit_water_discharge(
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
         wd_id = data["wd_id"]
+        
+        # Get old values before updating
+        old_record = db.query(EnviWaterDischarge).filter(EnviWaterDischarge.wd_id == wd_id).first()
+        old_value = f"company_id: {old_record.company_id}, year: {old_record.year}, quarter: {old_record.quarter}, volume: {old_record.volume}, unit: {old_record.unit_of_measurement}" if old_record else ""
+        
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
@@ -3149,6 +3173,20 @@ def edit_water_discharge(
         }
 
         update_water_discharge(db, wd_id, record_data)
+        
+        # Add audit trail
+        new_value = f"company_id: {company_id}, year: {data['year']}, quarter: {data['quarter']}, volume: {data['volume']}, unit: {data['unit']}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="water_discharge",
+            record_id=wd_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated water discharge record"
+        )
+        
         return {"message": "Water discharge record successfully updated."}
     except HTTPException:
         raise
@@ -3158,7 +3196,7 @@ def edit_water_discharge(
     
 @router.post("/edit_water_consumption")
 def edit_water_consumption( 
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         logging.info("Edit water consumption record")
@@ -3195,6 +3233,11 @@ def edit_water_consumption(
             raise HTTPException(status_code=422, detail="Invalid unit_of_measurement")
 
         wc_id = data["wc_id"]
+        
+        # Get old values before updating
+        old_record = db.query(EnviWaterConsumption).filter(EnviWaterConsumption.wc_id == wc_id).first()
+        old_value = f"company_id: {old_record.company_id}, year: {old_record.year}, quarter: {old_record.quarter}, volume: {old_record.volume}, unit: {old_record.unit_of_measurement}" if old_record else ""
+        
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
@@ -3204,6 +3247,20 @@ def edit_water_consumption(
         }
 
         update_water_consumption(db, wc_id, record_data)
+        
+        # Add audit trail
+        new_value = f"company_id: {company_id}, year: {data['year']}, quarter: {data['quarter']}, volume: {data['volume']}, unit: {data['unit']}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="water_consumption",
+            record_id=wc_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated water consumption record"
+        )
+        
         return {"message": "Water consumption record successfully updated."}
     except HTTPException:
         raise
@@ -3213,7 +3270,7 @@ def edit_water_consumption(
     
 @router.post("/edit_electric_consumption")
 def edit_electric_consumption(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         logging.info("Edit electric consumption record")
@@ -3253,6 +3310,11 @@ def edit_electric_consumption(
             raise HTTPException(status_code=422, detail="Invalid consumption")
 
         ec_id = data["ec_id"]
+        
+        # Get old values before updating
+        old_record = db.query(EnviElectricConsumption).filter(EnviElectricConsumption.ec_id == ec_id).first()
+        old_value = f"company_id: {old_record.company_id}, year: {old_record.year}, quarter: {old_record.quarter}, source: {old_record.source}, unit: {old_record.unit_of_measurement}, consumption: {old_record.consumption}" if old_record else ""
+        
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
@@ -3263,6 +3325,20 @@ def edit_electric_consumption(
         }
 
         update_electric_consumption(db, ec_id, record_data)
+        
+        # Add audit trail
+        new_value = f"company_id: {company_id}, year: {data['year']}, quarter: {data['quarter']}, source: {data['source']}, unit: {data['unit']}, consumption: {data['consumption']}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="electric_consumption",
+            record_id=ec_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated electric consumption record"
+        )
+        
         return {"message": "Electric consumption record successfully updated."}
     except HTTPException:
         raise
@@ -3272,7 +3348,7 @@ def edit_electric_consumption(
     
 @router.post("/edit_non_hazard_waste")
 def edit_non_hazard_waste(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         logging.info("Edit non-hazard waste record")
@@ -3312,16 +3388,35 @@ def edit_non_hazard_waste(
             raise HTTPException(status_code=422, detail="Invalid waste")
 
         nhw_id = data["nhw_id"]
+        
+        # Get old values before updating
+        old_record = db.query(EnviNonHazardWaste).filter(EnviNonHazardWaste.nhw_id == nhw_id).first()
+        old_value = f"company_id: {old_record.company_id}, year: {old_record.year}, quarter: {old_record.quarter}, metrics: {old_record.metrics}, unit: {old_record.unit_of_measurement}, waste: {old_record.waste}" if old_record else ""
+        
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
             "quarter": data["quarter"],
             "metrics": data["metrics"].strip(),
             "unit_of_measurement": data["unit"].strip(),
-            "waste": float(data["waste"]),  # Map 'waste' to 'waste_generated'
+            "waste": float(data["waste"]),
         }
 
         update_non_hazard_waste(db, nhw_id, record_data)
+        
+        # Add audit trail
+        new_value = f"company_id: {company_id}, year: {data['year']}, quarter: {data['quarter']}, metrics: {data['metrics']}, unit: {data['unit']}, waste: {data['waste']}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="non_hazard_waste",
+            record_id=nhw_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated non-hazard waste record"
+        )
+        
         return {"message": "Non-hazard waste record successfully updated."}
     except HTTPException:
         raise
@@ -3331,7 +3426,7 @@ def edit_non_hazard_waste(
     
 @router.post("/edit_hazard_waste_generated")
 def edit_hazard_waste_generated(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         logging.info("Edit hazard waste generated record")
@@ -3371,6 +3466,11 @@ def edit_hazard_waste_generated(
             raise HTTPException(status_code=422, detail="Invalid waste_generated")
 
         hwg_id = data["hwg_id"]
+        
+        # Get old values before updating
+        old_record = db.query(EnviHazardWasteGenerated).filter(EnviHazardWasteGenerated.hwg_id == hwg_id).first()
+        old_value = f"company_id: {old_record.company_id}, year: {old_record.year}, quarter: {old_record.quarter}, metrics: {old_record.metrics}, unit: {old_record.unit_of_measurement}, waste_generated: {old_record.waste_generated}" if old_record else ""
+        
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
@@ -3381,6 +3481,20 @@ def edit_hazard_waste_generated(
         }
 
         update_hazard_waste_generated(db, hwg_id, record_data)
+        
+        # Add audit trail
+        new_value = f"company_id: {company_id}, year: {data['year']}, quarter: {data['quarter']}, metrics: {data['metrics']}, unit: {data['unit']}, waste_generated: {data['waste']}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hazard_generated",
+            record_id=hwg_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated hazard waste generated record"
+        )
+        
         return {"message": "Hazard waste generated record successfully updated."}
     except HTTPException:
         raise
@@ -3390,7 +3504,7 @@ def edit_hazard_waste_generated(
     
 @router.post("/edit_hazard_waste_disposed")
 def edit_hazard_waste_disposed(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         logging.info("Edit hazard waste disposed record")
@@ -3427,6 +3541,11 @@ def edit_hazard_waste_disposed(
             raise HTTPException(status_code=422, detail="Invalid waste_disposed")
 
         hwd_id = data["hwd_id"]
+        
+        # Get old values before updating
+        old_record = db.query(EnviHazardWasteDisposed).filter(EnviHazardWasteDisposed.hwd_id == hwd_id).first()
+        old_value = f"company_id: {old_record.company_id}, year: {old_record.year}, metrics: {old_record.metrics}, unit: {old_record.unit_of_measurement}, waste_disposed: {old_record.waste_disposed}" if old_record else ""
+        
         record_data = {
             "company_id": company_id,
             "year": int(data["year"]),
@@ -3436,6 +3555,20 @@ def edit_hazard_waste_disposed(
         }
 
         update_hazard_waste_disposed(db, hwd_id, record_data)
+        
+        # Add audit trail
+        new_value = f"company_id: {company_id}, year: {data['year']}, metrics: {data['metrics']}, unit: {data['unit']}, waste_disposed: {data['waste']}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hazard_disposed",
+            record_id=hwd_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated hazard waste disposed record"
+        )
+        
         return {"message": "Hazard waste disposed record successfully updated."}
     except HTTPException:
         raise
@@ -3445,7 +3578,7 @@ def edit_hazard_waste_disposed(
     
 @router.post("/edit_diesel_consumption")
 def edit_diesel_consumption(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         logging.info("Edit diesel consumption record")
@@ -3510,17 +3643,34 @@ def edit_diesel_consumption(
 
         year = parsed_date.year
         dc_id = data["dc_id"]
+        
+        # Get old values before updating
+        old_record = db.query(EnviDieselConsumption).filter(EnviDieselConsumption.dc_id == dc_id).first()
+        old_value = f"company_id: {old_record.company_id}, cp_id: {old_record.cp_id}, unit: {old_record.unit_of_measurement}, consumption: {old_record.consumption}, date: {old_record.date}" if old_record else ""
 
         record_data = {
             "company_id": company_id,
             "cp_id": cp_id,
             "unit_of_measurement": data["unit"].strip(),
             "consumption": float(data["consumption"]),
-            "date": parsed_date,
-            "year": year
+            "date": parsed_date
         }
 
         update_diesel_consumption(db, dc_id, record_data)
+        
+        # Add audit trail
+        new_value = f"company_id: {company_id}, cp_id: {cp_id}, unit: {data['unit']}, consumption: {data['consumption']}, date: {parsed_date}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="diesel_consumption",
+            record_id=dc_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated diesel consumption record"
+        )
+        
         return {"message": "Diesel consumption record successfully updated."}
 
     except HTTPException:
