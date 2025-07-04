@@ -669,8 +669,8 @@ def update_csr_activity_single(data: dict, db: Session = Depends(get_db), user_i
 
         update_csr_activity(db, record)
 
-        csr_id = data.get("csr_id")
-        old_record = None
+        csr_id = data["csr_id"]
+        get_old_record = None
         if csr_id:
             result = db.execute(text("""
                 SELECT *
@@ -678,15 +678,16 @@ def update_csr_activity_single(data: dict, db: Session = Depends(get_db), user_i
                 WHERE csr_id = :csr_id
                 LIMIT 1
             """), {"csr_id": csr_id})
-            old_record = result.fetchone()
+            get_old_record = result.fetchone()
 
         new_value = f"company_id: {data["company_id"]}, project_id: {data["project_id"]}, project_year: {data["project_year"]}, csr_report: {data["csr_report"]}, project_expenses: {data["project_expenses"]}, project_remarks: {data["project_remarks"]}"
+        old_record = f"company_id: {get_old_record[1]}, project_id: {get_old_record[2]}, project_year: {get_old_record[3]}, csr_report: {get_old_record[4]}, project_expenses: {get_old_record[5]}, project_remarks: {get_old_record[6]}"
 
         append_audit_trail(
             db=db,
             account_id=str(user_info.account_id),
             target_table="csr_activity",
-            record_id=record.csr_id,
+            record_id=csr_id,
             action_type="update",
             old_value=old_record,
             new_value=new_value,
@@ -702,7 +703,7 @@ def update_csr_activity_single(data: dict, db: Session = Depends(get_db), user_i
         return {"success": False, "message": str(e)}
 
 @router.post("/activities-single")
-def insert_csr_activity_single(data: dict, db: Session = Depends(get_db)):
+def insert_csr_activity_single(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single csr activity record")
         CURRENT_YEAR = datetime.now().year
@@ -806,7 +807,7 @@ async def download_help_activity_template():
     )
 
 @router.post("/help-activity-bulk")
-def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         # raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
         return {"success": False, "message": f"Invalid file format. Please upload an Excel file."}
