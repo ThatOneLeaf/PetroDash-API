@@ -106,6 +106,7 @@ def insert_csr_activity(db: Session, data: dict):
             model_class=CSRActivity,
             id_field="csr_id"
         )
+
     try:
         db.execute(text("""
             INSERT INTO bronze.csr_activity (
@@ -170,7 +171,7 @@ def insert_csr_activity(db: Session, data: dict):
         print(f"Error inserting checker status log: {e}")
         db.rollback()
 
-    return  {"message": "CSR Activity record created successfully"}
+    return  csr_id
 
 def update_csr_activity(db: Session, data: dict):
     csr_id = data.get("csr_id")
@@ -290,7 +291,7 @@ def bulk_upload_csr_activity(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
 
-    return len(records)
+    return records
 
 # ====================================== ENVIRONMENTAL DATA ====================================
 # ====================================== RETRIEVE DATA ====================================
@@ -945,7 +946,7 @@ def bulk_create_water_abstractions(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
 
-    return records
+    return len(records)
 
 def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1045,7 +1046,7 @@ def bulk_create_water_discharge(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return records
+    return len(records)
 
 def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1145,7 +1146,7 @@ def bulk_create_water_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return records
+    return len(records)
 
 def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1246,7 +1247,7 @@ def bulk_create_electric_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return records
+    return len(records)
 
 def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1348,7 +1349,7 @@ def bulk_create_non_hazard_waste(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return records
+    return len(records)
 
 def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1449,7 +1450,7 @@ def bulk_create_hazard_waste_generated(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return records
+    return len(records)
 
 def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1549,7 +1550,7 @@ def bulk_create_hazard_waste_disposed(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return records
+    return len(records)
 
 def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
     if not rows:
@@ -1649,7 +1650,7 @@ def bulk_create_diesel_consumption(db: Session, rows: list[dict]) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
         
-    return records
+    return len(records)
 
 # ====================================== EDIT ENVI RECORD ======================================
 def update_water_abstraction(db: Session, wa_id: str, data: dict):

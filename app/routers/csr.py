@@ -15,6 +15,9 @@ import io
 import math
 
 from ..dependencies import get_db
+from ..auth_decorators import require_role, office_checker_only, get_current_user_with_roles, get_user_info
+from ..services.audit_trail import append_audit_trail
+from ..services.auth import User
 
 router = APIRouter()
 
@@ -628,7 +631,7 @@ def get_help_investments(
 # ----------------------- POST METHODS ----------------------------
 
 @router.post("/activities-update")
-def update_csr_activity_single(data: dict, db: Session = Depends(get_db)):
+def update_csr_activity_single(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Update single csr activity record")
         CURRENT_YEAR = datetime.now().year
@@ -665,6 +668,30 @@ def update_csr_activity_single(data: dict, db: Session = Depends(get_db)):
         }
 
         update_csr_activity(db, record)
+
+        csr_id = data.get("csr_id")
+        old_record = None
+        if csr_id:
+            result = db.execute(text("""
+                SELECT *
+                FROM silver.csr_activity
+                WHERE csr_id = :csr_id
+                LIMIT 1
+            """), {"csr_id": csr_id})
+            old_record = result.fetchone()
+
+        new_value = f"company_id: {data["company_id"]}, project_id: {data["project_id"]}, project_year: {data["project_year"]}, csr_report: {data["csr_report"]}, project_expenses: {data["project_expenses"]}, project_remarks: {data["project_remarks"]}"
+
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="csr_activity",
+            record_id=record.csr_id,
+            action_type="update",
+            old_value=old_record,
+            new_value=new_value,
+            description="Updated CSR activity record"
+        )
 
         return {"success": True, "message": "1 record successfully inserted."}
 
@@ -709,7 +736,30 @@ def insert_csr_activity_single(data: dict, db: Session = Depends(get_db)):
             "project_expenses": data["project_expenses"],
             "project_remarks": data["project_remarks"]
         }
-        insert_csr_activity(db, record)
+
+        csr_id = insert_csr_activity(db, record)
+        new_value = f"csr_id: {csr_id}, company_id: {data["company_id"]}, project_id: {data["project_id"]}, project_year: {data["project_year"]}, csr_report: {data["csr_report"]}, project_expenses: {data["project_expenses"]}, project_remarks: {data["project_remarks"]}"
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="csr_activity",
+            record_id=csr_id,
+            action_type="insert",
+            old_value="",
+            new_value=new_value,
+            description="Inserted single CSR activity record"
+        )
+
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="record_status",
+            record_id=csr_id,
+            action_type="insert",
+            old_value="",
+            new_value="URS",
+            description="Newly inserted record",
+        )
 
         return {"success": True, "message": "1 record successfully inserted."}
 
@@ -825,8 +875,20 @@ def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_d
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
             # return {"message": f"No valid data rows found to insert"}
 
-        count = bulk_upload_csr_activity(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        record = bulk_upload_csr_activity(db, rows)
+
+        audit_entries = []
+        for record in records:
+            record_audits = get_water_abstraction_audit_data(record)
+            for audit_data in record_audits:
+                audit_data["account_id"] = str(user_info.account_id)
+                audit_entries.append(audit_data)
+        
+        # Bulk insert audit trail
+        from ..services.audit_trail import append_bulk_audit_trail
+        append_bulk_audit_trail(db, audit_entries)
+
+        return {"message": f"{len(records)} records successfully inserted."}
 
     except HTTPException:
         raise
