@@ -11,7 +11,9 @@ from fastapi.responses import StreamingResponse
 import time
 
 from ..dependencies import get_db
-from ..auth_decorators import require_role, office_checker_only, get_current_user_with_roles
+from ..auth_decorators import require_role, office_checker_only, get_current_user_with_roles, get_user_info
+from ..services.audit_trail import append_audit_trail
+from ..services.auth import User
 
 router = APIRouter()
 
@@ -139,7 +141,7 @@ def validate_type_id(type_id, db: Session):
         return False, f"Database error checking Type ID: {str(e)}"
 
 # Helper function for processing Excel imports
-async def process_excel_import(file: UploadFile, import_config: Dict, db: Session):
+async def process_excel_import(file: UploadFile, import_config: Dict, db: Session, user_info: User = None):
     """
     Process Excel file import with flexible column mapping and error handling
     All-or-nothing approach: if any row has validation errors, entire import is rejected
@@ -298,11 +300,27 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
         
         # PHASE 2: If all rows are valid, proceed with import
         success_count = 0
+        audit_entries = []
         
         for record_data in valid_records:
             try:
                 db.execute(text(import_config['insert_query']), record_data)
                 success_count += 1
+                
+                # Prepare audit trail entry if user_info is provided
+                if user_info:
+                    table_name = import_config.get('table_name', 'unknown')
+                    record_id = import_config.get('record_id_func', lambda x: str(x.get('year', 'unknown')))(record_data)
+                    audit_entries.append({
+                        'account_id': str(user_info.account_id),
+                        'target_table': table_name,
+                        'record_id': record_id,
+                        'action_type': 'bulk_add',
+                        'old_value': '',
+                        'new_value': str(record_data),
+                        'description': f'Bulk imported {table_name} record via Excel upload'
+                    })
+                    
             except Exception as insert_error:
                 # If there's an insert error after validation passed, rollback and report
                 db.rollback()
@@ -328,6 +346,12 @@ async def process_excel_import(file: UploadFile, import_config: Dict, db: Sessio
             db.execute(text("CALL silver.load_econ_silver()"))
             db.commit()
             time.sleep(0.5)
+            
+            # Log audit trails in bulk if user_info is provided
+            if user_info and audit_entries:
+                from ..services.audit_trail import append_bulk_audit_trail
+                append_bulk_audit_trail(db, audit_entries)
+                
         except Exception as silver_error:
             db.rollback()
             logging.error(f"Silver layer processing error: {str(silver_error)}")
@@ -758,7 +782,9 @@ def check_capital_provider_exists(year: int, db: Session = Depends(get_db)):
 @office_checker_only
 def create_value_generated(
     value_data: dict, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """
     Insert economic value generated data into bronze layer and process to silver
@@ -810,6 +836,18 @@ def create_value_generated(
         
         # Small delay to ensure data is fully processed
         time.sleep(0.5)
+        
+        # Log audit trail
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="econ_value",
+            record_id=str(value_data['year']),
+            action_type="insert",
+            old_value="",
+            new_value=f"Year: {value_data['year']}, Total Generated: {sum([float(value_data.get(k, 0) or 0) for k in ['electricitySales', 'oilRevenues', 'otherRevenues', 'interestIncome', 'shareInNetIncomeOfAssociate', 'miscellaneousIncome']])}",
+            description=f"Created economic value generated record for year {value_data['year']}"
+        )
         
         logging.info("Value generated record created and processed to silver layer successfully")
         
@@ -875,7 +913,9 @@ def get_value_generated_by_year(year: int, db: Session = Depends(get_db)):
 def update_value_generated(
     year: int, 
     value_data: dict, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """
     Update economic value generated data in bronze layer and process to silver
@@ -891,6 +931,13 @@ def update_value_generated(
         
         if not existing_record:
             raise HTTPException(status_code=404, detail=f"Value generated record not found for year {year}")
+        
+        # Get old values for audit trail
+        old_record = db.execute(text("""
+            SELECT * FROM bronze.econ_value WHERE year = :year
+        """), {'year': year}).fetchone()
+        
+        old_value = f"Year: {old_record.year}, ES: {old_record.electricity_sales}, OR: {old_record.oil_revenues}, OTR: {old_record.other_revenues}, II: {old_record.interest_income}, SINIOA: {old_record.share_in_net_income_of_associate}, MI: {old_record.miscellaneous_income}"
         
         # Update the record in bronze layer
         db.execute(text("""
@@ -921,6 +968,20 @@ def update_value_generated(
         # Small delay to ensure data is fully processed
         time.sleep(0.5)
         
+        # Log audit trail
+        new_value = f"Year: {year}, ES: {value_data.get('electricitySales', 0)}, OR: {value_data.get('oilRevenues', 0)}, OTR: {value_data.get('otherRevenues', 0)}, II: {value_data.get('interestIncome', 0)}, SINIOA: {value_data.get('shareInNetIncomeOfAssociate', 0)}, MI: {value_data.get('miscellaneousIncome', 0)}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="econ_value",
+            record_id=str(year),
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description=f"Updated economic value generated record for year {year}"
+        )
+        
         logging.info("Value generated record updated and processed to silver layer successfully")
         
         return {"message": "Value generated record updated successfully"}
@@ -937,7 +998,9 @@ def update_value_generated(
 @office_checker_only
 def create_expenditure(
     expenditure_data: dict, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """
     Insert economic expenditure data into bronze layer and process to silver
@@ -1004,6 +1067,21 @@ def create_expenditure(
         # Small delay to ensure data is fully processed
         time.sleep(0.5)
         
+        # Log audit trail
+        record_id = f"{expenditure_data['comp']}-{expenditure_data['year']}-{expenditure_data['type']}"
+        total_expenditure = sum([float(expenditure_data.get(k, 0) or 0) for k in ['government', 'localSupplierSpending', 'foreignSupplierSpending', 'employee', 'community', 'depreciation', 'depletion', 'others']])
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="econ_expenditures",
+            record_id=record_id,
+            action_type="insert",
+            old_value="",
+            new_value=f"Company: {expenditure_data['comp']}, Year: {expenditure_data['year']}, Type: {expenditure_data['type']}, Total: {total_expenditure}",
+            description=f"Created expenditure record for company {expenditure_data['comp']}, year {expenditure_data['year']}, type {expenditure_data['type']}"
+        )
+        
         logging.info("Expenditure record created and processed to silver layer successfully")
         
         return {"message": "Expenditure record created successfully"}
@@ -1021,7 +1099,9 @@ def update_expenditure(
     year: int, 
     type: str, 
     expenditure_data: dict, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """
     Update economic expenditure data in bronze layer and process to silver
@@ -1041,6 +1121,18 @@ def update_expenditure(
         
         if not existing_record:
             raise HTTPException(status_code=404, detail=f"Expenditure record not found for company {comp}, year {year}, type {type}")
+        
+        # Get old values for audit trail
+        old_record = db.execute(text("""
+            SELECT * FROM bronze.econ_expenditures 
+            WHERE company_id = :company_id AND year = :year AND type_id = :type_id
+        """), {
+            'company_id': comp,
+            'year': year,
+            'type_id': type
+        }).fetchone()
+        
+        old_value = f"Company: {comp}, Year: {year}, Type: {type}, GP: {old_record.government_payments}, LSS: {old_record.supplier_spending_local}, FSS: {old_record.supplier_spending_abroad}, EWB: {old_record.employee_wages_benefits}, CI: {old_record.community_investments}, D: {old_record.depreciation}, Dep: {old_record.depletion}, O: {old_record.others}"
         
         # Update the record in bronze layer
         db.execute(text("""
@@ -1077,6 +1169,21 @@ def update_expenditure(
         # Small delay to ensure data is fully processed
         time.sleep(0.5)
         
+        # Log audit trail
+        record_id = f"{comp}-{year}-{type}"
+        new_value = f"Company: {comp}, Year: {year}, Type: {type}, GP: {expenditure_data.get('government', 0)}, LSS: {expenditure_data.get('localSupplierSpending', 0)}, FSS: {expenditure_data.get('foreignSupplierSpending', 0)}, EWB: {expenditure_data.get('employee', 0)}, CI: {expenditure_data.get('community', 0)}, D: {expenditure_data.get('depreciation', 0)}, Dep: {expenditure_data.get('depletion', 0)}, O: {expenditure_data.get('others', 0)}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="econ_expenditures",
+            record_id=record_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description=f"Updated expenditure record for company {comp}, year {year}, type {type}"
+        )
+        
         logging.info("Expenditure record updated and processed to silver layer successfully")
         
         return {"message": "Expenditure record updated successfully"}
@@ -1093,7 +1200,9 @@ def update_expenditure(
 @office_checker_only
 def create_capital_provider_payment(
     payment_data: dict, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """
     Insert capital provider payment data into bronze layer and process to silver
@@ -1133,6 +1242,20 @@ def create_capital_provider_payment(
         
         # Small delay to ensure data is fully processed
         time.sleep(0.5)
+        
+        # Log audit trail
+        total_payment = sum([float(payment_data.get(k, 0) or 0) for k in ['interest', 'dividendsToNci', 'dividendsToParent']])
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="econ_cap_provider",
+            record_id=str(payment_data['year']),
+            action_type="insert",
+            old_value="",
+            new_value=f"Year: {payment_data['year']}, Interest: {payment_data.get('interest', 0)}, Dividends to NCI: {payment_data.get('dividendsToNci', 0)}, Dividends to Parent: {payment_data.get('dividendsToParent', 0)}, Total: {total_payment}",
+            description=f"Created capital provider payment record for year {payment_data['year']}"
+        )
         
         logging.info("Capital provider payment created and processed to silver layer successfully")
         
@@ -1192,7 +1315,9 @@ def get_capital_provider_payment_by_year(year: int, db: Session = Depends(get_db
 def update_capital_provider_payment(
     year: int, 
     payment_data: dict, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """
     Update capital provider payment data in bronze layer and process to silver
@@ -1208,6 +1333,13 @@ def update_capital_provider_payment(
         
         if not existing_record:
             raise HTTPException(status_code=404, detail=f"Capital provider payment record not found for year {year}")
+        
+        # Get old values for audit trail
+        old_record = db.execute(text("""
+            SELECT * FROM bronze.econ_capital_provider_payment WHERE year = :year
+        """), {'year': year}).fetchone()
+        
+        old_value = f"Year: {year}, Interest: {old_record.interest}, Dividends to NCI: {old_record.dividends_to_nci}, Dividends to Parent: {old_record.dividends_to_parent}"
         
         # Update the record in bronze layer
         db.execute(text("""
@@ -1231,6 +1363,20 @@ def update_capital_provider_payment(
         
         # Small delay to ensure data is fully processed
         time.sleep(0.5)
+        
+        # Log audit trail
+        new_value = f"Year: {year}, Interest: {payment_data.get('interest', 0)}, Dividends to NCI: {payment_data.get('dividendsToNci', 0)}, Dividends to Parent: {payment_data.get('dividendsToParent', 0)}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="econ_cap_provider",
+            record_id=str(year),
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description=f"Updated capital provider payment record for year {year}"
+        )
         
         logging.info("Capital provider payment record updated and processed to silver layer successfully")
         
@@ -1329,7 +1475,9 @@ async def download_economic_capital_provider_template():
 @office_checker_only
 async def import_economic_generated_data(
     file: UploadFile = File(...), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """Import economic generated data from Excel file"""
     config = {
@@ -1343,6 +1491,8 @@ async def import_economic_generated_data(
             'miscellaneous_income': ['Miscellaneous Income']
         },
         'required_fields': ['year'],
+        'table_name': 'econ_value',
+        'record_id_func': lambda x: str(x.get('year', 'unknown')),
         'insert_query': """
             INSERT INTO bronze.econ_value (
                 year, electricity_sales, oil_revenues, other_revenues, interest_income,
@@ -1362,13 +1512,15 @@ async def import_economic_generated_data(
         """
     }
     
-    return await process_excel_import(file, config, db)
+    return await process_excel_import(file, config, db, user_info)
 
 @router.post("/import-expenditures")
 @office_checker_only
 async def import_economic_expenditures_data(
     file: UploadFile = File(...), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """Import economic expenditures data from Excel file"""
     config = {
@@ -1387,6 +1539,8 @@ async def import_economic_expenditures_data(
         },
         'required_fields': ['company_id', 'year', 'type_id'],
         'validate_expenditures': True,
+        'table_name': 'econ_expenditures',
+        'record_id_func': lambda x: f"{x.get('company_id', 'unknown')}-{x.get('year', 'unknown')}-{x.get('type_id', 'unknown')}",
         'insert_query': """
             INSERT INTO bronze.econ_expenditures (
                 year, company_id, type_id, government_payments, supplier_spending_local,
@@ -1410,13 +1564,15 @@ async def import_economic_expenditures_data(
         """
     }
     
-    return await process_excel_import(file, config, db)
+    return await process_excel_import(file, config, db, user_info)
 
 @router.post("/import-capital-provider")
 @office_checker_only
 async def import_economic_capital_provider_data(
     file: UploadFile = File(...), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user_with_roles("R02", "R03", "R04", "R05")),
+    user_info: User = Depends(get_user_info)
 ):
     """Import economic capital provider payments data from Excel file"""
     config = {
@@ -1427,6 +1583,8 @@ async def import_economic_capital_provider_data(
             'dividends_to_parent': ['Dividends to Parent']
         },
         'required_fields': ['year'],
+        'table_name': 'econ_cap_provider',
+        'record_id_func': lambda x: str(x.get('year', 'unknown')),
         'insert_query': """
             INSERT INTO bronze.econ_capital_provider_payment (
                 year, interest, dividends_to_nci, dividends_to_parent
@@ -1441,7 +1599,7 @@ async def import_economic_capital_provider_data(
         """
     }
     
-    return await process_excel_import(file, config, db)
+    return await process_excel_import(file, config, db, user_info)
 
 @router.get("/reference-data", response_model=Dict)
 @office_checker_only

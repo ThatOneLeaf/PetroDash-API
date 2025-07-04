@@ -1,23 +1,24 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.public.models import AuditTrail
-from datetime import datetime
 from typing import List, Dict, Any
+from sqlalchemy.exc import IntegrityError
+import time
 
 def format_audit_id(sequence: int = 1) -> str:
     """
-    Format audit_id into AUYYYYMMDDHHMMSSmm## format:
+    Format audit_id into AUYYYYMMDDHHMMSSuu## format:
     - AU: prefix
-    - YYYYMMDDHHMMSS: UTC timestamp
-    - mm: 2-digit milliseconds (truncated)
+    - YYYYMMDDHHMMSS: Philippine time timestamp (UTC+8)
+    - uu: 2-digit microseconds (truncated)
     - ##: sequence number (2 digits)
     
     Total: 20 characters
     """
-    now = datetime.utcnow()
+    now = datetime.now()
     timestamp = now.strftime('%Y%m%d%H%M%S')
-    milliseconds = int(now.microsecond / 10000)  # from microseconds to 2-digit ms
-    formatted_id = f"AU{timestamp}{milliseconds:02d}{sequence:02d}"
+    microseconds = int((now.microsecond % 1000000) / 10000)  # Get unique 2 digits from microseconds
+    formatted_id = f"AU{timestamp}{microseconds:02d}{sequence:02d}"
     return formatted_id
 
 
@@ -29,25 +30,56 @@ def append_audit_trail(
     action_type: str,
     old_value: str,
     new_value: str,
-    description: str
+    description: str,
+    max_retries: int = 3
 ):
-    """Single audit trail entry - commits immediately"""
-    audit_id = format_audit_id()  # Generate a formatted audit ID
-    audit = AuditTrail(
-        audit_id=audit_id,
-        account_id=account_id,
-        target_table=target_table,
-        record_id=record_id,
-        action_type=action_type,
-        old_value=old_value,
-        new_value=new_value,
-        audit_timestamp=datetime.utcnow(),
-        description=description
-    )
-    db.add(audit)
-    db.commit()
-    db.refresh(audit)
-    return audit
+    """Single audit trail entry - commits immediately with retry mechanism"""
+    retries = 0
+    while retries < max_retries:
+        try:
+            # Generate a formatted audit ID with sequence based on retry count
+            audit_id = format_audit_id(sequence=retries + 1)
+            audit = AuditTrail(
+                audit_id=audit_id,
+                account_id=account_id,
+                target_table=target_table,
+                record_id=record_id,
+                action_type=action_type,
+                old_value=old_value,
+                new_value=new_value,
+                audit_timestamp=datetime.now(),
+                description=description
+            )
+            db.add(audit)
+            db.commit()
+            db.refresh(audit)
+            return audit
+        except IntegrityError:
+            db.rollback()
+            retries += 1
+            if retries == max_retries:
+                # If we've exhausted retries, wait a tiny bit and try one last time with a timestamp-based sequence
+                time.sleep(0.001)  # Wait 1ms
+                audit_id = format_audit_id(sequence=99)  # Use 99 as last resort sequence
+                audit = AuditTrail(
+                    audit_id=audit_id,
+                    account_id=account_id,
+                    target_table=target_table,
+                    record_id=record_id,
+                    action_type=action_type,
+                    old_value=old_value,
+                    new_value=new_value,
+                    audit_timestamp=datetime.now(),
+                    description=description
+                )
+                db.add(audit)
+                db.commit()
+                db.refresh(audit)
+                return audit
+            continue
+        except Exception as e:
+            db.rollback()
+            raise e
 
 
 def append_bulk_audit_trail(
@@ -67,10 +99,10 @@ def append_bulk_audit_trail(
         return []
     
     audit_objects = []
-    base_timestamp = datetime.utcnow()
+    base_timestamp = datetime.now()
     
     for i, entry in enumerate(audit_entries):
-        # Generate unique audit_id for each entry
+        # Generate unique audit_id for each entry using index+1 as sequence
         audit_id = format_audit_id(sequence=i + 1)
         
         # Create audit object
@@ -88,8 +120,25 @@ def append_bulk_audit_trail(
         audit_objects.append(audit)
     
     # Bulk insert all audit records
-    db.bulk_save_objects(audit_objects)
-    db.commit()
+    try:
+        db.bulk_save_objects(audit_objects)
+        db.commit()
+    except IntegrityError:
+        # If bulk insert fails due to duplicate IDs, fall back to individual inserts with retry
+        db.rollback()
+        audit_objects = []
+        for entry in audit_entries:
+            audit = append_audit_trail(
+                db=db,
+                account_id=entry["account_id"],
+                target_table=entry["target_table"],
+                record_id=entry["record_id"],
+                action_type=entry["action_type"],
+                old_value=entry["old_value"],
+                new_value=entry["new_value"],
+                description=entry["description"]
+            )
+            audit_objects.append(audit)
     
     return audit_objects
 

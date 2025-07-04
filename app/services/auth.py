@@ -162,7 +162,7 @@ class AuthService:
         return encoded_jwt
     
     @staticmethod
-    def verify_token(token: str) -> TokenData:
+    def verify_token(token: str, db: Session = None) -> TokenData:
         """Verify and decode a JWT token with activity check."""
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -177,31 +177,60 @@ class AuthService:
         )
         
         try:
-            # Verify the token exists in active sessions
-            session = active_sessions.get(token)
-            if not session:
-                raise credentials_exception
-            
-            # Check for inactivity timeout
-            current_time = time.time()
-            last_activity = session["last_activity"]
-            if current_time - last_activity > INACTIVITY_TIMEOUT_MINUTES * 60:
-                # Remove expired session
-                active_sessions.pop(token, None)
-                raise inactivity_exception
-            
-            # Update last activity time
-            active_sessions[token]["last_activity"] = current_time
-            
-            # Decode and verify the token
+            # Decode token first to get username
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             username: str = payload.get("sub")
             if username is None:
                 raise credentials_exception
-                
+            
+            # Check if session exists and is active
+            session = active_sessions.get(token)
+            if not session:
+                if db:
+                    # Get user info before removing session
+                    user = AuthService.get_user(username, db)
+                    if user:
+                        from app.services.audit_trail import append_audit_trail
+                        append_audit_trail(
+                            db=db,
+                            account_id=str(user.account_id),
+                            target_table="account",
+                            record_id=username,
+                            action_type="logout",
+                            old_value="",
+                            new_value="expired",
+                            description=f"Session expired for user {username}"
+                        )
+                raise credentials_exception
+            
+            # Check for inactivity timeout
+            current_time = time.time()
+            if current_time - session["last_activity"] > INACTIVITY_TIMEOUT_MINUTES * 60:
+                # Remove expired session
+                active_sessions.pop(token, None)
+                if db:
+                    # Get user info before removing session
+                    user = AuthService.get_user(username, db)
+                    if user:
+                        from app.services.audit_trail import append_audit_trail
+                        append_audit_trail(
+                            db=db,
+                            account_id=str(user.account_id),
+                            target_table="account",
+                            record_id=username,
+                            action_type="logout",
+                            old_value="",
+                            new_value="inactive",
+                            description=f"Session expired due to inactivity for user {username}"
+                        )
+                raise inactivity_exception
+            
+            # Update last activity time
+            session["last_activity"] = current_time
+            
             token_data = TokenData(
                 username=username,
-                last_activity=current_time
+                last_activity=session["last_activity"]
             )
             return token_data
             

@@ -11,6 +11,7 @@ from app.services.auth import (
     active_sessions
 )
 from app.dependencies import get_db
+from app.services.audit_trail import append_audit_trail
 import time
 
 router = APIRouter()
@@ -39,6 +40,18 @@ async def login_for_access_token(
     # Calculate expiration timestamps
     current_time = int(time.time())
     absolute_expiry = current_time + (ACCESS_TOKEN_EXPIRE_HOURS * 3600)
+    
+    # Log successful login
+    append_audit_trail(
+        db=db,
+        account_id=str(user.account_id),
+        target_table="account",
+        record_id=user.username,
+        action_type="login",
+        old_value="",
+        new_value="success",
+        description=f"User {user.username} logged in"
+    )
     
     return {
         "access_token": access_token,
@@ -81,13 +94,40 @@ async def update_session_activity(
         }
 
 @router.post("/logout")
-async def logout(token: str = Depends(oauth2_scheme)):
+async def logout(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
     """
     Invalidate the current session token.
     """
-    # Remove session from active sessions
-    active_sessions.pop(token, None)
-    return {"message": "Successfully logged out"}
+    try:
+        # Get user info before removing session
+        token_data = AuthService.verify_token(token)
+        user = AuthService.get_user(token_data.username, db)
+        
+        if user:
+            # Log manual logout first
+            append_audit_trail(
+                db=db,
+                account_id=str(user.account_id),
+                target_table="account",
+                record_id=user.username,
+                action_type="logout",
+                old_value="",
+                new_value="manual",
+                description=f"User {user.username} manually logged out"
+            )
+            
+            # Then remove session
+            active_sessions.pop(token, None)
+            
+            return {"message": "Successfully logged out"}
+        else:
+            return {"message": "User not found"}
+            
+    except Exception as e:
+        return {"message": "Error during logout", "error": str(e)}
 
 @router.get("/me", response_model=User)
 async def read_users_me(

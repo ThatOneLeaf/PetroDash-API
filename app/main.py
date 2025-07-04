@@ -1,8 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import api_router
+import os
+from datetime import timezone, timedelta
 
 from .routers import economic  # Import just the economic router for now
+
+# Set the system timezone to Philippine time (UTC+8)
+os.environ['TZ'] = 'Asia/Manila'
+if hasattr(os, 'tzset'):
+    os.tzset()
 
 app = FastAPI(
     title="PetroDash API",
