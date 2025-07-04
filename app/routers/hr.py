@@ -792,6 +792,7 @@ def get_safety_manpower_per_month(
 # =================EMPLOYABILITY RECORD BY STATUS=================
 @router.get("/employability_records_by_status", response_model=List[dict])
 def get_employability_records_by_status(
+    company_id: Optional[str] = Query(None),
     status_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
@@ -814,9 +815,10 @@ def get_employability_records_by_status(
             JOIN ref.company_main cm
                 ON demo.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+                AND (:company_id IS NULL OR demo.company_id = ANY(:company_id))
         """)
         
-        result = db.execute(query, {"status_id": status_id})
+        result = db.execute(query, {"status_id": status_id, "company_id": company_id.split(',') if company_id else None})
         data = [dict(row._mapping) for row in result]
 
         logging.info(f"Returned {len(data)} records")
@@ -830,6 +832,7 @@ def get_employability_records_by_status(
 # =================PARENTAL LEAVE RECORD BY STATUS=================
 @router.get("/parental_leave_records_by_status", response_model=List[dict])
 def get_parental_leave_records_by_status(
+    company_id: Optional[str] = Query(None),
     status_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
@@ -846,9 +849,10 @@ def get_parental_leave_records_by_status(
             JOIN ref.company_main cm
                 ON demo.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+                AND (:company_id IS NULL OR demo.company_id = ANY(:company_id))
         """)
 
-        result = db.execute(query, {"status_id": status_id})
+        result = db.execute(query, {"status_id": status_id, "company_id": company_id.split(',') if company_id else None})
         data = [dict(row._mapping) for row in result]
 
         logging.info(f"Returned {len(data)} records")
@@ -862,6 +866,7 @@ def get_parental_leave_records_by_status(
 # =================SAFETY WORKDATA RECORD BY STATUS================= 
 @router.get("/safety_workdata_records_by_status", response_model=List[dict])
 def get_safety_workdata_records_by_status(
+    company_id: Optional[str] = Query(None),
     status_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
@@ -876,9 +881,10 @@ def get_safety_workdata_records_by_status(
             JOIN ref.company_main cm
                 ON swd.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+                AND (:company_id IS NULL OR swd.company_id = ANY(:company_id))
         """)
 
-        result = db.execute(query, {"status_id": status_id})
+        result = db.execute(query, { "status_id": status_id, "company_id": company_id.split(',') if company_id else None})
         data = [dict(row._mapping) for row in result]
 
         logging.info(f"Returned {len(data)} records")
@@ -891,6 +897,7 @@ def get_safety_workdata_records_by_status(
 # =================OCCUPATIONAL SAFETY HEALTH RECORD BY STATUS================= 
 @router.get("/occupational_safety_health_records_by_status", response_model=List[dict])
 def get_occupational_safety_health_records_by_status(
+    company_id: Optional[str] = Query(None),
     status_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
@@ -905,9 +912,10 @@ def get_occupational_safety_health_records_by_status(
             JOIN ref.company_main cm
                 ON osh.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+                AND (:company_id IS NULL OR osh.company_id = ANY(:company_id))
         """)
 
-        result = db.execute(query, {"status_id": status_id})
+        result = db.execute(query, {"status_id": status_id, "company_id": company_id.split(',') if company_id else None})
         data = [dict(row._mapping) for row in result]
 
         logging.info(f"Returned {len(data)} records")
@@ -921,6 +929,7 @@ def get_occupational_safety_health_records_by_status(
 # =================TRAINING RECORD BY STATUS================= 
 @router.get("/training_records_by_status", response_model=List[dict])
 def get_training_records_by_status(
+    company_id: Optional[str] = Query(None),
     status_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
@@ -935,9 +944,10 @@ def get_training_records_by_status(
             JOIN ref.company_main cm
                 ON tr.company_id = cm.company_id
             WHERE (:status_id IS NULL OR csl.status_id = :status_id)
+                AND (:company_id IS NULL OR tr.company_id = ANY(:company_id))
         """)
 
-        result = db.execute(query, {"status_id": status_id})
+        result = db.execute(query, {"status_id": status_id, "company_id": company_id.split(',') if company_id else None})
         data = [dict(row._mapping) for row in result]
 
         logging.info(f"Returned {len(data)} records")
