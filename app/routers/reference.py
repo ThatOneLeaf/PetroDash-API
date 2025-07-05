@@ -1,13 +1,53 @@
 
+
 from fastapi import APIRouter, Depends,  Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional, List, Dict
 from ..dependencies import get_db
+
 import logging
 import traceback
+import os
+import time
+from fastapi import Request
 
 router = APIRouter()
+
+# ====================== SYSTEM HEALTH API ====================== #
+server_start_time = time.time()
+
+@router.get("/system-health", response_model=dict)
+async def get_system_health(request: Request, db: Session = Depends(get_db)):
+    """
+    Get system health status for admin dashboard
+    """
+    # Database Connection Status
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "Online"
+    except Exception:
+        db_status = "Offline"
+
+    # API Response Time (for this endpoint)
+    start = time.time()
+    _ = await request.body()  # simulate some processing
+    api_response_time = round((time.time() - start) * 1000, 2)  # ms
+
+    # Server Uptime
+    uptime_seconds = int(time.time() - server_start_time)
+    uptime_hours = uptime_seconds // 3600
+    uptime_minutes = (uptime_seconds % 3600) // 60
+    uptime_str = f"{uptime_hours}h {uptime_minutes}m"
+
+
+    return {
+        "api": "Running",
+        "server": "Online",
+        "database": db_status,
+        "apiResponseTimeMs": api_response_time,
+        "serverUptime": uptime_str
+    }
 
 # ====================== KPI DATA API ====================== #
 @router.get("/kpi-data", response_model=dict)
