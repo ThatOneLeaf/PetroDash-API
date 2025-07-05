@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends,  Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -7,6 +8,70 @@ import logging
 import traceback
 
 router = APIRouter()
+
+# ====================== KPI DATA API ====================== #
+@router.get("/kpi-data", response_model=dict)
+def get_kpi_data(db: Session = Depends(get_db)):
+    """
+    Get KPI data for admin dashboard
+    """
+    try:
+        # Total users
+        total_users = db.execute(text("""
+            SELECT COUNT(*) FROM account
+        """)).scalar()
+
+        # Admins
+        admins = db.execute(text("""
+            SELECT COUNT(*) FROM account WHERE account_role = 'R01'
+        """)).scalar()
+
+        # Executives
+        executives = db.execute(text("""
+            SELECT COUNT(*) FROM account WHERE account_role = 'R02'
+        """)).scalar()
+
+        # HO Checkers
+        ho_checkers = db.execute(text("""
+            SELECT COUNT(*) FROM account WHERE account_role = 'R03'
+        """)).scalar()
+
+        # Site Checkers
+        site_checkers = db.execute(text("""
+            SELECT COUNT(*) FROM account WHERE account_role = 'R04'
+        """)).scalar()
+
+        # Encoders
+        encoders = db.execute(text("""
+            SELECT COUNT(*) FROM account WHERE account_role = 'R05'
+        """)).scalar()
+
+        # Active users
+        active_users = db.execute(text("""
+            SELECT COUNT(*) FROM account WHERE account_status = 'active'
+        """)).scalar()
+
+        # Deactivated users
+        deactivated_users = db.execute(text("""
+            SELECT COUNT(*) FROM account WHERE account_status != 'active'
+        """)).scalar()
+
+        
+
+        
+
+        return {
+            "activeUsers": active_users,
+            "admins": admins,
+            "executives": executives,
+            "hoCheckers": ho_checkers,
+            "siteCheckers": site_checkers,
+            "encoders": encoders
+        }
+    except Exception as e:
+        logging.error(f"Error fetching KPI data: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/companies", response_model=List[Dict])
 def get_companies(db: Session = Depends(get_db)):
