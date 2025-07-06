@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from sqlalchemy import text, update, select, bindparam, ARRAY, String, Integer
+from sqlalchemy import text, update, select, bindparam, ARRAY, String, Integer, Date
 from app.bronze.crud import EnergyRecords
 from app.bronze.schemas import EnergyRecordOut, AddEnergyRecord
 from app.public.models import RecordStatus
@@ -22,14 +22,13 @@ from fastapi.responses import StreamingResponse
 import openpyxl
 from openpyxl.styles import Font, Alignment
 import io
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from typing import Literal
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 import openpyxl
 from openpyxl.styles import Font, Alignment
 import io
-from datetime import datetime
 from ..auth_decorators import get_current_user_with_roles, allow_roles, get_user_info
 from ..services.audit_trail import append_audit_trail
 from ..services.auth import User
@@ -236,105 +235,18 @@ def get_fact_energy(
 
 
 # ====================== dashboard ====================== #
-
-@router.get("/energy_dashboard_raw", response_model=List[dict])
-def get_energy_dashboard_raw(
-    power_plant_ids: Optional[List[str]] = Query(None, alias="p_power_plant_id"),
-    company_ids: Optional[List[str]] = Query(None, alias="p_company_id"),
-    generation_sources: Optional[List[str]] = Query(None, alias="p_generation_source"),
-    provinces: Optional[List[str]] = Query(None, alias="p_province"),
-    months: Optional[List[int]] = Query(None, alias="p_month"),
-    quarters: Optional[List[int]] = Query(None, alias="p_quarter"),
-    years: Optional[List[int]] = Query(None, alias="p_year"),
-    x: Optional[str] = Query(None, alias="p_x"),  # grouping by e.g., power_plant_id
-    y: Optional[str] = Query(None, alias="p_y"),  # time granularity: monthly, quarterly, yearly
-    v: Optional[str] = Query("energy_generated_mwh", alias="p_v"),  # aggregated metric
-    db: Session = Depends(get_db)
-):
-    try:
-        logging.info("Fetching raw energy records.")
-
-        query = text("""
-            SELECT * 
-            FROM gold.func_fact_energy(                
-                :power_plant_ids,
-                :company_ids,
-                :generation_sources,
-                :provinces,
-                :months,
-                :quarters,
-                :years
-            );
-        """)
-
-        result = db.execute(query, {
-            "power_plant_ids": power_plant_ids,
-            "company_ids": company_ids,
-            "generation_sources": generation_sources,
-            "provinces": provinces,
-            "months": months,
-            "quarters": quarters,
-            "years": years
-        })
-
-        rows = result.fetchall()
-        columns = result.keys()
-        data = [dict(zip(columns, row)) for row in rows]
-
-        if not x or not y or not v:
-            # Return raw data if no pivot requested
-            return data
-
-        df = pd.DataFrame(data)
-
-        # Define time group column based on y
-        if y == "monthly":
-            df["time_group"] = df["year"].astype(str) + "-" + df["month"].astype(str).str.zfill(2)
-        elif y == "quarterly":
-            df["time_group"] = df["year"].astype(str) + "-Q" + df["quarter"].astype(str)
-        elif y == "yearly":
-            df["time_group"] = df["year"].astype(str)
-        else:
-            raise HTTPException(status_code=400, detail="Invalid y parameter. Use monthly, quarterly, or yearly.")
-
-        if x not in df.columns or v not in df.columns:
-            raise HTTPException(status_code=400, detail="Invalid x or v parameter.")
-
-        # Perform pivot: rows = x, columns = time_group, values = v
-        pivot = df.pivot_table(
-            index=x,
-            columns="time_group",
-            values=v,
-            aggfunc="sum",
-            fill_value=0
-        ).reset_index()
-
-        # Convert pivot result to records
-        pivot_result = pivot.to_dict(orient="records")
-
-        logging.info(f"Pivot result: {len(pivot_result)} rows.")
-        return pivot_result
-
-    except Exception as e:
-        logging.error(f"Error retrieving or processing records: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-    
-# ====================== dashboard ====================== #
 def process_query_data(
     db: Session,
-    query_str: str,  
+    query_str: str,
     x: str,
     y: str,
     v: List[str],
+    date_from: date,
+    date_to: date,
     power_plant_ids: Optional[List[str]] = None,
     company_ids: Optional[List[str]] = None,
     generation_sources: Optional[List[str]] = None,
-    provinces: Optional[List[str]] = None,
-    months: Optional[List[int]] = None,
-    quarters: Optional[List[int]] = None,
-    years: Optional[List[int]] = None
+    provinces: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     # Execute query
     query = text(query_str)
@@ -343,9 +255,8 @@ def process_query_data(
         "company_ids": company_ids,
         "generation_sources": generation_sources,
         "provinces": provinces,
-        "months": months,
-        "quarters": quarters,
-        "years": years
+        "date_from": date_from,
+        "date_to": date_to
     })
 
     df = pd.DataFrame(result.fetchall(), columns=result.keys())
@@ -403,13 +314,11 @@ def process_query_data(
             for _, row in grouped_df.groupby(x, dropna=False)[metric]
                 .sum()
                 .reset_index()
-                .pipe(lambda df: (
-                    df.assign(_total=df[metric].sum())  # add total column
-                ))
+                .pipe(lambda df: df.assign(_total=df[metric].sum()))
                 .iterrows()
         ]
         for metric in v
-        for total in [grouped_df.groupby(x, dropna=False)[metric].sum().sum()]  # compute total once per metric
+        for total in [grouped_df.groupby(x, dropna=False)[metric].sum().sum()]
     }
 
     # Bar chart
@@ -422,13 +331,9 @@ def process_query_data(
         for metric in v
     }
 
-    # Step 1: Group by [x, period] and sum values in v (like energy)
-    grouped_df = df.groupby([x, "period"], dropna=False)[v].sum().reset_index()
-
-    # Step 2: Pivot to get periods as rows, x categories as columns (stacked bars)
-    pivot_df = grouped_df.pivot(index="period", columns=x, values=v[0]).fillna(0).reset_index()
-
-    # Step 3: Convert to list of dicts (for charting libraries)
+    # Stacked bar chart
+    stacked_df = grouped_df.groupby([x, "period"], dropna=False)[v].sum().reset_index()
+    pivot_df = stacked_df.pivot(index="period", columns=x, values=v[0]).fillna(0).reset_index()
     stacked_bar_chart = pivot_df.to_dict(orient="records")
 
     # Totals
@@ -439,8 +344,9 @@ def process_query_data(
         "bar_chart": bar_chart,
         "pie_chart": pie_chart,
         "totals": totals,
-        "stacked_bar":stacked_bar_chart
+        "stacked_bar": stacked_bar_chart
     }
+
 
 def process_fa_data(
     db: Session,
@@ -561,9 +467,8 @@ def process_raw_data(
     company_ids: Optional[List[str]] = None,
     generation_sources: Optional[List[str]] = None,
     provinces: Optional[List[str]] = None,
-    months: Optional[List[int]] = None,
-    quarters: Optional[List[int]] = None,
-    years: Optional[List[int]] = None
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None
 ) -> List[Dict[str, Any]]:
 
     from sqlalchemy.dialects.postgresql import ARRAY
@@ -576,9 +481,8 @@ def process_raw_data(
         bindparam("company_ids", type_=ARRAY(String)),
         bindparam("generation_sources", type_=ARRAY(String)),
         bindparam("provinces", type_=ARRAY(String)),
-        bindparam("months", type_=ARRAY(Integer)),
-        bindparam("quarters", type_=ARRAY(Integer)),
-        bindparam("years", type_=ARRAY(Integer)),
+        bindparam("date_from", type_=Date),
+        bindparam("date_to", type_=Date),
     )
 
     result = db.execute(query, {
@@ -586,9 +490,8 @@ def process_raw_data(
         "company_ids": nullable(company_ids),
         "generation_sources": nullable(generation_sources),
         "provinces": nullable(provinces),
-        "months": nullable(months),
-        "quarters": nullable(quarters),
-        "years": nullable(years),
+        "date_from": date_from,
+        "date_to": date_to,
     })
 
     df = pd.DataFrame(result.fetchall(), columns=result.keys())
@@ -603,6 +506,7 @@ def process_raw_data(
 
 
 
+
 def parse_comma_separated(value: Optional[str]) -> Optional[List[str]]:
     if value:
         return [v.strip() for v in value.split(",") if v.strip()]
@@ -614,44 +518,42 @@ def normalize_list(lst):
     return lst
 
 @router.get("/energy_dashboard", response_model=Dict[str, Any])
-@allow_roles("R02","R03", "R04")
 def get_energy_dashboard(
     p_company_id: Optional[str] = Query(None),
     p_power_plant_id: Optional[str] = Query(None),
     p_generation_source: Optional[str] = Query(None),
     p_province: Optional[str] = Query(None),
-    p_month: Optional[str] = Query(None),
-    p_quarter: Optional[str] = Query(None),
-    p_year: Optional[str] = Query(None),
+    p_date_from: Optional[str] = Query(None),
+    p_date_to: Optional[str] = Query(None),
     x: str = Query("company_id"),
     y: str = Query("monthly"),
     db: Session = Depends(get_db)
 ):
-    # Parse and normalize all filter parameters
+    # Get today's date and 12 months ago
+    today = date.today()
+    twelve_months_ago = today - timedelta(days=365)
+
+    # Use provided dates or defaults
+    date_from = datetime.strptime(p_date_from, "%Y-%m-%d").date() if p_date_from else None
+    date_to = datetime.strptime(p_date_to, "%Y-%m-%d").date() if p_date_to else None
+
+    # Normalize filter parameters
     company_ids = normalize_list(parse_comma_separated(p_company_id))
     power_plant_ids = normalize_list(parse_comma_separated(p_power_plant_id))
     generation_sources = normalize_list(parse_comma_separated(p_generation_source))
     provinces = normalize_list(parse_comma_separated(p_province))
-    months = normalize_list([int(m) for m in parse_comma_separated(p_month) or []])
-    quarters = normalize_list([int(q) for q in parse_comma_separated(p_quarter) or []])
-    years = normalize_list([int(y) for y in parse_comma_separated(p_year) or []])
-
-    logging.info(f"Filters - company_ids: {company_ids}, power_plant_ids: {power_plant_ids}, "
-                 f"generation_sources: {generation_sources}, provinces: {provinces}, "
-                 f"months: {months}, quarters: {quarters}, years: {years}")
 
     try:
+        # 1. Revised Energy Query (date-based)
         energy = """
-            SELECT 
-                *
+            SELECT *
             FROM gold.func_fact_energy(
                 :power_plant_ids,
                 :company_ids,
                 :generation_sources,
                 :provinces,
-                :months,
-                :quarters,
-                :years
+                :date_from,
+                :date_to
             );
         """
         energy_result = process_query_data(
@@ -659,23 +561,42 @@ def get_energy_dashboard(
             query_str=energy,
             x=x,
             y=y,
+            power_plant_ids=power_plant_ids,
+            company_ids=company_ids,
             v=["total_energy_generated", "total_co2_avoidance"],
+            date_from=date_from,
+            date_to=date_to
+        )
+
+        # 2. CO2 Equivalence Query
+        equivalence = """
+            SELECT *
+            FROM gold.func_co2_equivalence_per_metric(
+                :power_plant_ids,
+                :company_ids,
+                :generation_sources,
+                :provinces,
+                :date_from,
+                :date_to
+            );
+        """
+        eq_result = process_raw_data(
+            db=db,
+            query_str=equivalence,
             power_plant_ids=power_plant_ids,
             company_ids=company_ids,
             generation_sources=generation_sources,
             provinces=provinces,
-            months=months,
-            quarters=quarters,
-            years=years
+            date_from=date_from,
+            date_to=date_to
         )
-        
-        # format ------------------
+
         def format_large_number(value):
             if value >= 1_000_000_000:
                 return f"{value / 1_000_000_000:.1f}B"
             elif value >= 1_000_000:
                 return f"{value / 1_000_000:.1f}M"
-            elif value <1:
+            elif value < 1:
                 return f"{value:,.4f}"
             else:
                 return math.ceil(value)
@@ -684,69 +605,27 @@ def get_energy_dashboard(
             record["co2_equivalent"] = format_large_number(round(float(record["co2_equivalent"]), 4))
             return record
 
-        equivalence = """
-            SELECT 
-                energy_generated,
-                co2_avoided,
-                conversion_value,
-                co2_equivalent,
-                metric,
-                equivalence_category,
-                equivalence_label
-            FROM gold.func_co2_equivalence_per_metric(
+        from collections import defaultdict
+        grouped_equivalence = defaultdict(lambda: defaultdict(list))
+        for i, record in enumerate(eq_result):
+            category = record.get("equivalence_category", "Uncategorized")
+            eq_key = f"EQ_{i+1}"
+            grouped_equivalence[category][eq_key].append(format_equivalence(record))
+
+        equivalence_dict = {category: dict(eqs) for category, eqs in grouped_equivalence.items()}
+
+        # 3. Household Powered Query
+        hp = """
+            SELECT *
+            FROM gold.func_household_powered(
                 :power_plant_ids,
                 :company_ids,
                 :generation_sources,
                 :provinces,
-                :months,
-                :quarters,
-                :years
+                :date_from,
+                :date_to
             );
         """
-
-        eq_result = process_raw_data(
-            db=db,
-            query_str=equivalence,
-            power_plant_ids=power_plant_ids,
-            company_ids=company_ids,
-            generation_sources=generation_sources,
-            provinces=provinces,
-            months=months,
-            quarters=quarters,
-            years=years
-        )
-
-        # Nested grouping: category → EQ → list of records
-        grouped_equivalence = defaultdict(lambda: defaultdict(list))
-
-        for i, record in enumerate(eq_result):
-            category = record.get("equivalence_category", "Uncategorized")  # Change this if your key is different
-            eq_key = f"EQ_{i+1}"
-
-            formatted_record = format_equivalence(record)
-
-            grouped_equivalence[category][eq_key].append(formatted_record)
-
-        # Convert defaultdicts to regular dicts
-        equivalence_dict = {
-            category: dict(eqs)
-            for category, eqs in grouped_equivalence.items()
-        }
-        
-        
-        hp = """
-            SELECT *
-            FROM gold.func_household_powered(
-                (:power_plant_ids)::VARCHAR(10)[],
-                (:company_ids)::VARCHAR(10)[],
-                (:generation_sources)::TEXT[],
-                (:provinces)::VARCHAR(30)[],
-                (:months)::INT[],
-                (:quarters)::INT[],
-                (:years)::INT[]
-            );
-        """
-
         hp_result = process_query_data(
             db=db,
             query_str=hp,
@@ -757,12 +636,11 @@ def get_energy_dashboard(
             company_ids=company_ids,
             generation_sources=generation_sources,
             provinces=provinces,
-            months=months,
-            quarters=quarters,
-            years=years
+            date_from=date_from,
+            date_to=date_to
         )
 
-
+        # 4. Emission Factor Label
         label_query = text("""
             SELECT
                 generation_source AS label,
@@ -772,42 +650,36 @@ def get_energy_dashboard(
                         CASE 
                             WHEN co2_emitted_kg IS NOT NULL THEN 
                             '; kg CO₂ emitted = EG(kWh) × ' || ROUND(co2_emitted_kg / 1000.0, 6) || ' kg CO₂/kWh; Emission Reduction = kg CO₂ avoided - kg CO₂ emitted'
-                            ELSE
-                            ''
+                            ELSE ''
                         END
                     )
                 ) AS formula
-            FROM
-                ref.ref_emission_factors
+            FROM ref.ref_emission_factors
         """)
-
-        # This returns each row as a dictionary-like object
         label_result = db.execute(label_query).mappings().all()
         label_dicts = [dict(row) for row in label_result]
-
 
         return {
             "energy_data": energy_result,
             "equivalence_data": equivalence_dict,
             "house_powered": hp_result,
-            "formula":label_dicts
+            "formula": label_dicts
         }
 
+
     except Exception as e:
-        logging.error(f"Error retrieving energy records: {str(e)}")
-        logging.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/fund_allocation_dashboard", response_model=Dict[str, Any])
-@allow_roles("R02","R03", "R04")
+# @allow_roles("R02", "R03", "R04")
 def get_fund_allocation(
     p_company_id: Optional[str] = Query(None),
     p_power_plant_id: Optional[str] = Query(None),
     p_ff_id: Optional[str] = Query(None),
     p_ff_category: Optional[str] = Query(None),
-    p_month: Optional[str] = Query(None),
-    p_year: Optional[str] = Query(None),
+    p_start_date: Optional[date] = Query(None),
+    p_end_date: Optional[date] = Query(None),
     x: str = Query("company_id"),
     y: str = Query("monthly"),
     db: Session = Depends(get_db)
@@ -817,37 +689,36 @@ def get_fund_allocation(
     power_plant_ids = normalize_list(parse_comma_separated(p_power_plant_id))
     ff_id = normalize_list(parse_comma_separated(p_ff_id))
     ff_category = normalize_list(parse_comma_separated(p_ff_category))
-    months = normalize_list([int(m) for m in parse_comma_separated(p_month) or []])
-    years = normalize_list([int(y) for y in parse_comma_separated(p_year) or []])
 
     logging.info(f"Filters - company_ids: {company_ids}, power_plant_ids: {power_plant_ids}, "
                  f"ff_id: {ff_id}, ff_category: {ff_category}, "
-                 f"months: {months}, years: {years}")
+                 f"start_date: {p_start_date}, end_date: {p_end_date}")
 
     try:
-        energy =text( """
-            SELECT 
-                *
+        energy = text("""
+            SELECT *
             FROM gold.func_fund_alloc(
                 :power_plant_ids,
                 :company_ids,
                 :ff_id,
-                :months,
-                :years,
+                :start_date,
+                :end_date,
                 :ff_category
             );
         """)
+
         result = db.execute(energy, {
-                "power_plant_ids": power_plant_ids if power_plant_ids else None,
-                "company_ids": company_ids if company_ids else None,
-                "ff_id": ff_id if ff_id else None,
-                "ff_category": ff_category if ff_category else None,
-                "months": months if months else None,
-                "years": years if years else None
-            })
+            "power_plant_ids": power_plant_ids or None,
+            "company_ids": company_ids or None,
+            "ff_id": ff_id or None,
+            "start_date": p_start_date,
+            "end_date": p_end_date,
+            "ff_category": ff_category or None
+        })
+
         rows = result.mappings().all()
         df = pd.DataFrame(rows)
-        v=['funds_allocated_peso']
+        v = ['funds_allocated_peso']
         if df.empty:
             return {}
 
@@ -1008,10 +879,6 @@ def get_fund_allocation(
 
                 # Convert to list of dicts for frontend rendering
                 chart_data["tabledata"] = pivot_df.to_dict(orient="records")
-
-
-
-
 
                 value[ff_cat] = chart_data  # Store chart data per ff_category
             value["total"] = total_per_item
