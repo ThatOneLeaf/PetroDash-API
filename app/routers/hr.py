@@ -169,11 +169,12 @@ def get_total_safety_manhours(
         
         if start_date is None:
             # Set to January 1st of the current year
-            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+            # start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+            start_date = None
         
         if end_date is None:
             # Set to today's date
-            end_date = datetime.now().strftime("%Y-%m-%d")
+            end_date = None
             
         result = db.execute(text("""
             SELECT SUM(manhours) AS total_safety_manhours
@@ -222,11 +223,11 @@ def get_total_safety_manhours(
         
         if start_date is None:
             # Set to January 1st of the current year
-            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+            start_date = None
         
         if end_date is None:
             # Set to today's date
-            end_date = datetime.now().strftime("%Y-%m-%d")
+            end_date = None
             
         result = db.execute(text("""
             SELECT SUM(manpower) AS total_safety_manpower
@@ -275,11 +276,11 @@ def get_total_training_hours(
         
         if start_date is None:
             # Set to January 1st of the current year
-            start_date = datetime(datetime.now().year, 1, 1).strftime("%Y-%m-%d")
+            start_date = None
         
         if end_date is None:
             # Set to today's date
-            end_date = datetime.now().strftime("%Y-%m-%d")
+            end_date = None
             
         result = db.execute(text("""
             SELECT SUM(training_hours) AS total_training_hours
@@ -341,14 +342,14 @@ def get_no_lost_time(
         latest_lti_date = lti_result.scalar()
         
         if latest_lti_date is None:
-            latest_lti_date = datetime(datetime.now().year, 1, 1).date()
+            latest_lti_date = None
             logging.info(f"No LTI found. Using default start date: {latest_lti_date}")
         else:
             logging.info(f"Latest LTI found. Using start date: {latest_lti_date}")
         
         if end_date is None:
             # Set to today's date
-            end_date = datetime.now().strftime("%Y-%m-%d")
+            end_date = None
             
         result = db.execute(text("""
             SELECT SUM(manhours) AS manhours_since_last_lti
@@ -657,17 +658,47 @@ def get_safety_manhours_per_month(
         sql = f"""
             SELECT 
                 {select_group},
-                sw.company_name,
-                sw.company_id,
-                comp.color,
+                CASE 
+                    WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_name
+                    ELSE 'Contractors'
+                END AS company_name,
+                CASE 
+                    WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_id
+                    ELSE 'Contractors'
+                END AS company_id,
+                CASE 
+                    WHEN sw.contractor LIKE '%Company Owned%' THEN comp.color
+                    ELSE '#FF3F33'
+                END AS color,
                 SUM(sw.manhours) AS manhours
             FROM gold.func_safety_workdata_summary(
                 :start_date, :end_date, :company_id, NULL
             ) sw
             JOIN ref.company_main comp ON comp.company_id = sw.company_id
-            GROUP BY {select_group}, sw.company_name, sw.company_id, comp.color
-            ORDER BY {order_by}, sw.company_name, sw.company_id;
+            GROUP BY {select_group}, sw.contractor, 
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_name ELSE 'Contractors' END,
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_id ELSE 'Contractors' END,
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN comp.color ELSE '#FF3F33' END
+            ORDER BY {order_by}, 
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_name ELSE 'Contractors' END,
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_id ELSE 'Contractors' END;
         """
+        
+        # Backup Just In Case of Errors
+        # f"""
+        #     SELECT 
+        #         {select_group},
+        #         sw.company_name,
+        #         sw.company_id,
+        #         comp.color,
+        #         SUM(sw.manhours) AS manhours
+        #     FROM gold.func_safety_workdata_summary(
+        #         :start_date, :end_date, :company_id, NULL
+        #     ) sw
+        #     JOIN ref.company_main comp ON comp.company_id = sw.company_id
+        #     GROUP BY {select_group}, sw.company_name, sw.company_id, comp.color
+        #     ORDER BY {order_by}, sw.company_name, sw.company_id;
+        # """
 
         # Execute with parameters
         result = db.execute(text(sql), {
@@ -736,21 +767,52 @@ def get_safety_manpower_per_month(
             order_by = "year"
 
         # Build SQL dynamically using f-string
+        
         sql = f"""
             SELECT 
                 {select_group},
-                sw.company_name,
-                sw.company_id,
-                comp.color,
+                CASE 
+                    WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_name
+                    ELSE 'Contractors'
+                END AS company_name,
+                CASE 
+                    WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_id
+                    ELSE 'Contractors'
+                END AS company_id,
+                CASE 
+                    WHEN sw.contractor LIKE '%Company Owned%' THEN comp.color
+                    ELSE '#FF3F33'
+                END AS color,
                 SUM(sw.manpower) AS total_monthly_safety_manpower
             FROM gold.func_safety_workdata_summary(
                 :start_date, :end_date, :company_id, NULL
             ) sw
             JOIN ref.company_main comp ON comp.company_id = sw.company_id
-            GROUP BY {select_group}, sw.company_name, sw.company_id, comp.color
-            ORDER BY {order_by}, sw.company_name, sw.company_id;
-
+            GROUP BY {select_group}, sw.contractor, 
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_name ELSE 'Contractors' END,
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_id ELSE 'Contractors' END,
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN comp.color ELSE '#FF3F33' END
+            ORDER BY {order_by}, 
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_name ELSE 'Contractors' END,
+                    CASE WHEN sw.contractor LIKE '%Company Owned%' THEN sw.company_id ELSE 'Contractors' END;
         """
+        
+        # Backup Just In Case of Errors
+        # sql = f"""
+        #     SELECT 
+        #         {select_group},
+        #         sw.company_name,
+        #         sw.company_id,
+        #         comp.color,
+        #         SUM(sw.manpower) AS total_monthly_safety_manpower
+        #     FROM gold.func_safety_workdata_summary(
+        #         :start_date, :end_date, :company_id, NULL
+        #     ) sw
+        #     JOIN ref.company_main comp ON comp.company_id = sw.company_id
+        #     GROUP BY {select_group}, sw.company_name, sw.company_id, comp.color
+        #     ORDER BY {order_by}, sw.company_name, sw.company_id;
+
+        # """
 
         result = db.execute(text(sql), {
             'start_date': start_date,
