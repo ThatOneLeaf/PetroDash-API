@@ -1297,7 +1297,7 @@ def single_upload_occupational_safety_health_record(data: dict, db: Session = De
 # ====================== ADD BULK RECORD ====================== 
 # --- EMPLOYABILITY ---
 @router.post("/bulk_upload_employability")
-def bulk_upload_employability(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_employability(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1356,8 +1356,63 @@ def bulk_upload_employability(file: UploadFile = File(...), db: Session = Depend
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = insert_employability_bulk(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        record_demo, record_tenure = insert_employability_bulk(db, rows)
+        
+        def demo_bulk_audit_data(record_demo):
+            return [
+                {
+                    "target_table": "hr_demographics",
+                    "record_id": record_demo.employee_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": str(record_demo.employee_id) + ", " + str(record_demo.gender) + ", " + str(record_demo.birthdate) + ", " + str(record_demo.position_id) + ", " + str(record_demo.p_np) + ", " + str(record_demo.company_id) + ", " + str(record_demo.employment_status),
+                    "description": "Inserted bulk hr_demographics record"
+                },
+                {
+                    "target_table": "record_status",
+                    "record_id": record_demo.employee_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": "URS",
+                    "description": "Newly inserted record"
+                }
+            ]
+            
+        def ten_bulk_audit_data(record_tenure):
+            return [
+                {
+                    "target_table": "hr_tenure",
+                    "record_id": record_tenure.employee_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": str(record_tenure.employee_id) + ", " + str(record_tenure.start_date) + ", " + (str(record_tenure.end_date) if record_tenure.end_date else "None"),
+                    "description": "Inserted bulk hr_tenure record"
+                },
+                {
+                    "target_table": "record_status",
+                    "record_id": record_tenure.employee_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": "URS",
+                    "description": "Newly inserted record"
+                }
+            ]
+        
+        audit_entries = []
+        
+        for demo in record_demo:
+            record_audits = demo_bulk_audit_data(demo)
+            for audit_data in record_audits:
+                audit_data["account_id"] = str(user_info.account_id)
+                audit_entries.append(audit_data)
+                
+        for tenure in record_tenure:
+            record_audits = ten_bulk_audit_data(tenure)
+            for audit_data in record_audits:
+                audit_data["account_id"] = str(user_info.account_id)
+                audit_entries.append(audit_data)
+                
+        return {"message": f"{len(record_demo)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -1366,7 +1421,7 @@ def bulk_upload_employability(file: UploadFile = File(...), db: Session = Depend
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/bulk_upload_safety_workdata")
-def bulk_upload_safety_workdata(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_safety_workdata(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1411,9 +1466,39 @@ def bulk_upload_safety_workdata(file: UploadFile = File(...), db: Session = Depe
 
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
-
-        count = insert_safety_workdata_bulk(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        
+        record = insert_safety_workdata_bulk(db, rows)
+        
+        def swd_bulk_audit_data(record):
+            return [
+                {
+                    "target_table": "hr_safety_workdata",
+                    "record_id": record.safety_workdata_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": str(record.safety_workdata_id) + ", " + str(record.company_id) + ", " + str(record.contractor) + ", " + str(record.date) + ", " + str(record.manpower) + ", " + str(record.manhours),
+                    "description": "Inserted bulk hr_safety_workdata record"
+                },
+                {
+                    "target_table": "record_status",
+                    "record_id": record.safety_workdata_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": "URS",
+                    "description": "Newly inserted record"
+                }
+            ]
+        
+        audit_entries = []
+        
+        for records in record:
+            record_audits = swd_bulk_audit_data(records)
+            for audit_data in record_audits:
+                audit_data["account_id"] = str(user_info.account_id)
+                audit_entries.append(audit_data)
+        
+        
+        return {"message": f"{len(record)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -1422,7 +1507,7 @@ def bulk_upload_safety_workdata(file: UploadFile = File(...), db: Session = Depe
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/bulk_upload_parental_leave")
-def bulk_upload_parental_leave(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_parental_leave(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1467,8 +1552,37 @@ def bulk_upload_parental_leave(file: UploadFile = File(...), db: Session = Depen
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = insert_parental_leave_bulk(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        record = insert_parental_leave_bulk(db, rows)
+        
+        def pl_bulk_audit_data(record):
+            return [
+                {
+                    "target_table": "hr_parental_leave",
+                    "record_id": record.parental_leave_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": str(record.parental_leave_id) + ", " + str(record.employee_id) + ", " + str(record.type_of_leave) + ", " + str(record.date) + ", " + str(record.days),
+                    "description": "Inserted bulk hr_parental_leave record"
+                },
+                {
+                    "target_table": "record_status",
+                    "record_id": record.parental_leave_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": "URS",
+                    "description": "Newly inserted record"
+                }
+            ]
+        
+        audit_entries = []
+        
+        for records in record:
+            record_audits = pl_bulk_audit_data(records)
+            for audit_data in record_audits:
+                audit_data["account_id"] = str(user_info.account_id)
+                audit_entries.append(audit_data)
+                
+        return {"message": f"{len(record)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -1477,7 +1591,7 @@ def bulk_upload_parental_leave(file: UploadFile = File(...), db: Session = Depen
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/bulk_upload_training")
-def bulk_upload_training(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_training(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1523,8 +1637,37 @@ def bulk_upload_training(file: UploadFile = File(...), db: Session = Depends(get
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = insert_training_bulk(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        record = insert_training_bulk(db, rows)
+        
+        def tr_bulk_audit_data(record):
+            return [
+                {
+                    "target_table": "hr_training",
+                    "record_id": record.training_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": str(record.training_id) + ", " + str(record.company_id) + ", " + str(record.date) + ", " + str(record.training_title) + ", " + str(record.training_hours) + ", " + str(record.number_of_participants),
+                    "description": "Inserted bulk hr_training record"
+                },
+                {
+                    "target_table": "record_status",
+                    "record_id": record.training_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": "URS",
+                    "description": "Newly inserted record"
+                }
+            ]
+        
+        audit_entries = []
+        
+        for records in record:
+            record_audits = tr_bulk_audit_data(records)
+            for audit_data in record_audits:
+                audit_data["account_id"] = str(user_info.account_id)
+                audit_entries.append(audit_data)
+                
+        return {"message": f"{len(record)} records successfully inserted."}
 
     except HTTPException:
         raise
@@ -1533,7 +1676,7 @@ def bulk_upload_training(file: UploadFile = File(...), db: Session = Depends(get
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/bulk_occupational_safety_health")
-def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload an Excel file.")
     
@@ -1608,8 +1751,37 @@ def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Ses
         if not rows:
             raise HTTPException(status_code=400, detail="No valid data rows found to insert")
 
-        count = insert_occupational_safety_health_bulk(db, rows)
-        return {"message": f"{count} records successfully inserted."}
+        record = insert_occupational_safety_health_bulk(db, rows)
+        
+        def osh_bulk_audit_data(record):
+            return [
+                {
+                    "target_table": "hr_occupational_safety_health",
+                    "record_id": record.osh_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": str(record.osh_id) + ", " + str(record.company_id) + ", " + str(record.workforce_type) + ", " + str(record.lost_time) + ", " + str(record.date) + ", " + str(record.incident_type) + ", " + str(record.incident_title) + ", " + str(record.incident_count),
+                    "description": "Inserted bulk hr_occupational_safety_health record"
+                },
+                {
+                    "target_table": "record_status",
+                    "record_id": record.osh_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": "URS",
+                    "description": "Newly inserted record"
+                }
+            ]
+        
+        audit_entries = []
+        
+        for records in record:
+            record_audits = osh_bulk_audit_data(records)
+            for audit_data in record_audits:
+                audit_data["account_id"] = str(user_info.account_id)
+                audit_entries.append(audit_data)
+                
+        return {"message": f"{len(record)} records successfully inserted."}
 
     except HTTPException:
         raise

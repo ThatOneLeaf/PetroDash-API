@@ -2539,7 +2539,7 @@ def insert_employability_bulk(db: Session, rows) -> int:
         print(f"Error executing stored procedure: {e}")
         db.rollback()
     
-    return len(record_demo)
+    return record_demo, record_tenure
 
 # --- Safety Workdata ---
 def insert_safety_workdata_bulk (db:Session, rows) -> int:
@@ -2631,7 +2631,7 @@ def insert_safety_workdata_bulk (db:Session, rows) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
     
-    return len(records)
+    return records
 
 # --- Parental Leave ---
 def insert_parental_leave_bulk (db:Session, rows) -> int:
@@ -2739,7 +2739,7 @@ def insert_parental_leave_bulk (db:Session, rows) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
     
-    return len(records)
+    return records
 
 # --- Occupational Safety Health ---
 def insert_occupational_safety_health_bulk (db:Session, rows) -> int:
@@ -2821,7 +2821,7 @@ def insert_occupational_safety_health_bulk (db:Session, rows) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
     
-    return len(records)
+    return records
 
 # --- Training ---
 def insert_training_bulk (db:Session, rows) -> int:
@@ -2903,4 +2903,4 @@ def insert_training_bulk (db:Session, rows) -> int:
         print(f"Error inserting checker status logs: {e}")
         db.rollback()
     
-    return len(records)
+    return records
