@@ -85,35 +85,44 @@ def create_account(account: AccountCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to create account: {e}")
 
 # Get all accounts with profiles
+from sqlalchemy.orm import joinedload
+from sqlalchemy.sql import func
+from sqlalchemy import outerjoin
+from sqlalchemy.future import select
+
 @router.get("/", response_model=List[AccountProfileOut])
 def get_all_accounts(db: Session = Depends(get_db)):
-    accounts = db.query(models.Account).order_by(
-        models.Account.date_updated.desc(),
-        models.Account.date_created.desc()
-    ).all()
-    profiles = db.query(models.UserProfile).all()
-    profile_map = {p.account_id: p for p in profiles}
+    # Perform a LEFT JOIN between Account and UserProfile
+    query = (
+        db.query(models.Account, models.UserProfile)
+        .outerjoin(models.UserProfile, models.Account.account_id == models.UserProfile.account_id)
+        .order_by(
+            models.Account.date_updated.desc(),
+            models.Account.date_created.desc()
+        )
+    )
+
     result = []
-    for acc in accounts:
-        prof = profile_map.get(acc.account_id)
-        if prof:
-            result.append({
-                "account_id": acc.account_id,
-                "email": acc.email,
-                "account_role": acc.account_role,
-                "power_plant_id": acc.power_plant_id,
-                "company_id": acc.company_id,
-                "account_status": acc.account_status,
-                "first_name": prof.first_name,
-                "last_name": prof.last_name,
-                "middle_name": prof.middle_name,
-                "suffix": prof.suffix,
-                "contact_number": prof.contact_number,
-                "address": prof.address,
-                "birthdate": prof.birthdate.strftime("%Y-%m-%d") if prof.birthdate else "",
-                "gender": prof.gender
-            })
+    for acc, prof in query.all():
+        result.append({
+            "account_id": acc.account_id,
+            "email": acc.email,
+            "account_role": acc.account_role,
+            "power_plant_id": acc.power_plant_id,
+            "company_id": acc.company_id,
+            "account_status": acc.account_status,
+            "first_name": prof.first_name if prof else "",
+            "last_name": prof.last_name if prof else "",
+            "middle_name": prof.middle_name if prof else "",
+            "suffix": prof.suffix if prof else "",
+            "contact_number": prof.contact_number if prof else "",
+            "address": prof.address if prof else "",
+            "birthdate": prof.birthdate.strftime("%Y-%m-%d") if prof and prof.birthdate else None,
+            "gender": prof.gender if prof else ""
+        })
+
     return result
+
 
 # Activate account
 @router.patch("/{account_id}/activate", response_model=AccountProfileOut)

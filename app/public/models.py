@@ -23,7 +23,7 @@ class AuditTrail(Base):
     audit_id = Column(String(26), primary_key=True, index=True)
     account_id = Column(String(26), nullable=False)
     target_table = Column(String(20), nullable=False)
-    record_id = Column(String(20), nullable=False)
+    record_id = Column(String(100), nullable=False)
     action_type = Column(String(10), nullable=False)
     old_value = Column(TEXT, nullable=False)
     new_value = Column(TEXT, nullable=False)
