@@ -2010,7 +2010,7 @@ def insert_employability(db: Session, data: dict):
         print(f"Tenure: Error executing stored procedure: {e}")
         db.rollback()
         
-    return record_demo, record_tenure
+    return record_demo.employee_id
 
 # --- Safety Workdata ---
 def insert_safety_workdata(db: Session, data: dict):
@@ -2072,7 +2072,7 @@ def insert_safety_workdata(db: Session, data: dict):
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    return record
+    return safety_workdata_id
 
 # --- Parental Leave ---
 def insert_parental_leave(db: Session, data: dict):
@@ -2144,7 +2144,7 @@ def insert_parental_leave(db: Session, data: dict):
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    return record
+    return parental_leave_id
 
 # --- Training ---
 def insert_training(db: Session, data: dict):
@@ -2209,7 +2209,7 @@ def insert_training(db: Session, data: dict):
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    return record
+    return training_id
 
 # --- Occupational Safety Health ---
 def insert_occupational_safety_health(db: Session, data: dict):
@@ -2260,7 +2260,7 @@ def insert_occupational_safety_health(db: Session, data: dict):
         print(f"Error executing stored procedure: {e}")
         db.rollback()
         
-    return record
+    return osh_id
 
 from datetime import datetime
 

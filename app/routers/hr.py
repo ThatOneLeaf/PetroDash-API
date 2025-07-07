@@ -10,6 +10,9 @@ import logging
 import traceback
 import io
 
+from ..auth_decorators import get_user_info
+from ..services.audit_trail import append_audit_trail
+from ..services.auth import User
 from app.crud.base import get_all, get_many_filtered, get_one
 from app.bronze.crud import (
     HRDemographics,
@@ -1038,7 +1041,7 @@ def get_employability_combined_by_id(employee_id: str, db: Session = Depends(get
 # ====================== ADD SINGLE RECORD ====================== 
 # --- EMPLOYABILITY ---
 @router.post("/single_upload_employability_record")
-def single_upload_employability_record(data: dict, db: Session = Depends(get_db)):
+def single_upload_employability_record(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single employability record")
 
@@ -1074,7 +1077,31 @@ def single_upload_employability_record(data: dict, db: Session = Depends(get_db)
             "end_date": data["end_date"],
         }
 
-        insert_employability(db, record)
+        employee_id = insert_employability(db, record)
+        new_value_demo = f"{data['employee_id']}, {data['gender']}, {data['birthdate']}, {data['position_id']}, {data['p_np']}, {data['company_id']}, {data['employment_status']}"
+        new_value_ten = f"{data['employee_id']}, {data['start_date']}, {data['end_date']}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_demographics",
+            record_id=employee_id,
+            action_type="insert",
+            old_value="",
+            new_value=new_value_demo,
+            description="Inserted Single HR demographics record"
+        )
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_tenure",
+            record_id=employee_id,
+            action_type="insert",
+            old_value="",
+            new_value=new_value_ten,
+            description="Inserted Single HR tenure record"
+        )
 
         return {"message": "1 record successfully inserted."}
 
@@ -1086,7 +1113,7 @@ def single_upload_employability_record(data: dict, db: Session = Depends(get_db)
         
 # --- SAFETY WORKDATA ---
 @router.post("/single_upload_safety_workdata_record")
-def single_upload_safety_workdata_record(data: dict, db: Session = Depends(get_db)):
+def single_upload_safety_workdata_record(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single safety workdata record")
 
@@ -1109,7 +1136,19 @@ def single_upload_safety_workdata_record(data: dict, db: Session = Depends(get_d
             "manhours": int(data["manhours"]),
         }
 
-        insert_safety_workdata(db, record)
+        swd_id = insert_safety_workdata(db, record)
+        new_value = f"{data['company_id']}, {data['contractor']}, {data['date']}, {data['manpower']}, {data['manhours']}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_safety_workdata",
+            record_id=swd_id,
+            action_type="insert",
+            old_value="",
+            new_value=new_value,
+            description="Inserted Single HR safety workdata record"
+        )
 
         return {"message": "1 record successfully inserted."}
 
@@ -1121,7 +1160,7 @@ def single_upload_safety_workdata_record(data: dict, db: Session = Depends(get_d
     
 # --- Parental Leave ---
 @router.post("/single_upload_parental_leave_record")
-def single_upload_parental_leave_record(data: dict, db: Session = Depends(get_db)):
+def single_upload_parental_leave_record(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single parental leave record")
 
@@ -1137,7 +1176,19 @@ def single_upload_parental_leave_record(data: dict, db: Session = Depends(get_db
             "days": int(data["days"]),
         }
 
-        insert_parental_leave(db, record)
+        pl_id = insert_parental_leave(db, record)
+        new_value = f"{data['employee_id']}, {data['type_of_leave']}, {data['date']}, {data['days']}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_parental_leave",
+            record_id=pl_id,
+            action_type="insert",
+            old_value="",
+            new_value=new_value,
+            description="Inserted Single HR Parental Leave record"
+        )
 
         return {"message": "1 record successfully inserted."}
 
@@ -1150,7 +1201,7 @@ def single_upload_parental_leave_record(data: dict, db: Session = Depends(get_db
     
 # --- Training ---
 @router.post("/single_upload_training_record")
-def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
+def single_upload_training_record(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single training record")
 
@@ -1170,7 +1221,19 @@ def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
             "number_of_participants": int(data["number_of_participants"]),
         }
 
-        insert_training(db, record)
+        tr_id = insert_training(db, record)
+        new_value = f"{data['company_id']}, {data['date']}, {data['training_title']}, {data['training_hours']}, {data['number_of_participants']}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_training",
+            record_id=tr_id,
+            action_type="insert",
+            old_value="",
+            new_value=new_value,
+            description="Inserted Single HR Training record"
+        )
 
         return {"message": "1 record successfully inserted."}
 
@@ -1183,7 +1246,7 @@ def single_upload_training_record(data: dict, db: Session = Depends(get_db)):
     
 # --- Occupational Safety Health ---
 @router.post("/single_upload_occupational_safety_health_record")
-def single_upload_occupational_safety_health_record(data: dict, db: Session = Depends(get_db)):
+def single_upload_occupational_safety_health_record(data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)):
     try:
         logging.info("Add single occupational safety health record")
 
@@ -1209,7 +1272,19 @@ def single_upload_occupational_safety_health_record(data: dict, db: Session = De
         }
 
         # Assuming you have a single insert function
-        insert_occupational_safety_health(db, record)
+        osh_id = insert_occupational_safety_health(db, record)
+        new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_occupational_safety_health",
+            record_id=osh_id,
+            action_type="insert",
+            old_value="",
+            new_value=new_value,
+            description="Inserted Single HR Occupational Safety Health record"
+        )
 
         return {"message": "1 record successfully inserted."}
 
