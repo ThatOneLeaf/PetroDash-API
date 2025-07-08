@@ -680,8 +680,9 @@ def update_csr_activity_single(data: dict, db: Session = Depends(get_db), user_i
             """), {"csr_id": csr_id})
             get_old_record = result.fetchone()
 
-        new_value = f"company_id: {data["company_id"]}, project_id: {data["project_id"]}, project_year: {data["project_year"]}, csr_report: {data["csr_report"]}, project_expenses: {data["project_expenses"]}, project_remarks: {data["project_remarks"]}"
-        old_record = f"company_id: {get_old_record[1]}, project_id: {get_old_record[2]}, project_year: {get_old_record[3]}, csr_report: {get_old_record[4]}, project_expenses: {get_old_record[5]}, project_remarks: {get_old_record[6]}"
+        new_value = f'company_id: {data["company_id"]}, project_id: {data["project_id"]}, project_year: {data["project_year"]}, csr_report: {data["csr_report"]}, project_expenses: {data["project_expenses"]}, project_remarks: {data["project_remarks"]}'
+        old_record = f'company_id: {get_old_record[1]}, project_id: {get_old_record[2]}, project_year: {get_old_record[3]}, csr_report: {get_old_record[4]}, project_expenses: {get_old_record[5]}, project_remarks: {get_old_record[6]}'
+
 
         append_audit_trail(
             db=db,
