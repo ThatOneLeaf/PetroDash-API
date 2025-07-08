@@ -1757,7 +1757,7 @@ def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Ses
         def osh_bulk_audit_data(record):
             return [
                 {
-                    "target_table": "hr_occupational_safety_health",
+                    "target_table": "hr_osh",
                     "record_id": record.osh_id,
                     "action_type": "insert",
                     "old_value": "",
@@ -2091,8 +2091,10 @@ def edit_osh(
     data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
+        
         required_fields = ['company_id', 'workforce_type', 'lost_time', 'date', 'incident_type', 'incident_title', 'incident_count']
         missing = [field for field in required_fields if field not in data]
+        
         if missing:
             raise HTTPException(status_code=400, detail=f"Missing required fields: {missing}")
 
@@ -2101,7 +2103,7 @@ def edit_osh(
 
         if data["lost_time"] not in {True, False}:
             raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['lost_time']}'")
-
+        
         osh_id = data["osh_id"]
         record = {
             "company_id": data["company_id"],
@@ -2112,9 +2114,7 @@ def edit_osh(
             "incident_title": data["incident_title"],
             "incident_count": int(data["incident_count"]),
         }
-
         osh_id=data["osh_id"]
-
         get_old_record = None
         if osh_id:
             result = db.execute(text("""
@@ -2124,20 +2124,19 @@ def edit_osh(
                 LIMIT 1
             """), {"osh_id": osh_id})
             get_old_record = result.mappings().first()
-        
+            
         update_occupational_safety_health(db, osh_id, record)
-
 
         
 
         new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
-        old_value = f"{get_old_record['company_id']}, {get_old_record['workforce_type']}, {get_old_record['lost_time']}, {daget_old_recorda['date']}, {get_old_record['incident_type']}, {get_old_record['incident_title']}, {get_old_record['incident_count']}"
+        old_value = f"{get_old_record['company_id']}, {get_old_record['workforce_type']}, {get_old_record['lost_time']}, {get_old_record['date']}, {get_old_record['incident_type']}, {get_old_record['incident_title']}, {get_old_record['incident_count']}"
         
 
         append_audit_trail(
             db=db,
             account_id=str(user_info.account_id),
-            target_table="hr_occupational_safety_health",
+            target_table="hr_osh",
             record_id=osh_id,
             action_type="update",
             old_value=old_value,

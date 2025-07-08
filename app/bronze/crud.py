@@ -2215,7 +2215,6 @@ def insert_training(db: Session, data: dict):
 def insert_occupational_safety_health(db: Session, data: dict):
     osh_id = id_generation(db, "OSH", HROsh.osh_id)
     
-    print("Pass 3")
     record = HROsh(
         osh_id=osh_id,
         company_id=data["company_id"],
@@ -2226,13 +2225,9 @@ def insert_occupational_safety_health(db: Session, data: dict):
         incident_title=data["incident_title"],
         incident_count=data["incident_count"]
     )
-    print("Pass 4")
     db.add(record)
-    print("Pass 5")
     db.commit()
-    print("Pass 6")
     db.refresh(record)
-    print("Pass 7")
     
     
     try:
@@ -2248,7 +2243,6 @@ def insert_occupational_safety_health(db: Session, data: dict):
     except Exception as e:
         print(f"Error inserting checker status log: {e}")
         db.rollback()
-    print("Pass 8")
     try:
         db.execute(text("""
             CALL silver.load_hr_silver(
