@@ -2103,47 +2103,55 @@ def edit_osh(
             raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['lost_time']}'")
 
         osh_id = data["osh_id"]
+        print("Pass 1")
         record = {
             "company_id": data["company_id"],
             "workforce_type": data["workforce_type"],
-            "lost_time": data["lost_time"],
+            "lost_time": str(data["lost_time"]).upper() == "TRUE",
             "date": data["date"],
             "incident_type": data["incident_type"],
             "incident_title": data["incident_title"],
             "incident_count": int(data["incident_count"]),
         }
+        print("Pass 2")
+        try:
 
-        osh_id=data["osh_id"]
+            osh_id=data["osh_id"]
+            print
+            get_old_record = None
+            if osh_id:
+                result = db.execute(text("""
+                    SELECT *
+                    FROM silver.hr_occupational_safety_health
+                    WHERE osh_id = :osh_id
+                    LIMIT 1
+                """), {"osh_id": osh_id})
+                get_old_record = result.mappings().first()
+            
+            update_occupational_safety_health(db, osh_id, record)
 
-        get_old_record = None
-        if osh_id:
-            result = db.execute(text("""
-                SELECT *
-                FROM silver.hr_occupational_safety_health
-                WHERE osh_id = :osh_id
-                LIMIT 1
-            """), {"osh_id": osh_id})
-            get_old_record = result.mappings().first()
-        
-        update_occupational_safety_health(db, osh_id, record)
+
+            
+
+            new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
+            old_value = f"{get_old_record['company_id']}, {get_old_record['workforce_type']}, {get_old_record['lost_time']}, {get_old_record['date']}, {get_old_record['incident_type']}, {get_old_record['incident_title']}, {get_old_record['incident_count']}"
+            
+
+            append_audit_trail(
+                db=db,
+                account_id=str(user_info.account_id),
+                target_table="hr_occupational_safety_health",
+                record_id=osh_id,
+                action_type="update",
+                old_value=old_value,
+                new_value=new_value,
+                description="Updated Single HR Occupational Safety Health record"
+            )
+
+        except Exception as e:
+            print(e)
 
 
-        
-
-        new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
-        old_value = f"{get_old_record['company_id']}, {get_old_record['workforce_type']}, {get_old_record['lost_time']}, {daget_old_recorda['date']}, {get_old_record['incident_type']}, {get_old_record['incident_title']}, {get_old_record['incident_count']}"
-        
-
-        append_audit_trail(
-            db=db,
-            account_id=str(user_info.account_id),
-            target_table="hr_occupational_safety_health",
-            record_id=osh_id,
-            action_type="update",
-            old_value=old_value,
-            new_value=new_value,
-            description="Updated Single HR Occupational Safety Health record"
-        )
         return {"message": "training record successfully updated."}
     except HTTPException:
         raise
