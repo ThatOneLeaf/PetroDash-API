@@ -878,9 +878,29 @@ def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_d
 
         record = bulk_upload_csr_activity(db, rows)
 
+        def csr_bulk_audit_data(record):
+            return [
+                {
+                    "target_table": "water_abstraction",
+                    "record_id": record.csr_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": str(record.volume),
+                    "description": "Inserted bulk activity record"
+                },
+                {
+                    "target_table": "record_status",
+                    "record_id": record.csr_id,
+                    "action_type": "insert",
+                    "old_value": "",
+                    "new_value": "URS",
+                    "description": "Newly inserted record"
+                }
+            ]
+
         audit_entries = []
-        for record in records:
-            record_audits = get_water_abstraction_audit_data(record)
+        for entries in record:
+            record_audits = csr_bulk_audit_data(entries)
             for audit_data in record_audits:
                 audit_data["account_id"] = str(user_info.account_id)
                 audit_entries.append(audit_data)
@@ -889,7 +909,7 @@ def bulk_help_activity(file: UploadFile = File(...), db: Session = Depends(get_d
         from ..services.audit_trail import append_bulk_audit_trail
         append_bulk_audit_trail(db, audit_entries)
 
-        return {"message": f"{len(records)} records successfully inserted."}
+        return {"message": f"{len(entries)} records successfully inserted."}
 
     except HTTPException:
         raise

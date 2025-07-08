@@ -1264,27 +1264,26 @@ def single_upload_occupational_safety_health_record(data: dict, db: Session = De
         record = {
             "company_id": data["company_id"],
             "workforce_type": data["workforce_type"],
-            "lost_time": data["lost_time"] == "TRUE",
+            "lost_time": data["lost_time"],
             "date": data["date"],
             "incident_type": data["incident_type"],
             "incident_title": data["incident_title"],
             "incident_count": int(data["incident_count"]),
         }
-
         # Assuming you have a single insert function
         osh_id = insert_occupational_safety_health(db, record)
         new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
         
-        append_audit_trail(
-            db=db,
-            account_id=str(user_info.account_id),
-            target_table="hr_occupational_safety_health",
-            record_id=osh_id,
-            action_type="insert",
-            old_value="",
-            new_value=new_value,
-            description="Inserted Single HR Occupational Safety Health record"
-        )
+        # append_audit_trail(
+        #     db=db,
+        #     account_id=str(user_info.account_id),
+        #     target_table="hr_occupational_safety_health",
+        #     record_id=str(osh_id),
+        #     action_type="insert",
+        #     old_value="",
+        #     new_value=new_value,
+        #     description="Inserted Single HR Occupational Safety Health record"
+        # )
 
         return {"message": "1 record successfully inserted."}
 
