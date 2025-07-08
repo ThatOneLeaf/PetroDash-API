@@ -740,7 +740,8 @@ def insert_csr_activity_single(data: dict, db: Session = Depends(get_db), user_i
         }
 
         csr_id = insert_csr_activity(db, record)
-        new_value = f"csr_id: {csr_id}, company_id: {data["company_id"]}, project_id: {data["project_id"]}, project_year: {data["project_year"]}, csr_report: {data["csr_report"]}, project_expenses: {data["project_expenses"]}, project_remarks: {data["project_remarks"]}"
+        new_value = f'csr_id: {csr_id}, company_id: {data["company_id"]}, project_id: {data["project_id"]}, project_year: {data["project_year"]}, csr_report: {data["csr_report"]}, project_expenses: {data["project_expenses"]}, project_remarks: {data["project_remarks"]}'
+
         append_audit_trail(
             db=db,
             account_id=str(user_info.account_id),
