@@ -1276,16 +1276,16 @@ def single_upload_occupational_safety_health_record(data: dict, db: Session = De
         
 
         
-        # append_audit_trail(
-        #     db=db,
-        #     account_id=str(user_info.account_id),
-        #     target_table="hr_occupational_safety_health",
-        #     record_id=str(osh_id),
-        #     action_type="insert",
-        #     old_value="",
-        #     new_value=new_value,
-        #     description="Inserted Single HR Occupational Safety Health record"
-        # )
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_osh",
+            record_id=str(osh_id),
+            action_type="insert",
+            old_value="",
+            new_value=new_value,
+            description="Inserted Single HR Occupational Safety Health record"
+        )
 
         return {"message": "1 record successfully inserted."}
 
