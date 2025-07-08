@@ -2105,7 +2105,6 @@ def edit_osh(
             raise HTTPException(status_code=422, detail=f"Invalid quarter '{data['lost_time']}'")
         
         osh_id = data["osh_id"]
-        print("Pass 1")
         record = {
             "company_id": data["company_id"],
             "workforce_type": data["workforce_type"],
@@ -2127,11 +2126,9 @@ def edit_osh(
             get_old_record = result.mappings().first()
             
         update_occupational_safety_health(db, osh_id, record)
-
-            
-
-            new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
-            old_value = f"{get_old_record['company_id']}, {get_old_record['workforce_type']}, {get_old_record['lost_time']}, {get_old_record['date']}, {get_old_record['incident_type']}, {get_old_record['incident_title']}, {get_old_record['incident_count']}"
+        
+        new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
+        old_value = f"{get_old_record['company_id']}, {get_old_record['workforce_type']}, {get_old_record['lost_time']}, {get_old_record['date']}, {get_old_record['incident_type']}, {get_old_record['incident_title']}, {get_old_record['incident_count']}"
             
 
         append_audit_trail(
