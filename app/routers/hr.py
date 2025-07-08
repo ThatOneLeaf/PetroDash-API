@@ -1274,6 +1274,8 @@ def single_upload_occupational_safety_health_record(data: dict, db: Session = De
         osh_id = insert_occupational_safety_health(db, record)
         new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
         
+
+        
         # append_audit_trail(
         #     db=db,
         #     account_id=str(user_info.account_id),
@@ -1792,7 +1794,7 @@ def bulk_upload_occupational_safety_health(file: UploadFile = File(...), db: Ses
 # --- EMPLOYABILITY ---
 @router.post("/edit_employability")
 def edit_employability(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         required_fields = ['employee_id', 'gender', 'birthdate', 'position_id', 'p_np', 'company_id', 'employment_status', 'start_date', 'end_date']
@@ -1827,14 +1829,71 @@ def edit_employability(
         }
         
 
-        print("📌 Received end_date:", data["end_date"])
+    
         record_tenure = {
             "employee_id": data["employee_id"],
             "start_date": data["start_date"],
             "end_date": data["end_date"]
         }
+
+        emp_id = data["employee_id"]
+
+        get_old_record = None
+        if emp_id:
+            result = db.execute(text("""
+                SELECT *
+                FROM silver.hr_demographics
+                WHERE employee_id = :emp_id
+                LIMIT 1
+            """), {"emp_id": emp_id})
+            get_old_record = result.mappings().first()
+
+        get_old_record_ten = None
+        if emp_id:
+            result = db.execute(text("""
+                SELECT *
+                FROM silver.hr_tenure
+                WHERE employee_id = :emp_id
+                LIMIT 1
+            """), {"emp_id": emp_id})
+            get_old_record_ten = result.mappings().first()
+        
         
         update_employability(db, employee_id, record_demo, record_tenure)
+
+
+     
+       
+
+        new_value_demo = f"{data['employee_id']}, {data['gender']}, {data['birthdate']}, {data['position_id']}, {data['p_np']}, {data['company_id']}, {data['employment_status']}"
+        old_value_demo = f"{get_old_record['employee_id']}, {get_old_record['gender']}, {get_old_record['birthdate']}, {get_old_record['position_id']}, {get_old_record['p_np']}, {get_old_record['company_id']}, {get_old_record['employment_status']}"
+
+        new_value_ten = f"{data['employee_id']}, {data['start_date']}, {data['end_date']}"
+        old_value_ten = f"{get_old_record_ten['employee_id']}, {get_old_record_ten['start_date']}, {get_old_record_ten['end_date']}"
+    
+
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_demographics",
+            record_id=employee_id,
+            action_type="update",
+            old_value=old_value_demo,
+            new_value=new_value_demo,
+            description="Updated Single HR demographics record"
+        )
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_tenure",
+            record_id=employee_id,
+            action_type="update",
+            old_value=old_value_ten,
+            new_value=new_value_ten,
+            description="Updated Single HR tenure record"
+        )
+
         return {"message": "employability record successfully updated."}
     except HTTPException:
         raise
@@ -1845,7 +1904,7 @@ def edit_employability(
 # --- Safety Workdata ---
 @router.post("/edit_safety_workdata")
 def edit_safety_workdata(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         required_fields = ['company_id', 'contractor', 'date', 'manpower', 'manhours']
@@ -1867,8 +1926,40 @@ def edit_safety_workdata(
             "manpower": int(data["manpower"]),
             "manhours": int(data["manhours"]),
         }
+
+        swd_id= data["safety_workdata_id"]
+      
+        get_old_record = None
+        if safety_workdata_id:
+            result = db.execute(text("""
+                SELECT *
+                FROM silver.hr_safety_workdata
+                WHERE safety_workdata_id = :safety_workdata_id
+                LIMIT 1
+            """), {"safety_workdata_id": safety_workdata_id})
+            get_old_record = result.mappings().first()
+
         
         update_safety_workdata(db, safety_workdata_id, record)
+
+        
+
+        new_value = f"{data['company_id']}, {data['contractor']}, {data['date']}, {data['manpower']}, {data['manhours']}"
+        old_value = f"{get_old_record['company_id']}, {get_old_record['contractor']}, {get_old_record['date']}, {get_old_record['manpower']}, {get_old_record['manhours']}"
+        
+
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_safety_workdata",
+            record_id=swd_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated Single HR safety workdata record"
+        )
+
+
         return {"message": "safety workdata record successfully updated."}
     except HTTPException:
         raise
@@ -1879,7 +1970,7 @@ def edit_safety_workdata(
 # --- Parental Leave ---
 @router.post("/edit_parental_leave")
 def edit_parental_leave(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         required_fields = ['employee_id', 'type_of_leave', 'date', 'days']
@@ -1894,8 +1985,39 @@ def edit_parental_leave(
             "date": data["date"],
             "days": int(data["days"]),
         }
+
+        pl_id= data["parental_leave_id"]
+      
+        get_old_record = None
+        if pl_id:
+            result = db.execute(text("""
+                SELECT *
+                FROM silver.hr_parental_leave
+                WHERE parental_leave_id = :pl_id
+                LIMIT 1
+            """), {"pl_id": pl_id})
+            get_old_record = result.mappings().first()
         
         update_parental_leave(db, parental_leave_id, record)
+
+    
+
+        new_value = f"{data['employee_id']}, {data['type_of_leave']}, {data['date']}, {data['days']}"
+        old_value = f"{get_old_record['employee_id']}, {get_old_record['type_of_leave']}, {get_old_record['date']}, {get_old_record['days']}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_parental_leave",
+            record_id=pl_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated Single HR Parental Leave record"
+        )
+
+
+       
         return {"message": "parental leave record successfully updated."}
     except HTTPException:
         raise
@@ -1906,7 +2028,7 @@ def edit_parental_leave(
 # --- Training ---
 @router.post("/edit_training")
 def edit_training(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         required_fields = ['company_id', 'date', 'training_title', 'training_hours', 'number_of_participants']
@@ -1925,8 +2047,37 @@ def edit_training(
             "training_hours": int(data["training_hours"]),
             "number_of_participants": int(data["number_of_participants"]),
         }
+
+        tr_id= data["training_id"]
+
+        get_old_record = None
+        if tr_id:
+            result = db.execute(text("""
+                SELECT *
+                FROM silver.hr_training
+                WHERE training_id = :tr_id
+                LIMIT 1
+            """), {"tr_id": tr_id})
+            get_old_record = result.mappings().first()
         
         update_training(db, training_id, record)
+
+        
+
+        new_value = f"{data['company_id']}, {data['date']}, {data['training_title']}, {data['training_hours']}, {data['number_of_participants']}"
+        old_value = f"{get_old_record['company_id']}, {get_old_record['date']}, {get_old_record['training_title']}, {get_old_record['training_hours']}, {get_old_record['number_of_participants']}"
+        
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_training",
+            record_id=tr_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated Single HR Training record"
+        )
+
         return {"message": "training record successfully updated."}
     except HTTPException:
         raise
@@ -1937,7 +2088,7 @@ def edit_training(
 # --- Occupational Safety Health ---
 @router.post("/edit_osh")
 def edit_osh(
-    data: dict, db: Session = Depends(get_db)
+    data: dict, db: Session = Depends(get_db), user_info: User = Depends(get_user_info)
 ):
     try:
         required_fields = ['company_id', 'workforce_type', 'lost_time', 'date', 'incident_type', 'incident_title', 'incident_count']
@@ -1961,8 +2112,38 @@ def edit_osh(
             "incident_title": data["incident_title"],
             "incident_count": int(data["incident_count"]),
         }
+
+        osh_id=data["osh_id"]
+
+        get_old_record = None
+        if osh_id:
+            result = db.execute(text("""
+                SELECT *
+                FROM silver.hr_occupational_safety_health
+                WHERE osh_id = :osh_id
+                LIMIT 1
+            """), {"osh_id": osh_id})
+            get_old_record = result.mappings().first()
         
         update_occupational_safety_health(db, osh_id, record)
+
+
+        
+
+        new_value = f"{data['company_id']}, {data['workforce_type']}, {data['lost_time']}, {data['date']}, {data['incident_type']}, {data['incident_title']}, {data['incident_count']}"
+        old_value = f"{get_old_record['company_id']}, {get_old_record['workforce_type']}, {get_old_record['lost_time']}, {daget_old_recorda['date']}, {get_old_record['incident_type']}, {get_old_record['incident_title']}, {get_old_record['incident_count']}"
+        
+
+        append_audit_trail(
+            db=db,
+            account_id=str(user_info.account_id),
+            target_table="hr_occupational_safety_health",
+            record_id=osh_id,
+            action_type="update",
+            old_value=old_value,
+            new_value=new_value,
+            description="Updated Single HR Occupational Safety Health record"
+        )
         return {"message": "training record successfully updated."}
     except HTTPException:
         raise
