@@ -21,17 +21,12 @@ def get_current_user_with_roles(*required_roles):
     Dependency that gets current user and checks for required roles.
     """
     def dependency(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-        print(f"[ROLE DEBUG] Checking roles for endpoint, required: {required_roles}")
-        
         # Get current user
         current_user = AuthService.get_current_user(token, db)
         current_user = AuthService.get_current_active_user(current_user)
         
-        print(f"[ROLE DEBUG] User: {current_user.email}, User roles: {current_user.roles}")
-        
         # Check if user has required role
         has_access = any(role in current_user.roles for role in required_roles)
-        print(f"[ROLE DEBUG] Access check - Has access: {has_access}")
         
         if not has_access:
             role_names = {
@@ -42,13 +37,11 @@ def get_current_user_with_roles(*required_roles):
                 "R05": "Encoder"
             }
             allowed_names = [role_names.get(role, role) for role in required_roles]
-            print(f"[ROLE DEBUG] Access denied for user {current_user.email}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required roles: {', '.join(allowed_names)}"
             )
         
-        print(f"[ROLE DEBUG] Access granted for user {current_user.email}")
         return current_user
     
     return dependency
